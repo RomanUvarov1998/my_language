@@ -1,10 +1,13 @@
 mod parser;
+mod lexer;
+mod tree;
+mod interpreter;
 
 #[cfg(test)]
 mod tests;
 
 use std::io;
-use parser::*;
+use interpreter::*;
 
 fn main() {
 	let mut code = String::new();	
@@ -15,26 +18,5 @@ fn main() {
 	match interpreter.process() {
 		Ok(()) => {},
 		Err(err) => println!("{}", err),
-	}
-}
-
-struct Interpreter<'code> {
-	code: &'code str
-}
-
-impl<'code> Interpreter<'code> {
-	fn new(code: &'code str) -> Self {
-		Self { code }
-	}
-	
-	fn process(&self) -> Result<(), parser::TokConstructErr> {
-		let parser = Parser::new(&self.code)?;
-		
-		for token in parser.tokens() {
-			println!("{:?}", token);
-		}
-		println!("Success!");
-		
-		Ok(())
 	}
 }

@@ -14,10 +14,10 @@ impl Parser {
 			let tok = match ch {
 				CharKind::Digit (first_digit) => Self::parse_number(first_digit, &mut iter)?,
 				CharKind::Dot => return Err(TokConstructErr::new(ch, pos)),
-				CharKind::Plus => Token::Plus,
-				CharKind::Minus => Token::Minus,
-				CharKind::Mul => Token::Mul,
-				CharKind::Div => Token::Div,
+				CharKind::Plus => Token::BinOp ( BinOp::Plus ),
+				CharKind::Minus => Token::BinOp ( BinOp::Minus ),
+				CharKind::Mul => Token::BinOp ( BinOp::Mul ),
+				CharKind::Div => Token::BinOp ( BinOp::Div ),
 				CharKind::Whitespace => continue,
 				CharKind::Invalid (..) => return Err(TokConstructErr::new(ch, pos)),
 			};
@@ -32,45 +32,35 @@ impl Parser {
 	}
 	
 	fn parse_number(first_digit: u32, iter: &mut CharsIter) -> Result<Token, TokConstructErr> {
-		let mut value: u32 = first_digit;
-		loop {
-			match iter.peek() {
-				Some( ( ch, _pos ) ) => {
-					match ch {
-						CharKind::Digit (val) => {
-							value *= 10_u32;
-							value += val;
-							iter.next(); // skip current digit
-						},
-						CharKind::Dot => {
-							iter.next(); // skip dot
-							return Self::parse_frac(value, iter);
-						},
-						_ => return Ok( Token::Int (value) ),
-					}
-				},
-				None => return Ok( Token::Int (value) ),
-			}
-		}
-	}
-	
-	fn parse_frac(int_part: u32, iter: &mut CharsIter) -> Result<Token, TokConstructErr> {
-		let mut value: f32 = int_part as f32;
+		let mut value: f32 = first_digit as f32;
+		let mut has_dot: bool = false;
 		let mut frac_multiplier = 0.1_f32;
 		loop {
 			match iter.peek() {
 				Some( ( ch, pos ) ) => {
 					match ch {
 						CharKind::Digit (val) => {
-							value += val as f32 * frac_multiplier;
-							frac_multiplier *= 0.1_f32;
+							if has_dot {
+								value += val as f32 * frac_multiplier;
+								frac_multiplier *= 0.1_f32;
+							} else {
+								value *= 10_f32;
+								value += val as f32;
+							}
 							iter.next(); // skip current digit
 						},
-						CharKind::Dot => return Err(TokConstructErr::new(ch, pos)),
-						_ => return Ok( Token::Float (value) ),
+						CharKind::Dot => {
+							iter.next(); // skip dot
+							if !has_dot {
+								has_dot = true;
+							} else {
+								return Err(TokConstructErr::new(ch, pos));
+							}
+						},
+						_ => return Ok( Token::Number (value) ),
 					}
 				},
-				None => return Ok( Token::Float (value) ),
+				None => return Ok( Token::Number (value) ),
 			}
 		}
 	}
@@ -78,39 +68,46 @@ impl Parser {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Token {
-	Int (u32),
-	Float (f32),
+	Number (f32),
+	BinOp (BinOp)
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum BinOp {
 	Plus,
 	Minus,
 	Mul,
 	Div
 }
+impl BinOp {
+	fn get_rank(self) -> u32 {
+		match self {
+			BinOp::Plus | BinOp::Minus => 1,
+			BinOp::Mul | BinOp::Div => 2,
+		}
+	}
+}
+use std::cmp::Ordering;
+impl Ord for BinOp {
+    fn cmp(&self, other: &Self) -> Ordering {
+		self.get_rank().cmp(&other.get_rank())
+    }
+}
+impl PartialOrd for BinOp {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 impl PartialEq for Token {
     fn eq(&self, other: &Self) -> bool {
 		match self {
-			Token::Int (i1) => match other {
-				Token::Int (i2) => i1 == i2,
+			Token::Number (val1) => match other {
+				Token::Number (val2) => (val1 - val2).abs() <= std::f32::EPSILON,
 				_ => false,
 			},
-			Token::Float (f1) => match other {
-				Token::Float (f2) => (f1 - f2).abs() < std::f32::EPSILON,
-				_ => false,
-			},
-			Token::Plus => match other {
-				Token::Plus => true,
-				_ => false,
-			},
-			Token::Minus => match other {
-				Token::Minus => true,
-				_ => false,
-			},
-			Token::Mul => match other {
-				Token::Mul => true,
-				_ => false,
-			},
-			Token::Div => match other {
-				Token::Div => true,
+			Token::BinOp (bin_op1) => match other {
+				Token::BinOp (bin_op2) => bin_op1 == bin_op2,
 				_ => false,
 			},
 		}
