@@ -1,12 +1,11 @@
-pub struct Parser<'code> {
-	code: &'code str,
+pub struct Parser {
 	toks: Vec<Token>
 }
 
 const RADIX: u32 = 10_u32;
 
-impl<'code> Parser<'code> {
-	pub fn new(code: &'code str) -> Result<Self, TokConstructErr> {
+impl Parser {
+	pub fn new(code: &str) -> Result<Self, TokConstructErr> {
 		let mut toks = Vec::<Token>::new();
 				
 		let mut iter: CharsIter = CharsIter::new(code);
@@ -17,22 +16,22 @@ impl<'code> Parser<'code> {
 				CharKind::Dot => return Err(TokConstructErr::new(ch, pos)),
 				CharKind::Plus => Token::Plus,
 				CharKind::Minus => Token::Minus,
+				CharKind::Mul => Token::Mul,
+				CharKind::Div => Token::Div,
 				CharKind::Whitespace => continue,
+				CharKind::Invalid (..) => return Err(TokConstructErr::new(ch, pos)),
 			};
 			toks.push(tok);
 		}
 		
-		Ok(Parser {
-			code,
-			toks
-		})
+		Ok( Parser { toks } )
 	}
 	
-	pub fn tokens(&'code self) -> &Vec<Token> {
+	pub fn tokens(&self) -> &Vec<Token> {
 		&self.toks
 	}
 	
-	fn parse_number(first_digit: u32, iter: &mut CharsIter<'code>) -> Result<Token, TokConstructErr> {
+	fn parse_number(first_digit: u32, iter: &mut CharsIter) -> Result<Token, TokConstructErr> {
 		let mut value: u32 = first_digit;
 		loop {
 			match iter.peek() {
@@ -47,15 +46,15 @@ impl<'code> Parser<'code> {
 							iter.next(); // skip dot
 							return Self::parse_frac(value, iter);
 						},
-						CharKind::Plus | CharKind::Minus | CharKind::Whitespace => return Ok( Token::Int { value } ),
+						_ => return Ok( Token::Int (value) ),
 					}
 				},
-				None => return Ok( Token::Int { value } ),
+				None => return Ok( Token::Int (value) ),
 			}
 		}
 	}
 	
-	fn parse_frac(int_part: u32, iter: &mut CharsIter<'code>) -> Result<Token, TokConstructErr> {
+	fn parse_frac(int_part: u32, iter: &mut CharsIter) -> Result<Token, TokConstructErr> {
 		let mut value: f32 = int_part as f32;
 		let mut frac_multiplier = 0.1_f32;
 		loop {
@@ -68,22 +67,56 @@ impl<'code> Parser<'code> {
 							iter.next(); // skip current digit
 						},
 						CharKind::Dot => return Err(TokConstructErr::new(ch, pos)),
-						CharKind::Plus | CharKind::Minus | CharKind::Whitespace => return Ok( Token::Float { value } ),
+						_ => return Ok( Token::Float (value) ),
 					}
 				},
-				None => return Ok( Token::Float { value } ),
+				None => return Ok( Token::Float (value) ),
 			}
 		}
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Token {
-	Int { value: u32 },
-	Float { value: f32 },
+	Int (u32),
+	Float (f32),
 	Plus,
 	Minus,
+	Mul,
+	Div
 }
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+		match self {
+			Token::Int (i1) => match other {
+				Token::Int (i2) => i1 == i2,
+				_ => false,
+			},
+			Token::Float (f1) => match other {
+				Token::Float (f2) => (f1 - f2).abs() < std::f32::EPSILON,
+				_ => false,
+			},
+			Token::Plus => match other {
+				Token::Plus => true,
+				_ => false,
+			},
+			Token::Minus => match other {
+				Token::Minus => true,
+				_ => false,
+			},
+			Token::Mul => match other {
+				Token::Mul => true,
+				_ => false,
+			},
+			Token::Div => match other {
+				Token::Div => true,
+				_ => false,
+			},
+		}
+    }
+}
+impl Eq for Token {}
 
 #[derive(Debug)]
 pub struct TokConstructErr { ch: CharKind, pos: usize, }
@@ -102,7 +135,10 @@ impl std::fmt::Display for TokConstructErr {
 			CharKind::Dot => write!(f, "'.'")?,
 			CharKind::Plus => write!(f, "'+'")?,
 			CharKind::Minus => write!(f, "'-'")?,
+			CharKind::Mul => write!(f, "'*'")?,
+			CharKind::Div => write!(f, "'/'")?,
 			CharKind::Whitespace => write!(f, "Whitespace")?,
+			CharKind::Invalid (ch) => write!(f, "invalid '{}'", ch)?,
 		};
 		write!(f, " in position {}", self.pos)
 	}
@@ -134,8 +170,10 @@ impl<'code> CharsIter<'code> {
 				'.' => CharKind::Dot,
 				'+' => CharKind::Plus,
 				'-' => CharKind::Minus,
+				'*' => CharKind::Mul,
+				'/' => CharKind::Div,
 				' ' | '\n' | '\t' => CharKind::Whitespace,
-				_ => panic!("Invalid char {}!", ch)
+				_ => CharKind::Invalid (ch)
 			}
 		}
 	}
@@ -163,5 +201,8 @@ pub enum CharKind {
 	Dot,
 	Plus,
 	Minus,
+	Mul,
+	Div,
 	Whitespace,
+	Invalid (char),
 }
