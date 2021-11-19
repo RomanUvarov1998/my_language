@@ -2,7 +2,7 @@ use super::parser::{Token, BinOp, Bracket};
 use super::lexer::LexerErr;
 
 #[derive(Debug)]
-pub struct Tree {
+pub struct Expr {
 	node_stack: NodeStack,
 	bin_op_stack: BinOpStack,
 	opened_brackets_cnt: u32,
@@ -55,7 +55,7 @@ impl std::fmt::Debug for Node {
     }
 }
 
-impl Tree {
+impl Expr {
 	pub fn new() -> Self {
 		Self {
 			node_stack: NodeStack::new(),
@@ -135,9 +135,9 @@ impl Tree {
 	}
 }
 
-impl std::fmt::Display for Tree {
+impl std::fmt::Display for Expr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		writeln!(f, "Tree {{")?;
+		writeln!(f, "Expr {{")?;
 		writeln!(f, "\t node_stack: {:?},", self.node_stack)?;
 		writeln!(f, "\t bin_op_stack: {:?},", self.bin_op_stack)?;
 		writeln!(f, "\t braces: {},", self.opened_brackets_cnt)?;

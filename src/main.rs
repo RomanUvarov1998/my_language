@@ -1,6 +1,6 @@
 mod parser;
 mod lexer;
-mod tree;
+mod expr;
 mod interpreter;
 
 #[cfg(test)]
