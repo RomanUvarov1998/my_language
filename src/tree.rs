@@ -76,84 +76,12 @@ impl Tree {
 impl std::fmt::Display for Tree {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		writeln!(f, "Tree {{")?;
-		writeln!(f, "main_stack: {:?},", self.main_stack)?;
-		writeln!(f, "temp_stack: {:?},", self.temp_stack)?;
+		writeln!(f, "\t main_stack: {:?},", self.main_stack)?;
+		writeln!(f, "\t temp_stack: {:?},", self.temp_stack)?;
 		writeln!(f, "}}")
 	}
 }
 
 trait Node: std::fmt::Display {
 	fn calc(&self) -> f32;
-}
-
-struct PlusNode { 
-	lhs: Box<dyn Node>, 
-	rhs: Box<dyn Node>,
-}
-impl Node for PlusNode {
-	fn calc(&self) -> f32 {
-		self.rhs.calc() + self.lhs.calc()
-	}
-}
-impl std::fmt::Display for PlusNode {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "[{}] + [{}]", self.lhs, self.rhs)
-	}
-}
-
-struct MinusNode { 
-	lhs: Box<dyn Node>, 
-	rhs: Box<dyn Node>,
-}
-impl Node for MinusNode {
-	fn calc(&self) -> f32 {
-		self.rhs.calc() - self.lhs.calc()
-	}
-}
-impl std::fmt::Display for MinusNode {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "[{}] - [{}]", self.lhs, self.rhs)
-	}
-}
-
-struct MulNode { 
-	lhs: Box<dyn Node>, 
-	rhs: Box<dyn Node>,
-}
-impl Node for MulNode {
-	fn calc(&self) -> f32 {
-		self.rhs.calc() * self.lhs.calc()
-	}
-}
-impl std::fmt::Display for MulNode {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "[{}] * [{}]", self.lhs, self.rhs)
-	}
-}
-
-struct DivNode { 
-	lhs: Box<dyn Node>, 
-	rhs: Box<dyn Node>,
-}
-impl Node for DivNode {
-	fn calc(&self) -> f32 {
-		self.rhs.calc() / self.lhs.calc()
-	}
-}
-impl std::fmt::Display for DivNode {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "[{}] / [{}]", self.lhs, self.rhs)
-	}
-}
-
-struct NumberNode (f32);
-impl Node for NumberNode {
-	fn calc(&self) -> f32 {
-		self.0
-	}
-}
-impl std::fmt::Display for NumberNode {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "[{}]", self.0)
-	}
 }

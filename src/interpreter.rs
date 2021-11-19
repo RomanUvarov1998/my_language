@@ -12,7 +12,8 @@ impl<'code> Interpreter<'code> {
 	
 	pub fn process(&self) -> Result<(), InterpErr> {
 		let parser = Parser::new(&self.code)?;
-		let lexer = Lexer::new(parser.tokens())?;		
+		let lexer = Lexer::new(parser.tokens())?;	
+		println!("Result: {}", lexer.calc()?);		
 		Ok(())
 	}
 }

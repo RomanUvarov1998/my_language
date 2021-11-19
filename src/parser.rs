@@ -69,7 +69,7 @@ impl Parser {
 #[derive(Debug, Clone, Copy)]
 pub enum Token {
 	Number (f32),
-	BinOp (BinOp)
+	BinOp (BinOp),
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]

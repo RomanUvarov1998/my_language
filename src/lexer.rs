@@ -14,9 +14,11 @@ impl Lexer {
 		}
 		tree.complete()?;
 		
-		println!("Result: {}", tree.calc()?);
-		
 		Ok( Self { tree } )
+	}
+	
+	pub fn calc(&self) -> Result<f32, LexerErr> {
+		self.tree.calc()
 	}
 }
 
