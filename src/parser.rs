@@ -18,12 +18,14 @@ impl Parser {
 				CharKind::Minus => Token::BinOp ( BinOp::Minus ),
 				CharKind::Mul => Token::BinOp ( BinOp::Mul ),
 				CharKind::Div => Token::BinOp ( BinOp::Div ),
+				CharKind::LeftBracket => Token::Bracket ( Bracket::Left ),
+				CharKind::RightBracket => Token::Bracket ( Bracket::Right ),
 				CharKind::Whitespace => continue,
 				CharKind::Invalid (..) => return Err(TokConstructErr::new(ch, pos)),
 			};
 			toks.push(tok);
 		}
-		
+		//(1+2*(3+4)+6)/10
 		Ok( Parser { toks } )
 	}
 	
@@ -70,50 +72,22 @@ impl Parser {
 pub enum Token {
 	Number (f32),
 	BinOp (BinOp),
+	Bracket (Bracket),
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub enum BinOp {
 	Plus,
 	Minus,
 	Mul,
 	Div
 }
-impl BinOp {
-	fn get_rank(self) -> u32 {
-		match self {
-			BinOp::Plus | BinOp::Minus => 1,
-			BinOp::Mul | BinOp::Div => 2,
-		}
-	}
-}
-use std::cmp::Ordering;
-impl Ord for BinOp {
-    fn cmp(&self, other: &Self) -> Ordering {
-		self.get_rank().cmp(&other.get_rank())
-    }
-}
-impl PartialOrd for BinOp {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
-impl PartialEq for Token {
-    fn eq(&self, other: &Self) -> bool {
-		match self {
-			Token::Number (val1) => match other {
-				Token::Number (val2) => (val1 - val2).abs() <= std::f32::EPSILON,
-				_ => false,
-			},
-			Token::BinOp (bin_op1) => match other {
-				Token::BinOp (bin_op2) => bin_op1 == bin_op2,
-				_ => false,
-			},
-		}
-    }
+#[derive(Debug, Clone, Copy)]
+pub enum Bracket {
+	Right,
+	Left,
 }
-impl Eq for Token {}
 
 #[derive(Debug)]
 pub struct TokConstructErr { ch: CharKind, pos: usize, }
@@ -134,6 +108,8 @@ impl std::fmt::Display for TokConstructErr {
 			CharKind::Minus => write!(f, "'-'")?,
 			CharKind::Mul => write!(f, "'*'")?,
 			CharKind::Div => write!(f, "'/'")?,
+			CharKind::LeftBracket => write!(f, "'('")?,
+			CharKind::RightBracket => write!(f, "')'")?,
 			CharKind::Whitespace => write!(f, "Whitespace")?,
 			CharKind::Invalid (ch) => write!(f, "invalid '{}'", ch)?,
 		};
@@ -169,6 +145,8 @@ impl<'code> CharsIter<'code> {
 				'-' => CharKind::Minus,
 				'*' => CharKind::Mul,
 				'/' => CharKind::Div,
+				'(' => CharKind::LeftBracket,
+				')' => CharKind::RightBracket,
 				' ' | '\n' | '\t' => CharKind::Whitespace,
 				_ => CharKind::Invalid (ch)
 			}
@@ -200,6 +178,8 @@ pub enum CharKind {
 	Minus,
 	Mul,
 	Div,
+	LeftBracket,
+	RightBracket,
 	Whitespace,
 	Invalid (char),
 }

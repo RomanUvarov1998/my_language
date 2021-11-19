@@ -11,6 +11,7 @@ impl Lexer {
 		
 		for token in tokens {
 			tree.add_node(*token)?;
+			println!("{}", tree);
 		}
 		tree.complete()?;
 		
