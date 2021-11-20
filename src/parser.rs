@@ -1,18 +1,32 @@
-pub struct Parser {
-	toks: Vec<Token>
+pub struct Parser<'code> {
+	code: &'code str,
 }
 
 const RADIX: u32 = 10_u32;
 
-impl Parser {
-	pub fn new(code: &str) -> Result<Self, TokConstructErr> {
-		let mut toks = Vec::<Token>::new();
-				
-		let mut iter: CharsIter = CharsIter::new(code);
-		
-		while let Some( ( ch, pos ) ) = iter.next(){
+impl<'code> Parser<'code> {
+	pub fn new(code: &'code str) -> Self {
+		Self { code }
+	}
+	
+	pub fn get_tokens_iter(&self) -> TokensIter<'code> {
+		TokensIter::new( CharsIter::new(self.code) )
+	}
+}
+
+pub struct TokensIter<'code> {
+	iter: CharsIter<'code>
+}
+
+impl<'code> TokensIter<'code> {
+	fn new(iter: CharsIter<'code>) -> Self {
+		Self { iter }
+	}
+	
+	pub fn next_token(&mut self) -> Result<Option<Token>, TokConstructErr> {		
+		while let Some( ( ch, pos ) ) = self.iter.next(){
 			let tok = match ch {
-				CharKind::Digit (first_digit) => Self::parse_number(first_digit, &mut iter)?,
+				CharKind::Digit (first_digit) => Self::parse_number(first_digit, &mut self.iter)?,
 				CharKind::Dot => return Err(TokConstructErr::new(ch, pos)),
 				CharKind::Plus => Token::BinOp ( BinOp::Plus ),
 				CharKind::Minus => Token::BinOp ( BinOp::Minus ),
@@ -23,14 +37,9 @@ impl Parser {
 				CharKind::Whitespace => continue,
 				CharKind::Invalid (..) => return Err(TokConstructErr::new(ch, pos)),
 			};
-			toks.push(tok);
+			return Ok(Some(tok));
 		}
-		//(1+2*(3+4)+6)/10
-		Ok( Parser { toks } )
-	}
-	
-	pub fn tokens(&self) -> &Vec<Token> {
-		&self.toks
+		return Ok(None);
 	}
 	
 	fn parse_number(first_digit: u32, iter: &mut CharsIter) -> Result<Token, TokConstructErr> {

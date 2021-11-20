@@ -1,17 +1,17 @@
-use super::parser::Token;
+use super::parser::{ Token, TokensIter };
 use super::expr::Expr;
+use super::interpreter::InterpErr;
 
 pub struct Lexer {
 	expr: Expr,
 }
 
 impl Lexer {
-	pub fn new(tokens: &Vec<Token>) -> Result<Self, LexerErr> {
+	pub fn new(mut tokens_iter: TokensIter) -> Result<Self, InterpErr> {
 		let mut expr = Expr::new();
 		
-		for token in tokens {
-			expr.add_node(*token)?;
-			println!("{}", expr);
+		while let Some(token) = tokens_iter.next_token()? {
+			expr.add_node(token)?;
 		}
 		expr.complete()?;
 		

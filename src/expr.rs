@@ -86,14 +86,12 @@ impl Expr {
 			Token::Bracket (br) => match br {
 				Bracket::Left => {
 					self.opened_brackets_cnt += 1;
-					println!("(, {}", self.opened_brackets_cnt);
 				},
 				Bracket::Right => {
 					if self.opened_brackets_cnt == 0 {
 						return Err( LexerErr::UnexpectedToken (token) );
 					}
 					self.opened_brackets_cnt -= 1;
-					println!("), {}", self.opened_brackets_cnt);
 				},
 			}
 		}
