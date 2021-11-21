@@ -107,7 +107,7 @@ pub fn can_make_variable_declare_init_statement() {
 	use super::statements_iter::*;
 	let st = statements_iter.next().unwrap().unwrap();
 	assert_eq!(st, Statement::WithVariable ( 
-			WithVariable::DeclareInitialize {
+			WithVariable::DeclareSet {
 				var_name: String::from("a"), 
 				var_type: VarType::Float32, 
 				value: VarValue::Float32(0.8),
@@ -129,6 +129,24 @@ pub fn can_make_variable_declare_statement() {
 			WithVariable::Declare {
 				var_name: String::from("a"), 
 				var_type: VarType::Float32, 
+			} 
+		) 
+	);
+	
+	assert!(statements_iter.next().unwrap().is_none());
+}
+
+#[test]
+pub fn can_make_variable_set_statement() {
+	let tokens_iter = TokensIter::new(CharsIter::new("a = 0.3 + 0.5;"));	
+	let mut statements_iter = StatementsIter::new(tokens_iter);
+	
+	use super::statements_iter::*;
+	let st = statements_iter.next().unwrap().unwrap();
+	assert_eq!(st, Statement::WithVariable ( 
+			WithVariable::Set {
+				var_name: String::from("a"), 
+				value: VarValue::Float32(0.8),
 			} 
 		) 
 	);

@@ -15,7 +15,8 @@ impl<'code> StatementsIter<'code> {
 		let first = self.tokens_iter.next()?;
 		let st: Statement = match first {
 			Some ( token ) => match token {
-				Token::Keyword ( Keyword::Var ) => self.parse_varable_declaration()?,				
+				Token::Keyword ( Keyword::Var ) => self.parse_varable_declaration()?,	
+				Token::Name( var_name ) => self.parse_variable_set(var_name)?,
 				_ => return Err( InterpErr::new( format!("Unexpected token {:?}", token) ) ),
 			},
 			None => return Ok( None ),
@@ -63,9 +64,31 @@ impl<'code> StatementsIter<'code> {
 			_ => return Err( InterpErr::new( format!("Expected ';' but found {:?}", tok_semicolon) ) ),
 		};
 		
-		Ok ( Statement::WithVariable ( WithVariable::DeclareInitialize {
+		Ok ( Statement::WithVariable ( WithVariable::DeclareSet {
 				var_name, 
 				var_type, 
+				value: VarValue::Float32 ( expr.calc()? ),
+			}
+		) )
+	}
+	
+	fn parse_variable_set(&mut self, var_name: String) -> Result<Statement, InterpErr> {		
+		let tok_assign = self.tokens_iter.next()?;
+		match tok_assign {
+			Some( Token::AssignOp ) => {},
+			_ => return Err( InterpErr::new( format!("Expected '=' but found {:?}", tok_assign) ) ),
+		};
+		
+		let expr = Expr::new(&mut self.tokens_iter)?;
+		
+		let tok_semicolon = self.tokens_iter.next()?;
+		match tok_semicolon {
+			Some( Token::StatementOp ( StatementOp::Semicolon ) ) => {},
+			_ => return Err( InterpErr::new( format!("Expected ';' but found {:?}", tok_semicolon) ) ),
+		};
+		
+		Ok ( Statement::WithVariable ( WithVariable::Set {
+				var_name, 
 				value: VarValue::Float32 ( expr.calc()? ),
 			}
 		) )
@@ -83,8 +106,8 @@ pub enum Statement {
 #[derive(Debug, Eq, PartialEq)]
 pub enum WithVariable {
 	Declare { var_name: String, var_type: VarType },
-	DeclareInitialize { var_name: String, var_type: VarType, value: VarValue },
-	//Set,
+	DeclareSet { var_name: String, var_type: VarType, value: VarValue },
+	Set { var_name: String, value: VarValue },
 }
 
 #[derive(Debug, Eq, PartialEq)]
