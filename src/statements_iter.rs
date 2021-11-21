@@ -46,6 +46,12 @@ impl<'code> StatementsIter<'code> {
 		let tok_assign = self.tokens_iter.next()?;
 		match tok_assign {
 			Some( Token::AssignOp ) => {},
+			Some( Token::StatementOp ( StatementOp::Semicolon ) ) => return 
+				Ok ( Statement::WithVariable ( WithVariable::Declare {
+					var_name, 
+					var_type, 
+				}
+			) ),
 			_ => return Err( InterpErr::new( format!("Expected '=' but found {:?}", tok_assign) ) ),
 		};
 		
@@ -76,7 +82,7 @@ pub enum Statement {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum WithVariable {
-	//Declare { name: String, var_type: VarType },
+	Declare { var_name: String, var_type: VarType },
 	DeclareInitialize { var_name: String, var_type: VarType, value: VarValue },
 	//Set,
 }

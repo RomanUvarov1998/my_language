@@ -117,3 +117,21 @@ pub fn can_make_variable_declare_init_statement() {
 	
 	assert!(statements_iter.next().unwrap().is_none());
 }
+
+#[test]
+pub fn can_make_variable_declare_statement() {
+	let tokens_iter = TokensIter::new(CharsIter::new("var a: f32;"));	
+	let mut statements_iter = StatementsIter::new(tokens_iter);
+	
+	use super::statements_iter::*;
+	let st = statements_iter.next().unwrap().unwrap();
+	assert_eq!(st, Statement::WithVariable ( 
+			WithVariable::Declare {
+				var_name: String::from("a"), 
+				var_type: VarType::Float32, 
+			} 
+		) 
+	);
+	
+	assert!(statements_iter.next().unwrap().is_none());
+}
