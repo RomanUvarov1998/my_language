@@ -56,7 +56,7 @@ impl<'code> StatementsIter<'code> {
 			_ => return Err( InterpErr::new( format!("Expected '=' but found {:?}", tok_assign) ) ),
 		};
 		
-		let expr = Expr::new(&mut self.tokens_iter)?;
+		let value_expr = Expr::new(&mut self.tokens_iter)?;
 		
 		let tok_semicolon = self.tokens_iter.next()?;
 		match tok_semicolon {
@@ -67,7 +67,7 @@ impl<'code> StatementsIter<'code> {
 		Ok ( Statement::WithVariable ( WithVariable::DeclareSet {
 				var_name, 
 				var_type, 
-				value: VarValue::Float32 ( expr.calc()? ),
+				value_expr,
 			}
 		) )
 	}
@@ -79,7 +79,7 @@ impl<'code> StatementsIter<'code> {
 			_ => return Err( InterpErr::new( format!("Expected '=' but found {:?}", tok_assign) ) ),
 		};
 		
-		let expr = Expr::new(&mut self.tokens_iter)?;
+		let value_expr = Expr::new(&mut self.tokens_iter)?;
 		
 		let tok_semicolon = self.tokens_iter.next()?;
 		match tok_semicolon {
@@ -89,7 +89,7 @@ impl<'code> StatementsIter<'code> {
 		
 		Ok ( Statement::WithVariable ( WithVariable::Set {
 				var_name, 
-				value: VarValue::Float32 ( expr.calc()? ),
+				value_expr,
 			}
 		) )
 	}
@@ -106,8 +106,8 @@ pub enum Statement {
 #[derive(Debug, Eq, PartialEq)]
 pub enum WithVariable {
 	Declare { var_name: String, var_type: VarType },
-	DeclareSet { var_name: String, var_type: VarType, value: VarValue },
-	Set { var_name: String, value: VarValue },
+	DeclareSet { var_name: String, var_type: VarType, value_expr: Expr },
+	Set { var_name: String, value_expr: Expr },
 }
 
 #[derive(Debug, Eq, PartialEq)]

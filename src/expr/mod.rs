@@ -1,7 +1,10 @@
+#[cfg(test)]
+mod tests;
+
 use super::tokens_iter::*;
 use super::interpreter::InterpErr;
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Expr {
 	node_stack: NodeStack,
 }
@@ -124,7 +127,7 @@ impl std::fmt::Display for Expr {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 struct RankedArithmeticalOp {
 	op: ArithmeticalOp,
 	rank: u32,
@@ -162,6 +165,21 @@ enum Node {
 	Number (f32),
 	ArithmeticalOp (RankedArithmeticalOp), 
 }
+impl Eq for Node {}
+impl PartialEq for Node {
+	fn eq(&self, other: &Self) -> bool {
+		match self {
+			Node::Number (f1) => match other {
+				Node::Number (f2) => (f1 - f2).abs() <= std::f32::EPSILON,
+				_ => false,
+			},
+			Node::ArithmeticalOp (op1) => match other {
+				Node::ArithmeticalOp (op2) => op1 == op2,
+				_ => false,
+			},
+		}
+	}
+}
 impl std::fmt::Debug for Node {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
@@ -173,7 +191,7 @@ impl std::fmt::Debug for Node {
 
 use std::ops::{Deref, DerefMut};
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 struct NodeStack {
 	inner: Vec<Node>,
 }
