@@ -59,7 +59,7 @@ impl Iterator for CharsIter<'_> {
 	}
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CharKind {
 	Digit (u32, char),
 	Dot,
@@ -76,7 +76,7 @@ pub enum CharKind {
 	Invalid (char),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Punctuation {
 	Colon,
 	Semicolon,

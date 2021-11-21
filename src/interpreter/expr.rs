@@ -14,18 +14,16 @@ impl Expr {
 		
 		loop {
 			match tokens_iter.peek()? {
-				Some(token_ref) => match token_ref {
-					Token::StatementOp (..) => break,
-					_ => {
-						let token = tokens_iter.next().unwrap().unwrap();
-						Self::add_token(
-								&mut node_stack, 
-								&mut bin_op_stack, 
-								&mut opened_brackets_cnt, 
-								token)?
-					},
+				Token::StatementOp (..) => break,
+				Token::Bracket (Bracket::Right) if opened_brackets_cnt == 0 => break,
+				_ => {
+					let token = tokens_iter.next().unwrap();
+					Self::add_token(
+							&mut node_stack, 
+							&mut bin_op_stack, 
+							&mut opened_brackets_cnt, 
+							token)?
 				},
-				None => break,
 			}
 		}
 		
@@ -40,7 +38,7 @@ impl Expr {
 				let (res, _) = self.calc_op(self.node_stack.len() - 1, memory)?;
 				Ok(VarValue::Float32(res))
 			},
-			None => Err(InterpErr::from(ExprError::Empty)),
+			None => Err(InterpErr::from(ExprErr::Empty)),
 		}
 	}
 	
@@ -49,7 +47,7 @@ impl Expr {
 		bin_op_stack: &mut ArithmeticalOpStack, 
 		opened_brackets_cnt: &mut u32, 
 		token: Token
-	) -> Result<(), ExprError> {		
+	) -> Result<(), ExprErr> {		
 		match token {
 			Token::ArithmeticalOp (bin_op) => {
 				let cur_bin_op = RankedArithmeticalOp::new(bin_op, *opened_brackets_cnt);
@@ -74,13 +72,13 @@ impl Expr {
 				},
 				Bracket::Right => {
 					if *opened_brackets_cnt == 0 {
-						return Err( ExprError::UnexpectedToken (token) );
+						return Err( ExprErr::UnexpectedToken (token) );
 					}
 					*opened_brackets_cnt -= 1;
 				},
 			},
 			Token::Name (name) => node_stack.push_var_name(name),
-			_ => return Err( ExprError::UnexpectedToken (token) ),
+			_ => return Err( ExprErr::UnexpectedToken (token) ),
 		}
 		
 		Ok(())
@@ -89,7 +87,7 @@ impl Expr {
 	fn complete(
 		node_stack: &mut NodeStack, 
 		bin_op_stack: &mut ArithmeticalOpStack
-	) -> Result<(), ExprError> {
+	) -> Result<(), ExprErr> {
 		while let Some(last_bin_op) = bin_op_stack.pop() {
 			node_stack.push( Node::ArithmeticalOp ( last_bin_op ) );
 		}
@@ -103,7 +101,7 @@ impl Expr {
 				let var_value: &VarValue = memory.get_variable(name)?;
 				match var_value {
 					VarValue::Float32(value) => Ok( ( *value, tok_ind ) ),
-					//_ => Err( InterpErr::from(ExprError::WrongType (format!("{:?}", var_value)) ) ),
+					//_ => Err( InterpErr::from(ExprErr::WrongType (format!("{:?}", var_value)) ) ),
 				}
 			},
 			Node::ArithmeticalOp (bin_op) => {
@@ -271,8 +269,8 @@ impl DerefMut for ArithmeticalOpStack {
     }
 }
 
-#[derive(Debug)]
-pub enum ExprError {
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExprErr {
 	UnexpectedToken (Token),
 	#[allow(unused)]
 	WrongType (String),
@@ -281,12 +279,12 @@ pub enum ExprError {
 
 use super::memory::*;
 
-impl std::fmt::Display for ExprError {
+impl std::fmt::Display for ExprErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			ExprError::UnexpectedToken (token) => write!(f, "Unexpected token '{:?}'", token),
-			ExprError::WrongType (var_value) => write!(f, "Wrong operand type: '{:?}'", var_value),
-			ExprError::Empty => write!(f, "No tokens to make an expression"),
+			ExprErr::UnexpectedToken (token) => write!(f, "Unexpected token '{:?}'", token),
+			ExprErr::WrongType (var_value) => write!(f, "Wrong operand type: '{:?}'", var_value),
+			ExprErr::Empty => write!(f, "No tokens to make an expression"),
 		}
 	}
 }
@@ -307,7 +305,7 @@ mod tests {
 		assert_eq!(st, Statement::WithVariable ( 
 				WithVariable::DeclareSet {
 					var_name: String::from("a"), 
-					var_type: VarType::Float32, 
+					data_type: DataType::Float32, 
 					value_expr: Expr {
 						node_stack: NodeStack {
 							inner: vec![
@@ -321,7 +319,7 @@ mod tests {
 			) 
 		);
 		
-		assert!(statements_iter.next().unwrap().is_none());
+		assert_eq!(statements_iter.next().unwrap(), None);
 	}
 
 	#[test]
@@ -346,12 +344,12 @@ mod tests {
 			) 
 		);
 		
-		assert!(statements_iter.next().unwrap().is_none());
+		assert_eq!(statements_iter.next().unwrap(), None);
 	}
 
 	#[test]
 	pub fn can_parse_expression_with_variables() {
-		let mut tokens_iter = TokensIter::new(CharsIter::new("a + 2 + b / c"));
+		let mut tokens_iter = TokensIter::new(CharsIter::new("a + 2 + b / c;"));
 		
 		let expr = Expr::new(&mut tokens_iter).unwrap();
 		assert_eq!(
@@ -370,5 +368,63 @@ mod tests {
 				}
 			},
 		);
+	}
+
+	#[test]
+	pub fn can_parse_print_call() {
+		let tokens_iter = TokensIter::new(CharsIter::new(r"
+		var a: f32;
+		a = 0.3 + 0.5;
+		print(a);
+		"));	
+		let mut statements_iter = StatementsIter::new(tokens_iter);
+		
+		println!("----------------------------------");
+		let st = statements_iter.next().unwrap().unwrap();
+		assert_eq!(st, Statement::WithVariable ( 
+				WithVariable::Declare {
+					var_name: String::from("a"), 
+					data_type: DataType::Float32,
+				} 
+			) 
+		);
+		
+		println!("----------------------------------");
+		let st = statements_iter.next().unwrap().unwrap();
+		assert_eq!(st, Statement::WithVariable ( 
+				WithVariable::Set {
+					var_name: String::from("a"), 
+					value_expr: Expr {
+						node_stack: NodeStack {
+							inner: vec![
+								Node::Number (0.3),
+								Node::Number (0.5),
+								Node::ArithmeticalOp (RankedArithmeticalOp { op: ArithmeticalOp::Plus, rank: 1_u32 }),
+							]
+						}
+					},
+				} 
+			) 
+		);
+		
+		println!("----------------------------------");
+		let st = statements_iter.next().unwrap().unwrap();
+		assert_eq!(
+			st, 
+			Statement::FuncCall { 
+				name: String::from("print"), 
+				args: vec![
+					Expr {
+						node_stack: NodeStack {
+							inner: vec![
+								Node::Variable { name: String::from("a") },
+							]
+						}
+					},
+				]
+			});
+		
+		println!("----------------------------------");
+		assert_eq!(statements_iter.next().unwrap(), None);
 	}
 }

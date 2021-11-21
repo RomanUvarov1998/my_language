@@ -31,15 +31,17 @@ impl Interpreter {
 			match statements_iter.next()? {
 				Some(st) => match st {
 					Statement::WithVariable (st) => match st {
-						WithVariable::Declare { var_name, var_type } => 
-							self.memory.add_variable(var_name, var_type)?,
-						WithVariable::DeclareSet { var_name, var_type, value_expr } => {
-							self.memory.add_variable(var_name.clone(), var_type)?;
+						WithVariable::Declare { var_name, data_type } => 
+							self.memory.add_variable(var_name, data_type)?,
+						WithVariable::DeclareSet { var_name, data_type, value_expr } => {
+							self.memory.add_variable(var_name.clone(), data_type)?;
 							self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?;
 						},
 						WithVariable::Set { var_name, value_expr } => 
 							self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?,
-					}
+					},
+					Statement::FuncCall { name, args } => 
+							self.memory.call_func(name, args)?,
 				},
 				None => break,
 			}
@@ -49,54 +51,57 @@ impl Interpreter {
 	}
 }
 
-#[derive(Debug)]
-pub struct InterpErr { msg: String }
-
-impl InterpErr {
-	pub fn new(msg: String) -> Self {
-		Self { msg }
-	}
+#[derive(Debug, PartialEq, Eq)]
+pub enum InterpErr {
+	Token (TokenErr),
+	Expr (ExprErr),
+	Statement (StatementErr),
+	Var (VarErr),
+	Func (FuncErr),
 }
 
 impl std::fmt::Display for InterpErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "Error occured: {}", &self.msg)
+		write!(f, "Error: ")?;
+		
+		match self {
+			InterpErr::Token (err) => write!(f, "{}", err),
+			InterpErr::Expr (err) => write!(f, "{}", err),
+			InterpErr::Statement (err) => write!(f, "{}", err),
+			InterpErr::Var (err) => write!(f, "{}", err),
+			InterpErr::Func (err) => write!(f, "{}", err),
+		}
 	}
 }
 
-use tokens_iter::TokConstructErr;
-impl From<TokConstructErr> for InterpErr {
-	fn from(err: TokConstructErr) -> InterpErr {
-        InterpErr::new(format!("{}", err))
+use tokens_iter::TokenErr;
+impl From<TokenErr> for InterpErr {
+	fn from(err: TokenErr) -> InterpErr {
+        InterpErr::Token(err)
     }
 }
 
-use expr::ExprError;
-impl From<ExprError> for InterpErr {
-	fn from(err: ExprError) -> InterpErr {
-        InterpErr::new(format!("{}", err))
+use expr::ExprErr;
+impl From<ExprErr> for InterpErr {
+	fn from(err: ExprErr) -> InterpErr {
+        InterpErr::Expr(err)
     }
 }
 
 impl From<StatementErr> for InterpErr {
 	fn from(err: StatementErr) -> InterpErr {
-        InterpErr::new(format!("{}", err))
+        InterpErr::Statement(err)
     }
 }
 
 impl From<VarErr> for InterpErr {
 	fn from(err: VarErr) -> InterpErr {
-		match err {
-			VarErr::NotDefined { name } => 
-				InterpErr::new(format!("Variable '{}' is not defined", &name)),
-			VarErr::NotSet { name } => 
-				InterpErr::new(format!("Variable '{}' is not set", &name)),
-			VarErr::UnknownType { name } => 
-				InterpErr::new(format!("Unknown type '{}'", &name)),
-			VarErr::AlreadyExists { name } => 
-				InterpErr::new(format!("Already exists '{}'", &name)),
-			VarErr::WrongType { new_value, var_type } =>
-				InterpErr::new(format!("Wrong value '{:?}' for type '{:?}'", new_value, var_type)),
-		}
+		InterpErr::Var(err)
+    }
+}
+
+impl From<FuncErr> for InterpErr {
+	fn from(err: FuncErr) -> InterpErr {
+        InterpErr::Func(err)
     }
 }

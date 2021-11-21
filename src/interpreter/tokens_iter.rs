@@ -13,22 +13,22 @@ impl<'code> TokensIter<'code> {
 		}
 	}
 	
-	pub fn peek<'iter>(&'iter mut self) -> Result<Option<&'iter Token>, TokConstructErr> {
+	pub fn peek<'iter>(&'iter mut self) -> Result<&'iter Token, TokenErr> {
 		if let None = self.peeked_token {
-			self.peeked_token = self.next()?;
+			self.peeked_token = Some( self.next()? );
 		}		
-		Ok( self.peeked_token.as_ref() )
+		Ok( self.peeked_token.as_ref().unwrap() )
 	}
 	
-	pub fn next(&mut self) -> Result<Option<Token>, TokConstructErr> {	
+	pub fn next(&mut self) -> Result<Token, TokenErr> {	
 		if self.peeked_token.is_some() {
-			return Ok( self.peeked_token.take() );
+			return Ok( self.peeked_token.take().unwrap() );
 		}
 	
 		while let Some( ( ch, pos ) ) = self.iter.next(){
 			let token: Token = match ch {
 				CharKind::Digit (first_digit, _) => Self::parse_number(first_digit, &mut self.iter)?,
-				CharKind::Dot => return Err(TokConstructErr::new(ch, pos)),
+				CharKind::Dot => return Err(TokenErr::Construct { ch, pos }),
 				CharKind::Plus => Token::ArithmeticalOp ( ArithmeticalOp::Plus ),
 				CharKind::Minus => Token::ArithmeticalOp ( ArithmeticalOp::Minus ),
 				CharKind::Mul => Token::ArithmeticalOp ( ArithmeticalOp::Mul ),
@@ -43,14 +43,32 @@ impl<'code> TokensIter<'code> {
 					Punctuation::Semicolon => Token::StatementOp (StatementOp::Semicolon),
 					Punctuation::Comma => Token::StatementOp (StatementOp::Comma),
 				},
-				CharKind::Invalid (..) => return Err(TokConstructErr::new(ch, pos)),
+				CharKind::Invalid (..) => return Err(TokenErr::Construct { ch, pos } ),
 			};
-			return Ok(Some(token));
+			return Ok(token);
 		}
-		return Ok(None);
+		return Err( TokenErr::EndReached );
 	}
 	
-	fn parse_number(first_digit: u32, iter: &mut CharsIter) -> Result<Token, TokConstructErr> {
+	pub fn expect(&mut self, expected_token: Token) -> Result<TokenExpectation, TokenErr> {
+		let found = self.next()?;
+		Ok( TokenExpectation::new(expected_token, found) )
+	}
+	
+	pub fn expect_name(&mut self) -> Result<String, TokenErr> {
+		let found = self.next()?;
+		match found {
+			Token::Name ( name ) => Ok( name ),
+			_ => return Err( TokenErr::ExpectedButFound { 
+							expected: vec![
+								Token::Name(String::from("<name>")),
+							], 
+							found
+						} ),
+		}
+	}
+	
+	fn parse_number(first_digit: u32, iter: &mut CharsIter) -> Result<Token, TokenErr> {
 		let mut value: f32 = first_digit as f32;
 		let mut has_dot: bool = false;
 		let mut frac_multiplier = 0.1_f32;
@@ -72,10 +90,10 @@ impl<'code> TokensIter<'code> {
 						if !has_dot {
 							has_dot = true;
 						} else {
-							break Err(TokConstructErr::new(ch, pos));
+							break Err(TokenErr::Construct { ch, pos });
 						}
 					},
-					CharKind::Letter (..) => break Err(TokConstructErr::new(ch, pos)),
+					CharKind::Letter (..) => break Err(TokenErr::Construct { ch, pos }),
 					_ => break Ok( Token::Number (value) ),
 				},
 				None => break Ok( Token::Number (value) ),
@@ -83,7 +101,7 @@ impl<'code> TokensIter<'code> {
 		}
 	}
 
-	fn parse_name_or_keyword(first_char: char, iter: &mut CharsIter) -> Result<Token, TokConstructErr> {
+	fn parse_name_or_keyword(first_char: char, iter: &mut CharsIter) -> Result<Token, TokenErr> {
 		let mut name = String::from(first_char);
 		
 		loop {
@@ -208,18 +226,49 @@ pub enum Keyword {
 	Var,
 }
 
-#[derive(Debug)]
-pub struct TokConstructErr { ch: CharKind, pos: usize, }
+#[derive(Debug, PartialEq, Eq)]
+pub enum TokenErr {
+	Construct { ch: CharKind, pos: usize },
+	ExpectedButFound { expected: Vec<Token>, found: Token },
+	EndReached,
+}
 
-impl TokConstructErr {
-	pub fn new(ch: CharKind, pos: usize) -> Self {
-		Self { ch, pos }
+impl std::fmt::Display for TokenErr {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			TokenErr::Construct { ch, pos } => write!(f, "Unexpected character '{}' in position {}", ch, pos),
+			TokenErr::ExpectedButFound { expected, found } => write!(f, "Expected {:?} but found {:?}", expected, found),
+			TokenErr::EndReached => write!(f, "End reached"),
+		}
 	}
 }
 
-impl std::fmt::Display for TokConstructErr {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "Unexpected {} in position {}", self.ch, self.pos)
+pub struct TokenExpectation {
+	expected: Vec<Token>, found: Token
+}
+
+impl TokenExpectation {
+	fn new(expected_token: Token, found: Token) -> Self {
+		Self {
+			expected: vec![expected_token], 
+			found,
+		}
+	}
+	
+	#[allow(unused)]
+	pub fn or(mut self, expected_token: Token) -> Self {
+		self.expected.push(expected_token);
+		self
+	}
+	
+	pub fn check(self) -> Result<(), TokenErr> {
+		match self.expected.iter().find(|t| **t == self.found) {
+			Some (_) => Ok(()),
+			None => {
+				let TokenExpectation { expected, found } = self;
+				Err( TokenErr::ExpectedButFound { expected, found } )
+			},
+		}
 	}
 }
 
@@ -230,89 +279,89 @@ mod tests {
 	#[test]
 	pub fn can_parse_int() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("123"));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (123_f32));
-		assert!(tokens_iter.next().unwrap().is_none());
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (123_f32));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached);
 	}
 
 	#[test]
 	pub fn can_parse_float() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("123.456"));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (123.456_f32));
-		assert!(tokens_iter.next().unwrap().is_none());
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (123.456_f32));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached);
 	}
 
 	#[test]
 	pub fn can_parse_plus() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("+"));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Plus));
-		assert!(tokens_iter.next().unwrap().is_none());
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Plus));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached);
 	}
 
 	#[test]
 	pub fn can_parse_minus() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("-"));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Minus));
-		assert!(tokens_iter.next().unwrap().is_none());
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Minus));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached);
 	}
 
 	#[test]
 	pub fn can_parse_mul() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("*"));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Mul));
-		assert!(tokens_iter.next().unwrap().is_none());
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Mul));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached);
 	}
 
 	#[test]
 	pub fn can_parse_div() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("/"));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Div));
-		assert!(tokens_iter.next().unwrap().is_none());
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Div));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached);
 	}
 
 	#[test]
 	pub fn can_parse_name() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("var1"));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Name (String::from("var1")));
-		assert!(tokens_iter.next().unwrap().is_none());
+		assert_eq!(tokens_iter.next().unwrap(), Token::Name (String::from("var1")));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached);
 	}
 
 	#[test]
 	pub fn can_parse_keyword() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("var"));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Keyword ( Keyword::Var ));
-		assert!(tokens_iter.next().unwrap().is_none());
+		assert_eq!(tokens_iter.next().unwrap(), Token::Keyword ( Keyword::Var ));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached);
 	}
 
 	#[test]
 	pub fn can_parse_simple_expr() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("1+23.4-45.6*7.8/9 var1var"));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (1_f32));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Plus));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (23.4_f32));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Minus));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (45.6_f32));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Mul));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (7.8_f32));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Div));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (9_f32));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Name (String::from("var1var")));
-		assert!(tokens_iter.next().unwrap().is_none());
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (1_f32));
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Plus));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (23.4_f32));
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Minus));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (45.6_f32));
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Mul));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (7.8_f32));
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Div));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (9_f32));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Name (String::from("var1var")));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached);
 	}
 
 	#[test]
 	pub fn can_parse_simple_expr_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var"));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (1_f32));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Plus));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (23.4_f32));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Minus));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (45.6_f32));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Mul));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (7.8_f32));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Div));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Number (9_f32));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Name (String::from("var1")));
-		assert_eq!(tokens_iter.next().unwrap().unwrap(), Token::Keyword ( Keyword::Var ));
-		assert!(tokens_iter.next().unwrap().is_none());
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (1_f32));
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Plus));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (23.4_f32));
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Minus));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (45.6_f32));
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Mul));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (7.8_f32));
+		assert_eq!(tokens_iter.next().unwrap(), Token::ArithmeticalOp (ArithmeticalOp::Div));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Number (9_f32));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Name (String::from("var1")));
+		assert_eq!(tokens_iter.next().unwrap(), Token::Keyword ( Keyword::Var ));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached);
 	}
 }

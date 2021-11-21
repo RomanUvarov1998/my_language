@@ -13,7 +13,7 @@ pub fn can_make_variable_declare_statement() {
 	assert_eq!(st, Statement::WithVariable ( 
 			WithVariable::Declare {
 				var_name: String::from("a"), 
-				var_type: VarType::Float32, 
+				data_type: DataType::Float32, 
 			} 
 		) 
 	);
@@ -23,7 +23,7 @@ pub fn can_make_variable_declare_statement() {
 
 #[test]
 pub fn can_calc_expression_without_variables() {
-	let mut tokens_iter = TokensIter::new(CharsIter::new("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30"));
+	let mut tokens_iter = TokensIter::new(CharsIter::new("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;"));
 	
 	let expr = Expr::new(&mut tokens_iter).unwrap();
 	

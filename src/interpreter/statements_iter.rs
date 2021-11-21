@@ -1,6 +1,6 @@
 use super::tokens_iter::*;
 use super::expr::Expr;
-use super::{ InterpErr, memory::VarType };
+use super::{ InterpErr, memory::DataType };
 
 pub struct StatementsIter<'code> {
 	tokens_iter: TokensIter<'code>
@@ -12,80 +12,83 @@ impl<'code> StatementsIter<'code> {
 	}
 	
 	pub fn next(&mut self) -> Result<Option<Statement>, InterpErr> {
-		let first = self.tokens_iter.next()?;
-		let st: Statement = match first {
-			Some ( token ) => match token {
-				Token::Keyword ( Keyword::Var ) => self.parse_varable_declaration()?,	
-				Token::Name( var_name ) => self.parse_variable_set(var_name)?,
-				_ => return Err( InterpErr::new( format!("Unexpected token {:?}", token) ) ),
+		let first = match self.tokens_iter.next() {
+			Err(err) => match err {
+				TokenErr::EndReached => return Ok( None ),
+				_ => return Err( InterpErr::from(err) ),
 			},
-			None => return Ok( None ),
+			Ok(token) => token,
+		};
+		let st: Statement = match first {
+			Token::Keyword ( Keyword::Var ) => self.parse_varable_declaration()?,	
+			Token::Name( name ) => {
+				let second = self.tokens_iter.next()?;
+				match second {
+					Token::Bracket(Bracket::Left) => self.parse_func_call(name)?,
+					Token::AssignOp => self.parse_variable_set(name)?,
+					_ => return Err( InterpErr::Token ( TokenErr::ExpectedButFound { 
+							expected: vec![
+								Token::Bracket(Bracket::Left),
+								Token::AssignOp,
+							], 
+							found: second 
+						} ) ),
+				}
+			},
+			found @ _ => return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
+							expected: vec![
+								Token::Keyword ( Keyword::Var ),
+								Token::Name( String::from("<name>") ),
+							], 
+							found
+						} ) ),
 		};
 		Ok (  Some ( st ) )
 	}
 	
 	fn parse_varable_declaration(&mut self) -> Result<Statement, InterpErr> {	
-		let tok_var_name = self.tokens_iter.next()?;
-		let var_name: String = match tok_var_name {
-			Some( Token::Name ( name ) ) => name,
-			_ => return Err( InterpErr::new( format!("Expected variable name but found {:?}", tok_var_name) ) ),
-		};
+		let var_name = self.tokens_iter.expect_name()?;
 		
-		let tok_colon = self.tokens_iter.next()?;
-		match tok_colon {
-			Some( Token::StatementOp ( StatementOp::Colon ) ) => {},
-			_ => return Err( InterpErr::new( format!("Expected ':' but found {:?}", tok_colon) ) ),
-		};
+		self.tokens_iter.expect(Token::StatementOp ( StatementOp::Colon ))?.check()?;
 		
-		let tok_type_name = self.tokens_iter.next()?;
-		let type_name: String = match tok_type_name {
-			Some( Token::Name ( name ) ) => name,
-			_ => return Err( InterpErr::new( format!("Expected type name but found {:?}", tok_type_name) ) ),
-		};
-		let var_type = VarType::parse(&type_name)?;
+		let type_name = self.tokens_iter.expect_name()?;
+		let data_type = DataType::parse(&type_name)?;
 		
 		let tok_assign = self.tokens_iter.next()?;
 		match tok_assign {
-			Some( Token::AssignOp ) => {},
-			Some( Token::StatementOp ( StatementOp::Semicolon ) ) => return 
+			Token::AssignOp => {},
+			Token::StatementOp ( StatementOp::Semicolon ) => return 
 				Ok ( Statement::WithVariable ( WithVariable::Declare {
 					var_name, 
-					var_type, 
+					data_type, 
 				}
 			) ),
-			_ => return Err( InterpErr::new( format!("Expected '=' but found {:?}", tok_assign) ) ),
+			found @ _ => return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
+							expected: vec![
+								Token::AssignOp,
+								Token::StatementOp ( StatementOp::Semicolon ),
+							], 
+							found
+						} ) ),
 		};
 		
 		let value_expr = Expr::new(&mut self.tokens_iter)?;
 		
-		let tok_semicolon = self.tokens_iter.next()?;
-		match tok_semicolon {
-			Some( Token::StatementOp ( StatementOp::Semicolon ) ) => {},
-			_ => return Err( InterpErr::new( format!("Expected ';' but found {:?}", tok_semicolon) ) ),
-		};
+		
+		self.tokens_iter.expect(Token::StatementOp ( StatementOp::Semicolon ))?.check()?;
 		
 		Ok ( Statement::WithVariable ( WithVariable::DeclareSet {
 				var_name, 
-				var_type, 
+				data_type, 
 				value_expr,
 			}
 		) )
 	}
 	
 	fn parse_variable_set(&mut self, var_name: String) -> Result<Statement, InterpErr> {		
-		let tok_assign = self.tokens_iter.next()?;
-		match tok_assign {
-			Some( Token::AssignOp ) => {},
-			_ => return Err( InterpErr::new( format!("Expected '=' but found {:?}", tok_assign) ) ),
-		};
-		
 		let value_expr = Expr::new(&mut self.tokens_iter)?;
 		
-		let tok_semicolon = self.tokens_iter.next()?;
-		match tok_semicolon {
-			Some( Token::StatementOp ( StatementOp::Semicolon ) ) => {},
-			_ => return Err( InterpErr::new( format!("Expected ';' but found {:?}", tok_semicolon) ) ),
-		};
+		self.tokens_iter.expect(Token::StatementOp ( StatementOp::Semicolon ))?.check()?;
 		
 		Ok ( Statement::WithVariable ( WithVariable::Set {
 				var_name, 
@@ -93,31 +96,65 @@ impl<'code> StatementsIter<'code> {
 			}
 		) )
 	}
+
+	fn parse_func_call(&mut self, func_name: String) -> Result<Statement, InterpErr> {
+		let mut exprs = Vec::<Expr>::new();
+		
+		loop {
+			exprs.push(Expr::new(&mut self.tokens_iter)?);
+			match self.tokens_iter.peek()? {
+				&Token::StatementOp ( StatementOp::Comma ) => {
+					self.tokens_iter.next()?;
+				},
+				&Token::Bracket ( Bracket::Right ) => {
+					self.tokens_iter.next()?;
+					break;
+				},
+				_ => {
+					let found = self.tokens_iter.next()?;
+					return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
+							expected: vec![
+								Token::StatementOp(StatementOp::Comma),
+								Token::Bracket ( Bracket::Right ),
+							], 
+							found
+						} ) );
+				},
+			}
+		}
+		
+		self.tokens_iter.expect(Token::StatementOp ( StatementOp::Semicolon ))?.check()?;
+		
+		Ok ( Statement::FuncCall {
+			name: func_name, 
+			args: exprs,
+		} )
+	}
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Statement {
 	WithVariable (WithVariable),
+	FuncCall { name: String, args: Vec<Expr> },
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum WithVariable {
-	Declare { var_name: String, var_type: VarType },
-	DeclareSet { var_name: String, var_type: VarType, value_expr: Expr },
+	Declare { var_name: String, data_type: DataType },
+	DeclareSet { var_name: String, data_type: DataType, value_expr: Expr },
 	Set { var_name: String, value_expr: Expr },
 }
 
-#[derive(Debug)]
-pub struct StatementErr { msg: String, }
-
-impl StatementErr {
-	pub fn new(msg: String) -> Self {
-		Self { msg }
-	}
+#[derive(Debug, PartialEq, Eq)]
+pub enum StatementErr {
+	#[allow(unused)]
+	EndReached,
 }
 
 impl std::fmt::Display for StatementErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		writeln!(f, "Statement error: {}", &self.msg)
+		match self {
+			StatementErr::EndReached => writeln!(f, "End reached"),
+		}
 	}
 }
