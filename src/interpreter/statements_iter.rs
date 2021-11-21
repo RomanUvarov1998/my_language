@@ -1,6 +1,6 @@
 use super::tokens_iter::*;
 use super::expr::Expr;
-use super::interpreter::InterpErr;
+use super::{ InterpErr, memory::VarType };
 
 pub struct StatementsIter<'code> {
 	tokens_iter: TokensIter<'code>
@@ -42,7 +42,7 @@ impl<'code> StatementsIter<'code> {
 			Some( Token::Name ( name ) ) => name,
 			_ => return Err( InterpErr::new( format!("Expected type name but found {:?}", tok_type_name) ) ),
 		};
-		let var_type = VarType::from(&type_name)?;
+		let var_type = VarType::parse(&type_name)?;
 		
 		let tok_assign = self.tokens_iter.next()?;
 		match tok_assign {
@@ -98,9 +98,6 @@ impl<'code> StatementsIter<'code> {
 #[derive(Debug, Eq, PartialEq)]
 pub enum Statement {
 	WithVariable (WithVariable),
-	VarOp,
-	FuncCall,
-	QuitCmd,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -108,34 +105,6 @@ pub enum WithVariable {
 	Declare { var_name: String, var_type: VarType },
 	DeclareSet { var_name: String, var_type: VarType, value_expr: Expr },
 	Set { var_name: String, value_expr: Expr },
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum VarType {
-	Float32,
-}
-impl VarType {
-	fn from(code: &str) -> Result<Self, StatementErr> {
-		match code {
-			"f32" => Ok( VarType::Float32 ),
-			_ => Err( StatementErr::new( format!("Unknown type name {:?}", code) ) ),
-		}
-	}
-}
-
-#[derive(Debug)]
-pub enum VarValue {
-	Float32 (f32),
-}
-impl Eq for VarValue {}
-impl PartialEq for VarValue {
-	fn eq(&self, other: &Self) -> bool {
-		match self {
-			VarValue::Float32 (f1) => match other {
-				VarValue::Float32 (f2) => (f1 - f2).abs() <= std::f32::EPSILON,
-			},
-		}
-	}
 }
 
 #[derive(Debug)]
