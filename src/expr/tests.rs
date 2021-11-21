@@ -80,3 +80,26 @@ pub fn can_calc_expression_without_variables() {
 	
 	assert!((expr.calc().unwrap() - 5.0_f32).abs() <= std::f32::EPSILON);
 }
+
+#[test]
+pub fn can_parse_expression_with_variables() {
+	let mut tokens_iter = TokensIter::new(CharsIter::new("a + 2 + b / c"));
+	
+	let expr = Expr::new(&mut tokens_iter).unwrap();
+	assert_eq!(
+		expr, 
+		Expr {
+			node_stack: NodeStack {
+				inner: vec![
+					Node::Variable { name: String::from("a") },
+					Node::Number (2_f32),
+					Node::ArithmeticalOp (RankedArithmeticalOp { op: ArithmeticalOp::Plus, rank: 1_u32 }),
+					Node::Variable { name: String::from("b") },
+					Node::Variable { name: String::from("c") },
+					Node::ArithmeticalOp (RankedArithmeticalOp { op: ArithmeticalOp::Div, rank: 2_u32 }),
+					Node::ArithmeticalOp (RankedArithmeticalOp { op: ArithmeticalOp::Plus, rank: 1_u32 }),
+				]
+			}
+		},
+	);
+}

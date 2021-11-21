@@ -70,7 +70,7 @@ impl Expr {
 				 
 				bin_op_stack.push(cur_bin_op);
 			},
-			Token::Number (val) => node_stack.push_number( val ),
+			Token::Number (val) => node_stack.push_number(val),
 			Token::Bracket (br) => match br {
 				Bracket::Left => {
 					*opened_brackets_cnt += 1;
@@ -82,6 +82,7 @@ impl Expr {
 					*opened_brackets_cnt -= 1;
 				},
 			},
+			Token::Name (name) => node_stack.push_var_name(name),
 			_ => return Err( ExprError::UnexpectedToken (token) ),
 		}
 		
@@ -111,7 +112,8 @@ impl Expr {
 					ArithmeticalOp::Div => val2 / val1,
 				};
 				Ok( ( res, pos ) )
-			}
+			},
+			Node::Variable { .. } => todo!(),
 		}
 	}
 }
@@ -160,10 +162,10 @@ impl std::fmt::Debug for RankedArithmeticalOp {
     }
 }
 
-#[derive(Clone, Copy)]
 enum Node {
 	Number (f32),
 	ArithmeticalOp (RankedArithmeticalOp), 
+	Variable { name: String },
 }
 impl Eq for Node {}
 impl PartialEq for Node {
@@ -177,14 +179,23 @@ impl PartialEq for Node {
 				Node::ArithmeticalOp (op2) => op1 == op2,
 				_ => false,
 			},
+			Node::Variable { ref name } => {
+				let name2 = if let Node::Variable { ref name } = other {
+					name
+				} else {
+					return false;
+				};
+				name == name2
+			},
 		}
 	}
 }
 impl std::fmt::Debug for Node {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Node::Number (val) => write!(f, "({})", val),
-			Node::ArithmeticalOp (op) => write!(f, "{:?}", op),
+			Node::Number (val) => write!(f, "[Value {}]", val),
+			Node::ArithmeticalOp (op) => write!(f, "[Op {:?}]", op),
+			Node::Variable { ref name } => write!(f, "[Var '{}']", name),
 		}
     }
 }
@@ -204,6 +215,9 @@ impl NodeStack {
 	}
 	fn push_bin_op(&mut self, op: RankedArithmeticalOp) {
 		self.inner.push( Node::ArithmeticalOp (op) );
+	}
+	fn push_var_name(&mut self, name: String) {
+		self.inner.push( Node::Variable { name } );
 	}
 	fn push_all_ge_than_from(&mut self, bin_op_stack: &mut ArithmeticalOpStack, bin_op: RankedArithmeticalOp) {
 		loop {
