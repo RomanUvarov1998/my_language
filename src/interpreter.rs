@@ -1,26 +1,32 @@
-use super::parser::Parser;
-use super::lexer::Lexer;
+use super::chars_iter::CharsIter;
+use super::tokens_iter::*;
+use super::statements_iter::*;
 
-pub struct Interpreter<'code> {
-	code: &'code str
-}
+pub struct Interpreter {}
 
-impl<'code> Interpreter<'code> {
-	pub fn new(code: &'code str) -> Self {
-		Self { code }
+impl Interpreter {
+	pub fn new() -> Self {
+		Self { }
 	}
 	
-	pub fn process(&self) -> Result<(), InterpErr> {
-		let parser = Parser::new(&self.code);
-		let lexer = Lexer::new(parser.get_tokens_iter())?;	
-		println!("Result: {}", lexer.calc()?);		
+	pub fn process(&mut self, code: &str) -> Result<(), InterpErr> {
+		let chars_iter = CharsIter::new(code);
+		let tokens_iter = TokensIter::new(chars_iter);
+		let mut statements_iter = StatementsIter::new(tokens_iter);
+		
+		loop {
+			match statements_iter.next()? {
+				Some(st) => println!("{:?}", st),
+				None => break,
+			}
+		}	
+		
 		Ok(())
 	}
 }
 
-pub struct InterpErr {
-	msg: String
-}
+#[derive(Debug)]
+pub struct InterpErr { msg: String }
 
 impl InterpErr {
 	pub fn new(msg: String) -> Self {
@@ -34,16 +40,22 @@ impl std::fmt::Display for InterpErr {
 	}
 }
 
-use super::parser::TokConstructErr;
+use super::tokens_iter::TokConstructErr;
 impl From<TokConstructErr> for InterpErr {
 	fn from(err: TokConstructErr) -> InterpErr {
         InterpErr::new(format!("{}", err))
     }
 }
 
-use super::lexer::LexerErr;
-impl From<LexerErr> for InterpErr {
-	fn from(err: LexerErr) -> InterpErr {
+use super::expr::ExprError;
+impl From<ExprError> for InterpErr {
+	fn from(err: ExprError) -> InterpErr {
+        InterpErr::new(format!("{}", err))
+    }
+}
+
+impl From<StatementErr> for InterpErr {
+	fn from(err: StatementErr) -> InterpErr {
         InterpErr::new(format!("{}", err))
     }
 }
