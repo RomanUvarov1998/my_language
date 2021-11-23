@@ -83,8 +83,7 @@ pub enum VarErr {
 impl std::fmt::Display for VarErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			VarErr::NotDefined { name } => 
-				write!(f, "Variable '{}' is not defined", &name),
+			VarErr::NotDefined { name } => write!(f, "Variable '{}' is not defined", &name),
 			VarErr::NotSet { name } => 
 				write!(f, "Variable '{}' is not set", &name),
 			VarErr::UnknownType { name } => 

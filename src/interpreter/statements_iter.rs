@@ -14,22 +14,22 @@ impl<'code> StatementsIter<'code> {
 	pub fn next(&mut self) -> Result<Option<Statement>, InterpErr> {
 		let first = match self.tokens_iter.next() {
 			Err(err) => match err {
-				TokenErr::EndReached => return Ok( None ),
+				TokenErr::EndReached { .. } => return Ok( None ),
 				_ => return Err( InterpErr::from(err) ),
 			},
 			Ok(token) => token,
 		};
 		let st: Statement = match first {
-			Token::Keyword ( Keyword::Var ) => self.parse_varable_declaration()?,	
-			Token::Name( name ) => {
+			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => self.parse_varable_declaration()?,	
+			Token { content: TokenContent::Name( name ), .. } => {
 				let second = self.tokens_iter.next()?;
 				match second {
-					Token::Bracket(Bracket::Left) => self.parse_func_call(name)?,
-					Token::AssignOp => self.parse_variable_set(name)?,
+					Token { content: TokenContent::Bracket(Bracket::Left), .. } => self.parse_func_call(name)?,
+					Token { content: TokenContent::AssignOp, .. } => self.parse_variable_set(name)?,
 					_ => return Err( InterpErr::Token ( TokenErr::ExpectedButFound { 
 							expected: vec![
-								Token::Bracket(Bracket::Left),
-								Token::AssignOp,
+								TokenContent::Bracket(Bracket::Left),
+								TokenContent::AssignOp,
 							], 
 							found: second 
 						} ) ),
@@ -37,8 +37,8 @@ impl<'code> StatementsIter<'code> {
 			},
 			found @ _ => return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
 							expected: vec![
-								Token::Keyword ( Keyword::Var ),
-								Token::Name( String::from("<name>") ),
+								TokenContent::Keyword ( Keyword::Var ),
+								TokenContent::Name( String::from("<name>") ),
 							], 
 							found
 						} ) ),
@@ -49,15 +49,15 @@ impl<'code> StatementsIter<'code> {
 	fn parse_varable_declaration(&mut self) -> Result<Statement, InterpErr> {	
 		let var_name = self.tokens_iter.expect_name()?;
 		
-		self.tokens_iter.expect(Token::StatementOp ( StatementOp::Colon ))?.check()?;
+		self.tokens_iter.expect(TokenContent::StatementOp ( StatementOp::Colon ))?.check()?;
 		
 		let type_name = self.tokens_iter.expect_name()?;
 		let data_type = DataType::parse(&type_name)?;
 		
 		let tok_assign = self.tokens_iter.next()?;
 		match tok_assign {
-			Token::AssignOp => {},
-			Token::StatementOp ( StatementOp::Semicolon ) => return 
+			Token { content: TokenContent::AssignOp, .. } => {},
+			Token { content: TokenContent::StatementOp ( StatementOp::Semicolon ), .. } => return 
 				Ok ( Statement::WithVariable ( WithVariable::Declare {
 					var_name, 
 					data_type, 
@@ -65,8 +65,8 @@ impl<'code> StatementsIter<'code> {
 			) ),
 			found @ _ => return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
 							expected: vec![
-								Token::AssignOp,
-								Token::StatementOp ( StatementOp::Semicolon ),
+								TokenContent::AssignOp,
+								TokenContent::StatementOp ( StatementOp::Semicolon ),
 							], 
 							found
 						} ) ),
@@ -75,7 +75,7 @@ impl<'code> StatementsIter<'code> {
 		let value_expr = Expr::new(&mut self.tokens_iter)?;
 		
 		
-		self.tokens_iter.expect(Token::StatementOp ( StatementOp::Semicolon ))?.check()?;
+		self.tokens_iter.expect(TokenContent::StatementOp ( StatementOp::Semicolon ))?.check()?;
 		
 		Ok ( Statement::WithVariable ( WithVariable::DeclareSet {
 				var_name, 
@@ -88,7 +88,7 @@ impl<'code> StatementsIter<'code> {
 	fn parse_variable_set(&mut self, var_name: String) -> Result<Statement, InterpErr> {		
 		let value_expr = Expr::new(&mut self.tokens_iter)?;
 		
-		self.tokens_iter.expect(Token::StatementOp ( StatementOp::Semicolon ))?.check()?;
+		self.tokens_iter.expect(TokenContent::StatementOp ( StatementOp::Semicolon ))?.check()?;
 		
 		Ok ( Statement::WithVariable ( WithVariable::Set {
 				var_name, 
@@ -103,10 +103,10 @@ impl<'code> StatementsIter<'code> {
 		loop {
 			exprs.push(Expr::new(&mut self.tokens_iter)?);
 			match self.tokens_iter.peek()? {
-				&Token::StatementOp ( StatementOp::Comma ) => {
+				&Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {
 					self.tokens_iter.next()?;
 				},
-				&Token::Bracket ( Bracket::Right ) => {
+				&Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => {
 					self.tokens_iter.next()?;
 					break;
 				},
@@ -114,8 +114,8 @@ impl<'code> StatementsIter<'code> {
 					let found = self.tokens_iter.next()?;
 					return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
 							expected: vec![
-								Token::StatementOp(StatementOp::Comma),
-								Token::Bracket ( Bracket::Right ),
+								TokenContent::StatementOp(StatementOp::Comma),
+								TokenContent::Bracket ( Bracket::Right ),
 							], 
 							found
 						} ) );
@@ -123,7 +123,7 @@ impl<'code> StatementsIter<'code> {
 			}
 		}
 		
-		self.tokens_iter.expect(Token::StatementOp ( StatementOp::Semicolon ))?.check()?;
+		self.tokens_iter.expect(TokenContent::StatementOp ( StatementOp::Semicolon ))?.check()?;
 		
 		Ok ( Statement::FuncCall {
 			name: func_name, 

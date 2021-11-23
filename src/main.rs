@@ -10,6 +10,8 @@ fn main() {
 	loop  {
 		code.clear();
 		io::stdin().read_line(&mut code).unwrap();
-		interpreter.run(&code).unwrap();
+		if let Err(err) = interpreter.run(&code) {
+			println!("{}", err);
+		}
 	}
 }

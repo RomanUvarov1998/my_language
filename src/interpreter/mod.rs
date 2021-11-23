@@ -61,9 +61,7 @@ pub enum InterpErr {
 }
 
 impl std::fmt::Display for InterpErr {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "Error: ")?;
-		
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {		
 		match self {
 			InterpErr::Token (err) => write!(f, "{}", err),
 			InterpErr::Expr (err) => write!(f, "{}", err),
@@ -72,6 +70,16 @@ impl std::fmt::Display for InterpErr {
 			InterpErr::Func (err) => write!(f, "{}", err),
 		}
 	}
+}
+
+fn display_error_pos(f: &mut std::fmt::Formatter<'_>, pos_begin: usize, pos_end: usize) -> std::fmt::Result {
+	for _ in 0..(pos_begin - 1) {
+		write!(f, "_")?;
+	}
+	for _ in (pos_begin - 1)..pos_end {
+		write!(f, "^")?;
+	}
+	writeln!(f, "")
 }
 
 use tokens_iter::TokenErr;

@@ -18,6 +18,10 @@ impl<'code> CharsIter<'code> {
 		Some( ( Self::get_kind(*ch), self.pos ) )
 	}
 	
+	pub fn last_pos(&self) -> usize {
+		self.pos
+	}
+	
 	fn get_kind(ch: char) -> CharKind {
 		match ch {
 			'.' => CharKind::Dot,
