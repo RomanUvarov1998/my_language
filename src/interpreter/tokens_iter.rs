@@ -76,7 +76,6 @@ impl<'code> TokensIter<'code> {
 		loop {
 			match iter.peek() {
 				Some( ( ch, pos ) ) => {
-					pos_end = pos;
 					match ch {
 						CharKind::Digit (val, _) => {
 							if has_dot {
@@ -98,7 +97,8 @@ impl<'code> TokensIter<'code> {
 						},
 						CharKind::Letter (..) => break Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos }),
 						_ => break Ok( Token::new(pos_begin, pos_end, TokenContent::Number (value) )),
-					}
+					};
+					pos_end = pos;
 				},
 				None => break Ok( Token::new(pos_begin, pos_end, TokenContent::Number (value) )),
 			}

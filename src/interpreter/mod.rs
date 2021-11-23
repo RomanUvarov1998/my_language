@@ -73,10 +73,10 @@ impl std::fmt::Display for InterpErr {
 }
 
 fn display_error_pos(f: &mut std::fmt::Formatter<'_>, pos_begin: usize, pos_end: usize) -> std::fmt::Result {
-	for _ in 0..(pos_begin - 1) {
+	for _ in 0..pos_begin {
 		write!(f, "_")?;
 	}
-	for _ in (pos_begin - 1)..pos_end {
+	for _ in pos_begin..(pos_end + 1) {
 		write!(f, "^")?;
 	}
 	writeln!(f, "")
