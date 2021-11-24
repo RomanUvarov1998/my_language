@@ -90,23 +90,23 @@ pub enum Punctuation {
 impl std::fmt::Display for CharKind {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			CharKind::Digit (_value, ch) => write!(f, "'{}'", ch),
-			CharKind::Dot => write!(f, "'.'"),
-			CharKind::Plus => write!(f, "'+'"),
-			CharKind::Minus => write!(f, "'-'"),
-			CharKind::Mul => write!(f, "'*'"),
-			CharKind::Div => write!(f, "'/'"),
-			CharKind::LeftBracket => write!(f, "'('"),
-			CharKind::RightBracket => write!(f, "')'"),
-			CharKind::Eq => write!(f, "'='"),
-			CharKind::Letter (ch) => write!(f, "'{}'", ch),
+			CharKind::Digit (_value, ch) => write!(f, "{}", ch),
+			CharKind::Dot => write!(f, "."),
+			CharKind::Plus => write!(f, "+"),
+			CharKind::Minus => write!(f, "-"),
+			CharKind::Mul => write!(f, "*"),
+			CharKind::Div => write!(f, "/"),
+			CharKind::LeftBracket => write!(f, "("),
+			CharKind::RightBracket => write!(f, ")"),
+			CharKind::Eq => write!(f, "="),
+			CharKind::Letter (ch) => write!(f, "{}", ch),
 			CharKind::Whitespace => write!(f, "Whitespace"),
 			CharKind::Punctuation (p) => match p {
-				Punctuation::Colon => write!(f, "':'"),
-				Punctuation::Semicolon => write!(f, "';'"),
-				Punctuation::Comma => write!(f, "','"),
+				Punctuation::Colon => write!(f, ":"),
+				Punctuation::Semicolon => write!(f, ";"),
+				Punctuation::Comma => write!(f, ","),
 			},
-			CharKind::Invalid (ch) => write!(f, "invalid char '{}'", ch),
+			CharKind::Invalid (ch) => write!(f, "invalid char {}", ch),
 		}
 	}
 }

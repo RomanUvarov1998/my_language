@@ -76,7 +76,7 @@ fn display_error_pos(f: &mut std::fmt::Formatter<'_>, pos_begin: usize, pos_end:
 	for _ in 0..pos_begin {
 		write!(f, "_")?;
 	}
-	for _ in pos_begin..(pos_end + 1) {
+	for _ in pos_begin..=pos_end {
 		write!(f, "^")?;
 	}
 	writeln!(f, "")

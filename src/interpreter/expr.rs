@@ -160,24 +160,22 @@ impl RankedArithmeticalOp {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum PrevTokenContentType {
-	Number,
-	ArithmeticalOp (ArithmeticalOp),
-	LogicalOp (LogicalOp),
-	Name,
+enum PrevTokenContentType { 
+	Operand,
+	Operator,
 }
 
 impl PrevTokenContentType {
 	fn from_token_content(tc: &TokenContent) -> Option<Self> {
 		match tc {
-			TokenContent::Number (_) => Some( PrevTokenContentType::Number ),
-			TokenContent::ArithmeticalOp (op) => Some( PrevTokenContentType::ArithmeticalOp (*op) ),
-			TokenContent::LogicalOp (op) => Some( PrevTokenContentType::LogicalOp (*op) ),
-			TokenContent::Bracket (_) => None,
-			TokenContent::AssignOp => None,
-			TokenContent::Name (_) => Some( PrevTokenContentType::Name ),
-			TokenContent::StatementOp (_) => None,
-			TokenContent::Keyword (_) => None,
+			TokenContent::Number (_) 
+				| TokenContent::Name (_) => Some( PrevTokenContentType::Operand ),
+			TokenContent::ArithmeticalOp (_) 
+				| TokenContent::LogicalOp (_) => Some( PrevTokenContentType::Operator ),
+			TokenContent::Bracket (_)
+				| TokenContent::AssignOp 
+				| TokenContent::StatementOp (_) 
+				| TokenContent::Keyword (_) => None,
 		}
 	}
 }

@@ -112,7 +112,6 @@ impl<'code> TokensIter<'code> {
 		loop {
 			match iter.peek() {
 				Some( ( ch, pos ) ) => {
-					pos_end = pos;
 					match ch {
 						CharKind::Digit (_, ch) => {
 							name.push(ch);
@@ -123,7 +122,8 @@ impl<'code> TokensIter<'code> {
 							iter.next(); 
 						},
 						_ => break,
-					}
+					};
+					pos_end = pos;
 				},
 				None => break,
 			}
