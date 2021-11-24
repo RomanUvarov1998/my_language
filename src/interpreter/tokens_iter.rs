@@ -357,56 +357,83 @@ mod tests {
 	use super::*;
 	
 	#[test]
-	pub fn can_parse_int() {
+	pub fn can_parse_tokens() {
+		let test_token_content_detection = |code: &str, tc: TokenContent, end_pos: usize| {
+			let mut tokens_iter = TokensIter::new(CharsIter::new(code));
+			assert_eq!(*tokens_iter.next().unwrap().content(), tc);
+			assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: end_pos });
+		};
+		
+		test_token_content_detection("123", 123_f32);
+		
 		let mut tokens_iter = TokensIter::new(CharsIter::new("123"));
 		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (123_f32));
 		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 3 });
-	}
-
-	#[test]
-	pub fn can_parse_float() {
+		
 		let mut tokens_iter = TokensIter::new(CharsIter::new("123.456"));
 		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (123.456_f32));
 		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 7 });
-	}
-
-	#[test]
-	pub fn can_parse_plus() {
+		
+		let mut tokens_iter = TokensIter::new(CharsIter::new("123."));
+		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (123_f32));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 7 });
+		
+		let mut tokens_iter = TokensIter::new(CharsIter::new(".456"));
+		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (0.456_f32));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 7 });
+		
 		let mut tokens_iter = TokensIter::new(CharsIter::new("+"));
 		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Plus));
 		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-	}
-
-	#[test]
-	pub fn can_parse_minus() {
+		
 		let mut tokens_iter = TokensIter::new(CharsIter::new("-"));
 		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Minus));
 		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-	}
-
-	#[test]
-	pub fn can_parse_mul() {
+		
 		let mut tokens_iter = TokensIter::new(CharsIter::new("*"));
 		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Mul));
 		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-	}
-
-	#[test]
-	pub fn can_parse_div() {
+		
 		let mut tokens_iter = TokensIter::new(CharsIter::new("/"));
 		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Div));
 		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-	}
-
-	#[test]
-	pub fn can_parse_name() {
+		
+		let mut tokens_iter = TokensIter::new(CharsIter::new("=="));
+		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::LogicalOp (LogicalOp::Equals));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
+		
+		let mut tokens_iter = TokensIter::new(CharsIter::new("("));
+		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Bracket (Bracket::Left));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
+		
+		let mut tokens_iter = TokensIter::new(CharsIter::new("("));
+		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Bracket (Bracket::Left));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
+		
+		let mut tokens_iter = TokensIter::new(CharsIter::new(")"));
+		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Bracket (Bracket::Right));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
+		
+		let mut tokens_iter = TokensIter::new(CharsIter::new(" = "));
+		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::AssignOp);
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 3 });
+		
 		let mut tokens_iter = TokensIter::new(CharsIter::new("var1"));
 		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Name (String::from("var1")));
 		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 4 });
-	}
-
-	#[test]
-	pub fn can_parse_keyword() {
+		
+		let mut tokens_iter = TokensIter::new(CharsIter::new(":"));
+		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::StatementOp (StatementOp::Colon));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
+		
+		let mut tokens_iter = TokensIter::new(CharsIter::new(";"));
+		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::StatementOp (StatementOp::Semicolon));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
+		
+		let mut tokens_iter = TokensIter::new(CharsIter::new(","));
+		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::StatementOp (StatementOp::Comma));
+		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
+		
 		let mut tokens_iter = TokensIter::new(CharsIter::new("var"));
 		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
 		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 3 });
