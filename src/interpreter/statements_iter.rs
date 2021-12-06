@@ -11,39 +11,22 @@ impl<'code> StatementsIter<'code> {
 		StatementsIter { tokens_iter }
 	}
 	
-	pub fn next(&mut self) -> Result<Option<Statement>, InterpErr> {
-		let first = match self.tokens_iter.next() {
-			Err(err) => match err {
-				TokenErr::EndReached { .. } => return Ok( None ),
-				_ => return Err( InterpErr::from(err) ),
-			},
-			Ok(token) => token,
+	fn parse_variable_set_or_func_call(&mut self, name: String) -> Result<Statement, InterpErr> {
+		let second = self.tokens_iter.next()?;
+		let statement = match second {
+			Token { content: TokenContent::Bracket(Bracket::Left), .. } => 
+				self.parse_func_call(name)?,
+			Token { content: TokenContent::AssignOp, .. } => 
+				self.parse_variable_set(name)?,
+			_ => return Err( InterpErr::Token ( TokenErr::ExpectedButFound { 
+					expected: vec![
+						TokenContent::Bracket(Bracket::Left),
+						TokenContent::AssignOp,
+					], 
+					found: second 
+				} ) ),
 		};
-		let st: Statement = match first {
-			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => self.parse_varable_declaration()?,	
-			Token { content: TokenContent::Name( name ), .. } => {
-				let second = self.tokens_iter.next()?;
-				match second {
-					Token { content: TokenContent::Bracket(Bracket::Left), .. } => self.parse_func_call(name)?,
-					Token { content: TokenContent::AssignOp, .. } => self.parse_variable_set(name)?,
-					_ => return Err( InterpErr::Token ( TokenErr::ExpectedButFound { 
-							expected: vec![
-								TokenContent::Bracket(Bracket::Left),
-								TokenContent::AssignOp,
-							], 
-							found: second 
-						} ) ),
-				}
-			},
-			found @ _ => return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
-							expected: vec![
-								TokenContent::Keyword ( Keyword::Var ),
-								TokenContent::Name( String::from("<name>") ),
-							], 
-							found
-						} ) ),
-		};
-		Ok (  Some ( st ) )
+		Ok(statement)
 	}
 	
 	fn parse_varable_declaration(&mut self) -> Result<Statement, InterpErr> {	
@@ -130,6 +113,37 @@ impl<'code> StatementsIter<'code> {
 			args: exprs,
 		} )
 	}
+}
+
+impl Iterator for StatementsIter<'_> {
+	type Item = Result<Statement, InterpErr>;
+	
+	fn next(&mut self) -> Option<Self::Item> {
+		let first = match self.tokens_iter.next() {
+			Err(err) => match err {
+				TokenErr::EndReached { .. } => return None,
+				_ => return Some( Err( InterpErr::from(err) ) ),
+			},
+			Ok(token) => token,
+		};
+		
+		let statement_result = match first {
+			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => 
+				self.parse_varable_declaration(),	
+			Token { content: TokenContent::Name( name ), .. } => 
+				self.parse_variable_set_or_func_call(name),
+			found @ _ => 
+				Err( InterpErr::Token( TokenErr::ExpectedButFound { 
+					expected: vec![
+						TokenContent::Keyword ( Keyword::Var ),
+						TokenContent::Name( String::from("<name>") ),
+					], 
+					found
+				} ) ),
+		};
+		
+		Some(statement_result)
+	}	
 }
 
 #[derive(Debug, Eq, PartialEq)]

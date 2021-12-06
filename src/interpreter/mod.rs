@@ -26,24 +26,21 @@ impl Interpreter {
 	pub fn run(&mut self, code: &str) -> Result<(), InterpErr> {
 		let chars_iter = CharsIter::new(code);
 		let tokens_iter = TokensIter::new(chars_iter);
-		let mut statements_iter = StatementsIter::new(tokens_iter);
-		loop {
-			match statements_iter.next()? {
-				Some(st) => match st {
-					Statement::WithVariable (st) => match st {
-						WithVariable::Declare { var_name, data_type } => 
-							self.memory.add_variable(var_name, data_type)?,
-						WithVariable::DeclareSet { var_name, data_type, value_expr } => {
-							self.memory.add_variable(var_name.clone(), data_type)?;
-							self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?;
-						},
-						WithVariable::Set { var_name, value_expr } => 
-							self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?,
+		
+		for statement_result in StatementsIter::new(tokens_iter) {
+			match statement_result? {
+				Statement::WithVariable (st) => match st {
+					WithVariable::Declare { var_name, data_type } => 
+						self.memory.add_variable(var_name, data_type)?,
+					WithVariable::DeclareSet { var_name, data_type, value_expr } => {
+						self.memory.add_variable(var_name.clone(), data_type)?;
+						self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?;
 					},
-					Statement::FuncCall { name, args } => 
-							self.memory.call_func(name, args)?,
+					WithVariable::Set { var_name, value_expr } => 
+						self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?,
 				},
-				None => break,
+				Statement::FuncCall { name, args } => 
+						self.memory.call_func(name, args)?,
 			}
 		}	
 		

@@ -27,16 +27,22 @@ impl<'code> TokensIter<'code> {
 	
 		while let Some( ( ch, pos ) ) = self.iter.next(){
 			let token: Token = match ch {
-				CharKind::Digit (first_digit, _) => Self::parse_number(pos, first_digit, &mut self.iter)?,
-				CharKind::Dot => return Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos }),
+				CharKind::Digit (first_digit, _) => self.parse_number(pos, first_digit, false)?,
+				CharKind::Dot => match self.iter.peek() {
+					Some( ( ch, pos ) ) => match ch {
+						CharKind::Digit (_, _) => self.parse_number(pos, 0_u32, true)?,
+						_ => return Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos } ),
+					},
+					None => return Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos }),
+				},
 				CharKind::Plus => Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Plus )),
 				CharKind::Minus => Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Minus )),
 				CharKind::Mul => Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Mul )),
 				CharKind::Div => Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Div )),
 				CharKind::LeftBracket => Token::new(pos, pos, TokenContent::Bracket ( Bracket::Left )),
 				CharKind::RightBracket => Token::new(pos, pos, TokenContent::Bracket ( Bracket::Right )),
-				CharKind::Eq => Self::parse_assignment_or_equality(pos, &mut self.iter),
-				CharKind::Letter (first_char) => Self::parse_name_or_keyword(pos, first_char, &mut self.iter)?,
+				CharKind::Eq => self.parse_assignment_or_equality(pos),
+				CharKind::Letter (first_char) => self.parse_name_or_keyword(pos, first_char)?,
 				CharKind::Whitespace => continue,
 				CharKind::Punctuation (p) => match p {
 					Punctuation::Colon => Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Colon)),
@@ -68,13 +74,13 @@ impl<'code> TokensIter<'code> {
 		}
 	}
 	
-	fn parse_number(pos_begin: usize, first_digit: u32, iter: &mut CharsIter) -> Result<Token, TokenErr> {
+	fn parse_number(&mut self, pos_begin: usize, first_digit: u32, already_encountered_dot : bool) -> Result<Token, TokenErr> {
 		let mut value: f32 = first_digit as f32;
-		let mut has_dot: bool = false;
+		let mut has_dot: bool = already_encountered_dot;
 		let mut frac_multiplier = 0.1_f32;
 		let mut pos_end: usize = pos_begin;
 		loop {
-			match iter.peek() {
+			match self.iter.peek() {
 				Some( ( ch, pos ) ) => {
 					match ch {
 						CharKind::Digit (val, _) => {
@@ -85,10 +91,10 @@ impl<'code> TokensIter<'code> {
 								value *= 10_f32;
 								value += val as f32;
 							}
-							iter.next(); // skip current digit
+							self.iter.next(); // skip current digit
 						},
 						CharKind::Dot => {
-							iter.next(); // skip dot
+							self.iter.next(); // skip dot
 							if !has_dot {
 								has_dot = true;
 							} else {
@@ -105,21 +111,21 @@ impl<'code> TokensIter<'code> {
 		}
 	}
 
-	fn parse_name_or_keyword(pos_begin: usize, first_char: char, iter: &mut CharsIter) -> Result<Token, TokenErr> {
+	fn parse_name_or_keyword(&mut self, pos_begin: usize, first_char: char) -> Result<Token, TokenErr> {
 		let mut name = String::from(first_char);
 		let mut pos_end: usize = pos_begin;
 		
 		loop {
-			match iter.peek() {
+			match self.iter.peek() {
 				Some( ( ch, pos ) ) => {
 					match ch {
 						CharKind::Digit (_, ch) => {
 							name.push(ch);
-							iter.next(); 
+							self.iter.next(); 
 						},
 						CharKind::Letter (ch) => {
 							name.push(ch);
-							iter.next(); 
+							self.iter.next(); 
 						},
 						_ => break,
 					};
@@ -137,14 +143,14 @@ impl<'code> TokensIter<'code> {
 		Ok( token )
 	}
 
-	fn parse_assignment_or_equality(pos_begin: usize, iter: &mut CharsIter) -> Token {
+	fn parse_assignment_or_equality(&mut self, pos_begin: usize) -> Token {
 		let mut pos_end: usize = pos_begin;
-		match iter.peek() {
+		match self.iter.peek() {
 			Some( ( ch, pos ) ) => {
 				pos_end = pos;
 				match ch {
 					CharKind::Eq => {
-						iter.next(); 
+						self.iter.next(); 
 						Token::new(pos_begin, pos_end, TokenContent::LogicalOp(LogicalOp::Equals))
 					},
 					_ => Token::new(pos_begin, pos_end, TokenContent::AssignOp),
@@ -358,85 +364,30 @@ mod tests {
 	
 	#[test]
 	pub fn can_parse_tokens() {
-		let test_token_content_detection = |code: &str, tc: TokenContent, end_pos: usize| {
+		let test_token_content_detection = |code: &str, tc: TokenContent| {
 			let mut tokens_iter = TokensIter::new(CharsIter::new(code));
 			assert_eq!(*tokens_iter.next().unwrap().content(), tc);
+			let end_pos: usize = code.len();
 			assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: end_pos });
 		};
 		
-		test_token_content_detection("123", 123_f32);
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("123"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (123_f32));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 3 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("123.456"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (123.456_f32));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 7 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("123."));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (123_f32));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 7 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new(".456"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (0.456_f32));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 7 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("+"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Plus));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("-"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Minus));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("*"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Mul));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("/"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Div));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("=="));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::LogicalOp (LogicalOp::Equals));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("("));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Bracket (Bracket::Left));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("("));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Bracket (Bracket::Left));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new(")"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Bracket (Bracket::Right));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new(" = "));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::AssignOp);
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 3 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("var1"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Name (String::from("var1")));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 4 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new(":"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::StatementOp (StatementOp::Colon));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new(";"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::StatementOp (StatementOp::Semicolon));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new(","));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::StatementOp (StatementOp::Comma));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 1 });
-		
-		let mut tokens_iter = TokensIter::new(CharsIter::new("var"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 3 });
+		test_token_content_detection("123", TokenContent::Number (123_f32));
+		test_token_content_detection("123.456", TokenContent::Number (123.456_f32));
+		test_token_content_detection("123.", TokenContent::Number (123_f32));
+		test_token_content_detection(".456", TokenContent::Number (0.456_f32));
+		test_token_content_detection("+", TokenContent::ArithmeticalOp (ArithmeticalOp::Plus));
+		test_token_content_detection("-", TokenContent::ArithmeticalOp (ArithmeticalOp::Minus));
+		test_token_content_detection("*", TokenContent::ArithmeticalOp (ArithmeticalOp::Mul));
+		test_token_content_detection("/", TokenContent::ArithmeticalOp (ArithmeticalOp::Div));
+		test_token_content_detection("==", TokenContent::LogicalOp (LogicalOp::Equals));
+		test_token_content_detection("(", TokenContent::Bracket (Bracket::Left));
+		test_token_content_detection(")", TokenContent::Bracket (Bracket::Right));
+		test_token_content_detection("=", TokenContent::AssignOp);
+		test_token_content_detection("var1", TokenContent::Name (String::from("var1")));
+		test_token_content_detection(":", TokenContent::StatementOp (StatementOp::Colon));
+		test_token_content_detection(";", TokenContent::StatementOp (StatementOp::Semicolon));
+		test_token_content_detection(",", TokenContent::StatementOp (StatementOp::Comma));
+		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
 	}
 
 	#[test]

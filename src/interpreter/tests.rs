@@ -18,7 +18,7 @@ pub fn can_make_variable_declare_statement() {
 		) 
 	);
 	
-	assert!(statements_iter.next().unwrap().is_none());
+	assert!(statements_iter.next().is_none());
 }
 
 #[test]

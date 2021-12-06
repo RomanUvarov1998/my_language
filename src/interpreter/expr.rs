@@ -331,7 +331,7 @@ mod tests {
 			) 
 		);
 		
-		assert_eq!(statements_iter.next().unwrap(), None);
+		assert!(statements_iter.next().is_none());
 	}
 
 	#[test]
@@ -356,7 +356,7 @@ mod tests {
 			) 
 		);
 		
-		assert_eq!(statements_iter.next().unwrap(), None);
+		assert!(statements_iter.next().is_none());
 	}
 
 	#[test]
@@ -469,6 +469,6 @@ mod tests {
 			});
 		
 		println!("----------------------------------");
-		assert_eq!(statements_iter.next().unwrap(), None);
+		assert!(statements_iter.next().is_none());
 	}
 }
