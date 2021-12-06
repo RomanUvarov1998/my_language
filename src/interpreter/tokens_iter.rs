@@ -2,7 +2,7 @@ use super::chars_iter::*;
 
 pub struct TokensIter<'code> {
 	iter: CharsIter<'code>,
-	peeked_token: Option<Token>,
+	peeked_token: Option<Result<Token, TokenErr>>,
 }
 
 impl<'code> TokensIter<'code> {
@@ -13,56 +13,24 @@ impl<'code> TokensIter<'code> {
 		}
 	}
 	
-	pub fn peek<'iter>(&'iter mut self) -> Result<&'iter Token, TokenErr> {
-		if let None = self.peeked_token {
-			self.peeked_token = Some( self.next()? );
+	pub fn peek_or_err<'iter>(&'iter mut self) -> Result<&'iter Token, &'iter TokenErr> {
+		if self.peeked_token.is_none() {
+			self.peeked_token = Some( self.next_or_err() );
 		}		
-		Ok( self.peeked_token.as_ref().unwrap() )
+		self.peeked_token.as_ref().unwrap().as_ref()
 	}
 	
-	pub fn next(&mut self) -> Result<Token, TokenErr> {	
-		if self.peeked_token.is_some() {
-			return Ok( self.peeked_token.take().unwrap() );
-		}
-	
-		while let Some( ( ch, pos ) ) = self.iter.next(){
-			let token: Token = match ch {
-				CharKind::Digit (first_digit, _) => self.parse_number(pos, first_digit, false)?,
-				CharKind::Dot => match self.iter.peek() {
-					Some( ( ch, pos ) ) => match ch {
-						CharKind::Digit (_, _) => self.parse_number(pos, 0_u32, true)?,
-						_ => return Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos } ),
-					},
-					None => return Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos }),
-				},
-				CharKind::Plus => Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Plus )),
-				CharKind::Minus => Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Minus )),
-				CharKind::Mul => Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Mul )),
-				CharKind::Div => Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Div )),
-				CharKind::LeftBracket => Token::new(pos, pos, TokenContent::Bracket ( Bracket::Left )),
-				CharKind::RightBracket => Token::new(pos, pos, TokenContent::Bracket ( Bracket::Right )),
-				CharKind::Eq => self.parse_assignment_or_equality(pos),
-				CharKind::Letter (first_char) => self.parse_name_or_keyword(pos, first_char)?,
-				CharKind::Whitespace => continue,
-				CharKind::Punctuation (p) => match p {
-					Punctuation::Colon => Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Colon)),
-					Punctuation::Semicolon => Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Semicolon)),
-					Punctuation::Comma => Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Comma)),
-				},
-				CharKind::Invalid (..) => return Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos } ),
-			};
-			return Ok(token);
-		}
-		return Err( TokenErr::EndReached { pos: self.iter.last_pos() } );
+	pub fn next_or_err(&mut self) -> Result<Token, TokenErr> {
+		self.next().unwrap_or( Err( TokenErr::EndReached { pos: self.iter.last_pos() } ) )
 	}
 	
 	pub fn expect(&mut self, expected_token: TokenContent) -> Result<TokenExpectation, TokenErr> {
-		let found = self.next()?;
+		let found = self.next_or_err()?;
 		Ok( TokenExpectation::new(expected_token, found) )
 	}
 	
 	pub fn expect_name(&mut self) -> Result<String, TokenErr> {
-		let found = self.next()?;
+		let found = self.next_or_err()?;
 		match found.content {
 			TokenContent::Name ( name ) => Ok( name ),
 			_ => return Err( TokenErr::ExpectedButFound { 
@@ -143,7 +111,7 @@ impl<'code> TokensIter<'code> {
 		Ok( token )
 	}
 
-	fn parse_assignment_or_equality(&mut self, pos_begin: usize) -> Token {
+	fn parse_assignment_or_equality(&mut self, pos_begin: usize) -> Result<Token, TokenErr> {
 		let mut pos_end: usize = pos_begin;
 		match self.iter.peek() {
 			Some( ( ch, pos ) ) => {
@@ -151,13 +119,55 @@ impl<'code> TokensIter<'code> {
 				match ch {
 					CharKind::Eq => {
 						self.iter.next(); 
-						Token::new(pos_begin, pos_end, TokenContent::LogicalOp(LogicalOp::Equals))
+						Ok( Token::new(pos_begin, pos_end, TokenContent::LogicalOp(LogicalOp::Equals)) )
 					},
-					_ => Token::new(pos_begin, pos_end, TokenContent::AssignOp),
+					_ => Ok( Token::new(pos_begin, pos_end, TokenContent::AssignOp) ),
 				}
 			},
-			None => Token::new(pos_begin, pos_end, TokenContent::AssignOp),
+			None => Ok( Token::new(pos_begin, pos_end, TokenContent::AssignOp) ),
 		}
+	}
+}
+
+impl Iterator for TokensIter<'_> {
+	type Item = Result<Token, TokenErr>;
+	
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.peeked_token.is_some() {
+			return Some( self.peeked_token.take().unwrap() );
+		}
+
+		for ( ch, pos ) in self.iter.by_ref() {			
+			let token_result = match ch {
+				CharKind::Digit (first_digit, _) => self.parse_number(pos, first_digit, false),
+				CharKind::Dot => match self.iter.peek() {
+					Some( ( ch, pos ) ) => match ch {
+						CharKind::Digit (_, _) => self.parse_number(pos, 0_u32, true),
+						_ => Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos } ),
+					},
+					None => Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos }),
+				},
+				CharKind::Plus => Ok( Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Plus )) ),
+				CharKind::Minus => Ok( Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Minus )) ),
+				CharKind::Mul => Ok( Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Mul )) ),
+				CharKind::Div => Ok( Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Div )) ),
+				CharKind::LeftBracket => Ok( Token::new(pos, pos, TokenContent::Bracket ( Bracket::Left )) ),
+				CharKind::RightBracket => Ok( Token::new(pos, pos, TokenContent::Bracket ( Bracket::Right )) ),
+				CharKind::Eq => self.parse_assignment_or_equality(pos),
+				CharKind::Letter (first_char) => self.parse_name_or_keyword(pos, first_char),
+				CharKind::Whitespace => continue,
+				CharKind::Punctuation (p) => match p {
+					Punctuation::Colon => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Colon)) ),
+					Punctuation::Semicolon => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Semicolon)) ),
+					Punctuation::Comma => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Comma)) ),
+				},
+				CharKind::Invalid (..) => Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos } ),
+			};
+			
+			return Some( token_result );
+		}
+		
+		Some( Err( TokenErr::EndReached { pos: self.iter.last_pos() } ) )
 	}
 }
 
@@ -298,7 +308,7 @@ pub enum Keyword {
 	Var,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenErr {
 	Construct { ch: CharKind, pos_begin: usize, pos_end: usize },
 	ExpectedButFound { expected: Vec<TokenContent>, found: Token },
@@ -366,9 +376,9 @@ mod tests {
 	pub fn can_parse_tokens() {
 		let test_token_content_detection = |code: &str, tc: TokenContent| {
 			let mut tokens_iter = TokensIter::new(CharsIter::new(code));
-			assert_eq!(*tokens_iter.next().unwrap().content(), tc);
+			assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), tc);
 			let end_pos: usize = code.len();
-			assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: end_pos });
+			assert_eq!(tokens_iter.next_or_err().unwrap_err(), TokenErr::EndReached { pos: end_pos });
 		};
 		
 		test_token_content_detection("123", TokenContent::Number (123_f32));
@@ -393,33 +403,33 @@ mod tests {
 	#[test]
 	pub fn can_parse_simple_expr() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("1+23.4-45.6*7.8/9 var1var"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (1_f32));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Plus));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (23.4_f32));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Minus));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (45.6_f32));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Mul));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (7.8_f32));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Div));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (9_f32));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Name (String::from("var1var")));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 25 });
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Plus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Minus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Mul));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Div));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var1var")));
+		assert_eq!(tokens_iter.next_or_err().unwrap_err(), TokenErr::EndReached { pos: 25 });
 	}
 
 	#[test]
 	pub fn can_parse_simple_expr_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var"));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (1_f32));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Plus));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (23.4_f32));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Minus));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (45.6_f32));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Mul));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (7.8_f32));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Div));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Number (9_f32));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Name (String::from("var1")));
-		assert_eq!(*tokens_iter.next().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
-		assert_eq!(tokens_iter.next().unwrap_err(), TokenErr::EndReached { pos: 43 });
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Plus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Minus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Mul));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Div));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var1")));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
+		assert_eq!(tokens_iter.next_or_err().unwrap_err(), TokenErr::EndReached { pos: 43 });
 	}
 }

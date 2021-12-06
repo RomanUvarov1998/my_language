@@ -12,7 +12,7 @@ impl<'code> StatementsIter<'code> {
 	}
 	
 	fn parse_variable_set_or_func_call(&mut self, name: String) -> Result<Statement, InterpErr> {
-		let second = self.tokens_iter.next()?;
+		let second = self.tokens_iter.next_or_err()?;
 		let statement = match second {
 			Token { content: TokenContent::Bracket(Bracket::Left), .. } => 
 				self.parse_func_call(name)?,
@@ -37,7 +37,7 @@ impl<'code> StatementsIter<'code> {
 		let type_name = self.tokens_iter.expect_name()?;
 		let data_type = DataType::parse(&type_name)?;
 		
-		let tok_assign = self.tokens_iter.next()?;
+		let tok_assign = self.tokens_iter.next_or_err()?;
 		match tok_assign {
 			Token { content: TokenContent::AssignOp, .. } => {},
 			Token { content: TokenContent::StatementOp ( StatementOp::Semicolon ), .. } => return 
@@ -85,16 +85,16 @@ impl<'code> StatementsIter<'code> {
 		
 		loop {
 			exprs.push(Expr::new(&mut self.tokens_iter)?);
-			match self.tokens_iter.peek()? {
+			match self.tokens_iter.peek_or_err()? {
 				&Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {
-					self.tokens_iter.next()?;
+					self.tokens_iter.next_or_err()?;
 				},
 				&Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => {
-					self.tokens_iter.next()?;
+					self.tokens_iter.next_or_err()?;
 					break;
 				},
 				_ => {
-					let found = self.tokens_iter.next()?;
+					let found = self.tokens_iter.next_or_err()?;
 					return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
 							expected: vec![
 								TokenContent::StatementOp(StatementOp::Comma),
@@ -119,7 +119,7 @@ impl Iterator for StatementsIter<'_> {
 	type Item = Result<Statement, InterpErr>;
 	
 	fn next(&mut self) -> Option<Self::Item> {
-		let first = match self.tokens_iter.next() {
+		let first = match self.tokens_iter.next()? {
 			Err(err) => match err {
 				TokenErr::EndReached { .. } => return None,
 				_ => return Some( Err( InterpErr::from(err) ) ),

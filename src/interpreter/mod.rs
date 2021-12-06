@@ -85,6 +85,11 @@ impl From<TokenErr> for InterpErr {
         InterpErr::Token(err)
     }
 }
+impl From<&TokenErr> for InterpErr {
+	fn from(err: &TokenErr) -> InterpErr {
+        InterpErr::Token(TokenErr::clone(err))
+    }
+}
 
 use expr::ExprErr;
 impl From<ExprErr> for InterpErr {

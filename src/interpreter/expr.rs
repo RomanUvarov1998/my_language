@@ -14,11 +14,13 @@ impl Expr {
 		let mut prev_tok_content = Option::<PrevTokenContentType>::None;
 		
 		loop {
-			match tokens_iter.peek()?.content() {
+			let next_token_ref = tokens_iter.peek_or_err()?;
+			
+			match next_token_ref.content() {
 				TokenContent::StatementOp (..) => break,
 				TokenContent::Bracket (Bracket::Right) if opened_brackets_cnt == 0 => break,
 				_ => {
-					let token = tokens_iter.next().unwrap();
+					let token = tokens_iter.next().unwrap()?;
 					
 					let cur_tok = PrevTokenContentType::from_token_content(token.content());					
 					if let (Some(ref t1), Some(t2)) = (&prev_tok_content, &cur_tok) {
