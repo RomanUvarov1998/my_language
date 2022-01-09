@@ -16,12 +16,12 @@ impl<'code> StatementsIter<'code> {
 		let statement = match second {
 			Token { content: TokenContent::Bracket(Bracket::Left), .. } => 
 				self.parse_func_call(name)?,
-			Token { content: TokenContent::AssignOp, .. } => 
+			Token { content: TokenContent::Operator (Operator::Assign), .. } => 
 				self.parse_variable_set(name)?,
 			_ => return Err( InterpErr::Token ( TokenErr::ExpectedButFound { 
 					expected: vec![
 						TokenContent::Bracket(Bracket::Left),
-						TokenContent::AssignOp,
+						TokenContent::Operator (Operator::Assign),
 					], 
 					found: second 
 				} ) ),
@@ -39,7 +39,7 @@ impl<'code> StatementsIter<'code> {
 		
 		let tok_assign = self.tokens_iter.next_or_err()?;
 		match tok_assign {
-			Token { content: TokenContent::AssignOp, .. } => {},
+			Token { content: TokenContent::Operator (Operator::Assign), .. } => {},
 			Token { content: TokenContent::StatementOp ( StatementOp::Semicolon ), .. } => return 
 				Ok ( Statement::WithVariable ( WithVariable::Declare {
 					var_name, 
@@ -48,7 +48,7 @@ impl<'code> StatementsIter<'code> {
 			) ),
 			found @ _ => return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
 							expected: vec![
-								TokenContent::AssignOp,
+								TokenContent::Operator (Operator::Assign),
 								TokenContent::StatementOp ( StatementOp::Semicolon ),
 							], 
 							found

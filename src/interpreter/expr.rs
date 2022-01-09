@@ -9,7 +9,7 @@ pub struct Expr {
 impl Expr {
 	pub fn new(tokens_iter: &mut TokensIter) -> Result<Self, InterpErr> {
 		let mut node_stack = NodeStack::new();
-		let mut bin_op_stack = ArithmeticalOpStack::new();
+		let mut bin_op_stack = OperatorStack::new();
 		let mut opened_brackets_cnt = 0_u32;
 		let mut prev_tok_content = Option::<PrevTokenContentType>::None;
 		
@@ -56,13 +56,13 @@ impl Expr {
 		
 	fn add_token(
 		node_stack: &mut NodeStack, 
-		bin_op_stack: &mut ArithmeticalOpStack, 
+		bin_op_stack: &mut OperatorStack, 
 		opened_brackets_cnt: &mut u32, 
 		token: Token
 	) -> Result<(), ExprErr> {	
 		match token {
-			Token { pos_begin, pos_end, content: TokenContent::ArithmeticalOp (bin_op) } => {
-				let cur_bin_op = RankedArithmeticalOp::new(pos_begin, pos_end, bin_op, *opened_brackets_cnt);
+			Token { pos_begin, pos_end, content: TokenContent::Operator (bin_op) } => {
+				let cur_bin_op = RankedOperator::new(pos_begin, pos_end, bin_op, *opened_brackets_cnt)?;
 				
 				match bin_op_stack.last() {
 					Some(last_bin_op) => if cur_bin_op.rank <= last_bin_op.rank {
@@ -98,10 +98,10 @@ impl Expr {
 	
 	fn complete(
 		node_stack: &mut NodeStack, 
-		bin_op_stack: &mut ArithmeticalOpStack
+		bin_op_stack: &mut OperatorStack
 	) -> Result<(), ExprErr> {
 		while let Some(last_bin_op) = bin_op_stack.pop() {
-			node_stack.push( Node::ArithmeticalOp ( last_bin_op ) );
+			node_stack.push( Node::Operator ( last_bin_op ) );
 		}
 		Ok(())
 	}
@@ -116,16 +116,17 @@ impl Expr {
 					//_ => Err( InterpErr::from(ExprErr::WrongType (format!("{:?}", var_value)) ) ),
 				}
 			},
-			Node::ArithmeticalOp (bin_op) => {
+			Node::Operator (bin_op) => {
 				let (val1, pos) = self.calc_op(tok_ind - 1, memory)?;
 				let (val2, pos) = self.calc_op(pos - 1, memory)?;
-				let res: f32 = match bin_op.op {
-					ArithmeticalOp::Plus => val2 + val1,
-					ArithmeticalOp::Minus => val2 - val1,
-					ArithmeticalOp::Mul => val2 * val1,
-					ArithmeticalOp::Div => val2 / val1,
-				};
-				Ok( ( res, pos ) )
+				match bin_op.op {
+					Operator::Plus => Ok( ( val2 + val1, pos ) ),
+					Operator::Minus => Ok( ( val2 - val1, pos ) ),
+					Operator::Mul => Ok( ( val2 * val1, pos ) ),
+					Operator::Div => Ok( ( val2 / val1, pos ) ),
+					Operator::Equals | Operator::Assign 
+						=> Err( InterpErr::Expr( ExprErr::WrongType( format!("Wrong type for operator {:?}", bin_op.op) ) ) ),
+				}
 			},
 		}
 	}
@@ -143,21 +144,23 @@ impl std::fmt::Display for Expr {
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-struct RankedArithmeticalOp {
+struct RankedOperator {
 	pos_begin: usize, 
 	pos_end: usize,
-	op: ArithmeticalOp,
+	op: Operator,
 	rank: u32,
 }
-impl RankedArithmeticalOp {
-	fn new(pos_begin: usize, pos_end: usize, op: ArithmeticalOp, opened_brackets_cnt: u32) -> Self {
+impl RankedOperator {
+	fn new(pos_begin: usize, pos_end: usize, op: Operator, opened_brackets_cnt: u32) -> Result<Self, ExprErr> {
 		const BRACKET_RANK: u32 = 2;
 		let mut rank = match op {
-			ArithmeticalOp::Plus | ArithmeticalOp::Minus => 1,
-			ArithmeticalOp::Mul | ArithmeticalOp::Div => 2,
+			Operator::Plus | Operator::Minus => 1,
+			Operator::Mul | Operator::Div => 2,
+			Operator::Equals | Operator::Assign 
+				=> return Err( ExprErr::WrongType( format!("Wrong type for operator {:?}", op) ) ),
 		};
 		rank += opened_brackets_cnt * BRACKET_RANK;
-		Self { pos_begin, pos_end, op, rank }
+		Ok( Self { pos_begin, pos_end, op, rank } )
 	}
 }
 
@@ -172,10 +175,8 @@ impl PrevTokenContentType {
 		match tc {
 			TokenContent::Number (_) 
 				| TokenContent::Name (_) => Some( PrevTokenContentType::Operand ),
-			TokenContent::ArithmeticalOp (_) 
-				| TokenContent::LogicalOp (_) => Some( PrevTokenContentType::Operator ),
+			TokenContent::Operator (_) => Some( PrevTokenContentType::Operator ),
 			TokenContent::Bracket (_)
-				| TokenContent::AssignOp 
 				| TokenContent::StatementOp (_) 
 				| TokenContent::Keyword (_) => None,
 		}
@@ -185,7 +186,7 @@ impl PrevTokenContentType {
 #[derive(Debug)]
 enum Node {
 	Number (f32),
-	ArithmeticalOp (RankedArithmeticalOp), 
+	Operator (RankedOperator), 
 	Variable { name: String },
 }
 impl Eq for Node {}
@@ -196,8 +197,8 @@ impl PartialEq for Node {
 				Node::Number (f2) => (f1 - f2).abs() <= std::f32::EPSILON,
 				_ => false,
 			},
-			Node::ArithmeticalOp (op1) => match other {
-				Node::ArithmeticalOp (op2) => op1 == op2,
+			Node::Operator (op1) => match other {
+				Node::Operator (op2) => op1 == op2,
 				_ => false,
 			},
 			Node::Variable { ref name } => {
@@ -225,13 +226,13 @@ impl NodeStack {
 	fn push_number(&mut self, val: f32) {
 		self.inner.push( Node::Number (val) );
 	}
-	fn push_bin_op(&mut self, op: RankedArithmeticalOp) {
-		self.inner.push( Node::ArithmeticalOp (op) );
+	fn push_bin_op(&mut self, op: RankedOperator) {
+		self.inner.push( Node::Operator (op) );
 	}
 	fn push_var_name(&mut self, name: String) {
 		self.inner.push( Node::Variable { name } );
 	}
-	fn push_all_ge_than_from(&mut self, bin_op_stack: &mut ArithmeticalOpStack, bin_op: RankedArithmeticalOp) {
+	fn push_all_ge_than_from(&mut self, bin_op_stack: &mut OperatorStack, bin_op: RankedOperator) {
 		loop {
 			match bin_op_stack.last() {
 				Some(op) => 
@@ -259,22 +260,22 @@ impl DerefMut for NodeStack {
 }
 
 #[derive(Debug)]
-struct ArithmeticalOpStack {
-	inner: Vec<RankedArithmeticalOp>,
+struct OperatorStack {
+	inner: Vec<RankedOperator>,
 }
-impl ArithmeticalOpStack {
+impl OperatorStack {
 	fn new() -> Self {
 		Self { inner: Vec::new() }
 	}
 }
-impl Deref for ArithmeticalOpStack {
-    type Target = Vec<RankedArithmeticalOp>;
+impl Deref for OperatorStack {
+    type Target = Vec<RankedOperator>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
-impl DerefMut for ArithmeticalOpStack {
+impl DerefMut for OperatorStack {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
@@ -283,7 +284,6 @@ impl DerefMut for ArithmeticalOpStack {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExprErr {
 	UnexpectedToken (Token),
-	#[allow(unused)]
 	WrongType (String),
 	Empty,
 }
@@ -325,7 +325,7 @@ mod tests {
 							inner: vec![
 								Node::Number (0.3),
 								Node::Number (0.5),
-								Node::ArithmeticalOp (RankedArithmeticalOp { pos_begin: 17, pos_end: 17, op: ArithmeticalOp::Plus, rank: 1_u32 }),
+								Node::Operator (RankedOperator { pos_begin: 17, pos_end: 17, op: Operator::Plus, rank: 1_u32 }),
 							]
 						}
 					},
@@ -350,7 +350,7 @@ mod tests {
 							inner: vec![
 								Node::Number (0.3),
 								Node::Number (0.5),
-								Node::ArithmeticalOp (RankedArithmeticalOp { pos_begin: 8, pos_end: 8, op: ArithmeticalOp::Plus, rank: 1_u32 }),
+								Node::Operator (RankedOperator { pos_begin: 8, pos_end: 8, op: Operator::Plus, rank: 1_u32 }),
 							]
 						}
 					},
@@ -373,11 +373,11 @@ mod tests {
 					inner: vec![
 						Node::Variable { name: String::from("a") },
 						Node::Number (2_f32),
-						Node::ArithmeticalOp (RankedArithmeticalOp { pos_begin: 2, pos_end: 2, op: ArithmeticalOp::Plus, rank: 1_u32 }),
+						Node::Operator (RankedOperator { pos_begin: 2, pos_end: 2, op: Operator::Plus, rank: 1_u32 }),
 						Node::Variable { name: String::from("b") },
 						Node::Variable { name: String::from("c") },
-						Node::ArithmeticalOp (RankedArithmeticalOp { pos_begin: 10, pos_end: 10, op: ArithmeticalOp::Div, rank: 2_u32 }),
-						Node::ArithmeticalOp (RankedArithmeticalOp { pos_begin: 6, pos_end: 6, op: ArithmeticalOp::Plus, rank: 1_u32 }),
+						Node::Operator (RankedOperator { pos_begin: 10, pos_end: 10, op: Operator::Div, rank: 2_u32 }),
+						Node::Operator (RankedOperator { pos_begin: 6, pos_end: 6, op: Operator::Plus, rank: 1_u32 }),
 					]
 				}
 			},
@@ -410,7 +410,7 @@ mod tests {
 				InterpErr::Expr ( ExprErr::UnexpectedToken ( Token {
 					pos_begin: 4,
 					pos_end: 4,
-					content: TokenContent::ArithmeticalOp ( ArithmeticalOp::Plus ),
+					content: TokenContent::Operator ( Operator::Plus ),
 				} ) )
 			)
 		);
@@ -445,7 +445,7 @@ mod tests {
 							inner: vec![
 								Node::Number (0.3),
 								Node::Number (0.5),
-								Node::ArithmeticalOp (RankedArithmeticalOp { pos_begin: 25, pos_end: 25, op: ArithmeticalOp::Plus, rank: 1_u32 }),
+								Node::Operator (RankedOperator { pos_begin: 25, pos_end: 25, op: Operator::Plus, rank: 1_u32 }),
 							]
 						}
 					},

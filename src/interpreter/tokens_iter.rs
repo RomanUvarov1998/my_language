@@ -119,12 +119,12 @@ impl<'code> TokensIter<'code> {
 				match ch {
 					CharKind::Eq => {
 						self.iter.next(); 
-						Ok( Token::new(pos_begin, pos_end, TokenContent::LogicalOp(LogicalOp::Equals)) )
+						Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Equals)) )
 					},
-					_ => Ok( Token::new(pos_begin, pos_end, TokenContent::AssignOp) ),
+					_ => Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Assign)) ),
 				}
 			},
-			None => Ok( Token::new(pos_begin, pos_end, TokenContent::AssignOp) ),
+			None => Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Assign)) ),
 		}
 	}
 }
@@ -147,10 +147,10 @@ impl Iterator for TokensIter<'_> {
 					},
 					None => Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos }),
 				},
-				CharKind::Plus => Ok( Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Plus )) ),
-				CharKind::Minus => Ok( Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Minus )) ),
-				CharKind::Mul => Ok( Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Mul )) ),
-				CharKind::Div => Ok( Token::new(pos, pos, TokenContent::ArithmeticalOp ( ArithmeticalOp::Div )) ),
+				CharKind::Plus => Ok( Token::new(pos, pos, TokenContent::Operator ( Operator::Plus )) ),
+				CharKind::Minus => Ok( Token::new(pos, pos, TokenContent::Operator ( Operator::Minus )) ),
+				CharKind::Mul => Ok( Token::new(pos, pos, TokenContent::Operator ( Operator::Mul )) ),
+				CharKind::Div => Ok( Token::new(pos, pos, TokenContent::Operator ( Operator::Div )) ),
 				CharKind::LeftBracket => Ok( Token::new(pos, pos, TokenContent::Bracket ( Bracket::Left )) ),
 				CharKind::RightBracket => Ok( Token::new(pos, pos, TokenContent::Bracket ( Bracket::Right )) ),
 				CharKind::Eq => self.parse_assignment_or_equality(pos),
@@ -197,10 +197,8 @@ impl std::fmt::Display for Token {
 #[derive(Debug, Clone)]
 pub enum TokenContent {
 	Number (f32),
-	ArithmeticalOp (ArithmeticalOp),
-	LogicalOp (LogicalOp),
+	Operator (Operator),
 	Bracket (Bracket),
-	AssignOp,
 	Name (String),
 	StatementOp (StatementOp),
 	Keyword (Keyword),
@@ -210,20 +208,18 @@ impl std::fmt::Display for TokenContent {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			TokenContent::Number (val) => write!(f, "'{}'", val),
-			TokenContent::ArithmeticalOp (op) => match op {
-				ArithmeticalOp::Plus => write!(f, "'{}'", "+"),
-				ArithmeticalOp::Minus => write!(f, "'{}'", "-"),
-				ArithmeticalOp::Mul => write!(f, "'{}'", "*"),
-				ArithmeticalOp::Div => write!(f, "'{}'", "/"),
-			},
-			TokenContent::LogicalOp (op) => match op {
-				LogicalOp::Equals => write!(f, "'{}'", "=="),
+			TokenContent::Operator (op) => match op {
+				Operator::Plus => write!(f, "'{}'", "+"),
+				Operator::Minus => write!(f, "'{}'", "-"),
+				Operator::Mul => write!(f, "'{}'", "*"),
+				Operator::Div => write!(f, "'{}'", "/"),
+				Operator::Equals => write!(f, "'{}'", "=="),
+				Operator::Assign => write!(f, "'{}'", "="),
 			},
 			TokenContent::Bracket (br) => match br {
 				Bracket::Right => write!(f, "'{}'", ")"),
 				Bracket::Left => write!(f, "'{}'", "("),
 			},
-			TokenContent::AssignOp => write!(f, "'{}'", "="),
 			TokenContent::Name (name) => write!(f, "'{}'", name),
 			TokenContent::StatementOp (op) => match op {
 				StatementOp::Colon => write!(f, "'{}'", ":"),
@@ -244,12 +240,8 @@ impl PartialEq for TokenContent {
 				TokenContent::Number (f2) => (f1 - f2).abs() <= std::f32::EPSILON,
 				_ => false,
 			},
-			TokenContent::ArithmeticalOp (op1) => match other {
-				TokenContent::ArithmeticalOp (op2) => op1 == op2,
-				_ => false,
-			},
-			TokenContent::LogicalOp (op1) => match other {
-				TokenContent::LogicalOp (op2) => op1 == op2,
+			TokenContent::Operator (op1) => match other {
+				TokenContent::Operator (op2) => op1 == op2,
 				_ => false,
 			},
 			TokenContent::Bracket (br1) => match other {
@@ -268,26 +260,19 @@ impl PartialEq for TokenContent {
 				TokenContent::Keyword (kw2) => kw1 == kw2,
 				_ => false,
 			},
-			TokenContent::AssignOp => match other {
-				TokenContent::AssignOp => true,
-				_ => false,
-			},
 		}
 	}
 }
 impl Eq for TokenContent {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArithmeticalOp {
+pub enum Operator {
 	Plus,
 	Minus,
 	Mul,
 	Div,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LogicalOp {
 	Equals,
+	Assign,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -385,14 +370,14 @@ mod tests {
 		test_token_content_detection("123.456", TokenContent::Number (123.456_f32));
 		test_token_content_detection("123.", TokenContent::Number (123_f32));
 		test_token_content_detection(".456", TokenContent::Number (0.456_f32));
-		test_token_content_detection("+", TokenContent::ArithmeticalOp (ArithmeticalOp::Plus));
-		test_token_content_detection("-", TokenContent::ArithmeticalOp (ArithmeticalOp::Minus));
-		test_token_content_detection("*", TokenContent::ArithmeticalOp (ArithmeticalOp::Mul));
-		test_token_content_detection("/", TokenContent::ArithmeticalOp (ArithmeticalOp::Div));
-		test_token_content_detection("==", TokenContent::LogicalOp (LogicalOp::Equals));
+		test_token_content_detection("+", TokenContent::Operator (Operator::Plus));
+		test_token_content_detection("-", TokenContent::Operator (Operator::Minus));
+		test_token_content_detection("*", TokenContent::Operator (Operator::Mul));
+		test_token_content_detection("/", TokenContent::Operator (Operator::Div));
+		test_token_content_detection("==", TokenContent::Operator (Operator::Equals));
 		test_token_content_detection("(", TokenContent::Bracket (Bracket::Left));
 		test_token_content_detection(")", TokenContent::Bracket (Bracket::Right));
-		test_token_content_detection("=", TokenContent::AssignOp);
+		test_token_content_detection("=", TokenContent::Operator (Operator::Assign));
 		test_token_content_detection("var1", TokenContent::Name (String::from("var1")));
 		test_token_content_detection(":", TokenContent::StatementOp (StatementOp::Colon));
 		test_token_content_detection(";", TokenContent::StatementOp (StatementOp::Semicolon));
@@ -404,13 +389,13 @@ mod tests {
 	pub fn can_parse_simple_expr() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("1+23.4-45.6*7.8/9 var1var"));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Plus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Minus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Minus));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Mul));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Mul));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Div));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var1var")));
 		assert_eq!(tokens_iter.next_or_err().unwrap_err(), TokenErr::EndReached { pos: 25 });
@@ -420,13 +405,13 @@ mod tests {
 	pub fn can_parse_simple_expr_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var"));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Plus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Minus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Minus));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Mul));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Mul));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::ArithmeticalOp (ArithmeticalOp::Div));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var1")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
