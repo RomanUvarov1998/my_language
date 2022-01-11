@@ -1,4 +1,4 @@
-use super::tokens_iter::*;
+use super::token::*;
 use super::arithmetic_expr::{ArithmeticExpr, ExprContextKind};
 use super::{ InterpErr, memory::DataType };
 
@@ -181,8 +181,8 @@ impl std::fmt::Display for StatementErr {
 
 #[cfg(test)]
 mod tests {
-	use super::super::chars_iter::*;
-	use super::super::tokens_iter::*;
+	use super::super::string_char::*;
+	use super::super::token::*;
 	use super::*;
 
 	#[test]

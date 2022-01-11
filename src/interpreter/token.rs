@@ -1,4 +1,4 @@
-use super::chars_iter::*;
+use super::string_char::*;
 
 pub struct TokensIter<'code> {
 	iter: CharsIter<'code>,

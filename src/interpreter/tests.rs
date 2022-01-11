@@ -1,7 +1,7 @@
 use super::memory::*;
-use super::chars_iter::*;
-use super::tokens_iter::*;
-use super::statements_iter::*;
+use super::string_char::*;
+use super::token::*;
+use super::statement::*;
 use super::arithmetic_expr::*;
 
 #[test]

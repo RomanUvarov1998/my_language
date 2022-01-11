@@ -1,4 +1,4 @@
-use super::tokens_iter::{self, *};
+use super::token::{self, *};
 use super::InterpErr;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -55,23 +55,23 @@ impl ArithmeticExpr {
 				},
 				
 				TokenContent::Operator (op) => {
-					let tok_op: tokens_iter::Operator = *op;
+					let tok_op: Operator = *op;
 					
 					match tok_op {
-						tokens_iter::Operator::Plus | tokens_iter::Operator::Minus => {
+						Operator::Plus | Operator::Minus => {
 							if prev_is_operand {
 								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, token, tok_op)?;
 							} else {
 								tmp_stack.push( (token, Symbol::new_un_pref_op(tok_op)) );
 							}
 						},
-						tokens_iter::Operator::Mul 
-							| tokens_iter::Operator::Div 
-							| tokens_iter::Operator::Pow 
+						Operator::Mul 
+							| Operator::Div 
+							| Operator::Pow 
 							=> {
 								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, token, tok_op)?;
 						},
-						tokens_iter::Operator::Equals | tokens_iter::Operator::Assign 
+						Operator::Equals | Operator::Assign 
 							=> return Err( InterpErr::ArithmExpr( ArithmExprErr::UnexpectedToken (token) ) ),
 					};
 					
@@ -79,7 +79,7 @@ impl ArithmeticExpr {
 				},
 				
 				TokenContent::Bracket (br) => {
-					let tok_br: tokens_iter::Bracket = *br;
+					let tok_br: Bracket = *br;
 					Self::add_bracket(&mut expr_stack, &mut tmp_stack, token, tok_br)?;
 					
 					prev_is_operand = match tok_br {
@@ -110,7 +110,7 @@ impl ArithmeticExpr {
 	fn add_bin_op(
 		expr_stack: &mut Vec<TokSym>, 
 		tmp_stack: &mut Vec<TokSym>, 
-		tok: Token, op: tokens_iter::Operator
+		tok: Token, op: Operator
 		) -> Result<(), InterpErr> 
 	{
 		let ar_op = ArithmOperator::new_bin(op);
@@ -149,7 +149,7 @@ impl ArithmeticExpr {
 	fn add_bracket(
 		expr_stack: &mut Vec<TokSym>, 
 		tmp_stack: &mut Vec<TokSym>, 
-		tok: Token, br: tokens_iter::Bracket
+		tok: Token, br: Bracket
 	) -> Result<(), InterpErr> 
 	{
 		match br {
@@ -273,7 +273,7 @@ impl ExprContext {
 		}
 	}
 	
-	fn check_brackets(&mut self, br: tokens_iter::Bracket) -> bool {
+	fn check_brackets(&mut self, br: Bracket) -> bool {
 		match br {
 			Bracket::Left => {
 				self.left_brackets_count += 1;
@@ -310,7 +310,7 @@ impl Symbol {
 	fn new_left_bracket() -> Self {
 		Symbol::LeftBracket
 	}
-	fn new_un_pref_op(op: tokens_iter::Operator) -> Self {
+	fn new_un_pref_op(op: Operator) -> Self {
 		Symbol::ArithmOperator( ArithmOperator::new_un_pref(op) )
 	}
 }
@@ -343,27 +343,27 @@ enum ArithmOperator {
 }
 
 impl ArithmOperator {
-	fn new_bin(op: tokens_iter::Operator) -> Self {
+	fn new_bin(op: Operator) -> Self {
 		let ar_op: BinOp = match op {
-			tokens_iter::Operator::Plus => BinOp::Plus,
-			tokens_iter::Operator::Minus => BinOp::Minus,
-			tokens_iter::Operator::Mul => BinOp::Mul,
-			tokens_iter::Operator::Div => BinOp::Div,
-			tokens_iter::Operator::Pow => BinOp::Pow,
-			tokens_iter::Operator::Equals | tokens_iter::Operator::Assign => unreachable!(),
+			Operator::Plus => BinOp::Plus,
+			Operator::Minus => BinOp::Minus,
+			Operator::Mul => BinOp::Mul,
+			Operator::Div => BinOp::Div,
+			Operator::Pow => BinOp::Pow,
+			Operator::Equals | Operator::Assign => unreachable!(),
 		};
 		ArithmOperator::Binary (ar_op)
 	}
 	
-	fn new_un_pref(op: tokens_iter::Operator) -> Self {
+	fn new_un_pref(op: Operator) -> Self {
 		let ar_op: UnPrefOp = match op {
-			tokens_iter::Operator::Plus => UnPrefOp::Plus,
-			tokens_iter::Operator::Minus => UnPrefOp::Minus,
-			tokens_iter::Operator::Mul 
-				| tokens_iter::Operator::Div 
-				| tokens_iter::Operator::Equals 
-				| tokens_iter::Operator::Assign 
-				| tokens_iter::Operator::Pow 
+			Operator::Plus => UnPrefOp::Plus,
+			Operator::Minus => UnPrefOp::Minus,
+			Operator::Mul 
+				| Operator::Div 
+				| Operator::Equals 
+				| Operator::Assign 
+				| Operator::Pow 
 				=> unreachable!(),
 		};
 		ArithmOperator::UnaryPrefix (ar_op)
@@ -473,9 +473,9 @@ impl std::fmt::Display for ArithmExprErr {
 
 #[cfg(test)]
 mod tests {
-	use super::super::statements_iter::*;
-	use super::super::tokens_iter::*;
-	use super::super::chars_iter::CharsIter;
+	use super::super::statement::*;
+	use super::super::token::*;
+	use super::super::string_char::CharsIter;
 	use super::*;
 	
 	#[test]

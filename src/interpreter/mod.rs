@@ -1,15 +1,15 @@
 mod memory;
 mod arithmetic_expr;
-mod chars_iter;
-mod tokens_iter;
-mod statements_iter;
+mod string_char;
+mod token;
+mod statement;
 
 #[cfg(test)]
 mod tests;
 
-use chars_iter::CharsIter;
-use tokens_iter::*;
-use statements_iter::*;
+use string_char::CharsIter;
+use token::*;
+use statement::*;
 use memory::*;
 
 pub struct Interpreter {
@@ -79,7 +79,7 @@ fn display_error_pos(f: &mut std::fmt::Formatter<'_>, pos_begin: usize, pos_end:
 	writeln!(f, "")
 }
 
-use tokens_iter::TokenErr;
+use token::TokenErr;
 impl From<TokenErr> for InterpErr {
 	fn from(err: TokenErr) -> InterpErr {
         InterpErr::Token(err)
