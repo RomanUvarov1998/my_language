@@ -25,7 +25,9 @@ pub fn can_make_variable_declare_statement() {
 pub fn can_calc_expression_without_variables() {
 	let mut tokens_iter = TokensIter::new(CharsIter::new("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;"));
 	
-	let expr = ArithmeticExpr::new(&mut tokens_iter).unwrap();
+	let expr = ArithmeticExpr::new(
+		&mut tokens_iter,
+		ExprContextKind::FunctionArg).unwrap();
 	
 	let memory = Memory::new();
 	

@@ -1,5 +1,5 @@
 use super::tokens_iter::*;
-use super::arithmetic_expr::ArithmeticExpr;
+use super::arithmetic_expr::{ArithmeticExpr, ExprContextKind};
 use super::{ InterpErr, memory::DataType };
 
 pub struct StatementsIter<'code> {
@@ -55,7 +55,9 @@ impl<'code> StatementsIter<'code> {
 						} ) ),
 		};
 		
-		let value_expr = ArithmeticExpr::new(&mut self.tokens_iter)?;
+		let value_expr = ArithmeticExpr::new(
+			&mut self.tokens_iter, 
+			ExprContextKind::ValueToAssign)?;
 		
 		
 		self.tokens_iter.expect(TokenContent::StatementOp ( StatementOp::Semicolon ))?.check()?;
@@ -69,7 +71,9 @@ impl<'code> StatementsIter<'code> {
 	}
 	
 	fn parse_variable_set(&mut self, var_name: String) -> Result<Statement, InterpErr> {		
-		let value_expr = ArithmeticExpr::new(&mut self.tokens_iter)?;
+		let value_expr = ArithmeticExpr::new(
+			&mut self.tokens_iter,
+			ExprContextKind::ValueToAssign)?;
 		
 		self.tokens_iter.expect(TokenContent::StatementOp ( StatementOp::Semicolon ))?.check()?;
 		
@@ -84,7 +88,9 @@ impl<'code> StatementsIter<'code> {
 		let mut exprs = Vec::<ArithmeticExpr>::new();
 		
 		loop {
-			exprs.push(ArithmeticExpr::new(&mut self.tokens_iter)?);
+			exprs.push(ArithmeticExpr::new(
+				&mut self.tokens_iter,
+				ExprContextKind::FunctionArg)?);
 			match self.tokens_iter.peek_or_err()? {
 				&Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {
 					self.tokens_iter.next_or_err()?;
@@ -170,5 +176,35 @@ impl std::fmt::Display for StatementErr {
 		match self {
 			StatementErr::EndReached => writeln!(f, "End reached"),
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::super::chars_iter::*;
+	use super::super::tokens_iter::*;
+	use super::*;
+
+	#[test]
+	fn can_parse_builtin_funcs_call() {
+		let tokens_iter = TokensIter::new(CharsIter::new("print(1.2 + 3.4);"));
+		let mut st_iter = StatementsIter::new(tokens_iter);
+		
+		assert_eq!(
+			st_iter.next().unwrap().unwrap(),
+			Statement::FuncCall {
+				name: String::from("print"), 
+				args: vec![
+					ArithmeticExpr::new(
+						&mut TokensIter::new(CharsIter::new("1.2 + 3.4);")),
+						ExprContextKind::FunctionArg).unwrap(),
+				]
+			},
+		);
+		
+		assert_eq!(
+			st_iter.next(),
+			None
+		);
 	}
 }

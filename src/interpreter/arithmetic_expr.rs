@@ -9,15 +9,16 @@ pub struct ArithmeticExpr {
 type TokSym = (Token, Symbol);
 
 impl ArithmeticExpr {	
-	pub fn new(tokens_iter: &mut TokensIter) -> Result<Self, InterpErr> {
-		let expr_stack = Self::create_stack(tokens_iter)?;
+	pub fn new(tokens_iter: &mut TokensIter, context_kind: ExprContextKind) -> Result<Self, InterpErr> {
+		let context = ExprContext::new(context_kind);
+		let expr_stack = Self::create_stack(tokens_iter, context)?;
 		
 		let root = Self::create_tree(expr_stack)?;
 		
 		Ok( Self { root } )
 	}
 	
-	fn create_stack(tokens_iter: &mut TokensIter) -> Result<Vec<TokSym>, InterpErr> {
+	fn create_stack(tokens_iter: &mut TokensIter, mut context: ExprContext) -> Result<Vec<TokSym>, InterpErr> {
 		let mut tmp_stack = Vec::<TokSym>::new();
 		let mut expr_stack = Vec::<TokSym>::new();
 		let mut prev_is_operand = false;
@@ -25,7 +26,7 @@ impl ArithmeticExpr {
 		loop {
 			let next_token_ref = tokens_iter.peek_or_err()?;
 			
-			if let TokenContent::StatementOp (..) = next_token_ref.content() {		
+			if context.check_expr_end(next_token_ref)? {		
 				break;
 			}
 			
@@ -214,6 +215,79 @@ impl ArithmeticExpr {
 	pub fn calc(&self, memory: &super::memory::Memory) -> Result<super::memory::VarValue, InterpErr> {
 		let result: f32 = self.root.calc(memory)?;
 		Ok(super::memory::VarValue::Float32 (result))
+	}
+}
+
+//------------------------------- ExprContext ----------------------------------
+
+#[derive(Debug, Clone, Copy)]
+pub enum ExprContextKind {
+	ValueToAssign,
+	FunctionArg,
+}
+
+pub struct ExprContext {
+	kind: ExprContextKind,
+	left_brackets_count: u32,
+}
+
+impl ExprContext {
+	fn new(kind: ExprContextKind)-> Self {
+		Self {
+			kind,
+			left_brackets_count: 0_u32,
+		}
+	}
+	
+	fn check_expr_end(&mut self, tok: &Token) -> Result<bool, InterpErr> {
+		match self.kind {
+			ExprContextKind::ValueToAssign =>
+				match tok.content() {
+					TokenContent::Number (..) | TokenContent::Operator (..) | TokenContent::Name (..)
+						=> Ok(false),
+					TokenContent::Bracket (br) 
+						=> Ok( self.check_brackets(*br) ),
+					TokenContent::StatementOp (st_op) => match st_op {
+						StatementOp::Colon | StatementOp::Comma 
+							=> Err( InterpErr::ArithmExpr (ArithmExprErr::UnexpectedToken (tok.clone()) ) ),
+						StatementOp::Semicolon => Ok(true),
+					},
+					TokenContent::Keyword (..) 
+						=> Err( InterpErr::ArithmExpr (ArithmExprErr::UnexpectedToken (tok.clone()) ) ),
+				},
+			ExprContextKind::FunctionArg =>
+				match tok.content() {
+					TokenContent::Number (..) | TokenContent::Operator (..) | TokenContent::Name (..)
+						=> Ok(false),
+					TokenContent::Bracket (br) 
+						=> Ok( self.check_brackets(*br) ),
+					TokenContent::StatementOp (st_op) => match st_op {
+						StatementOp::Colon 
+							=> Err( InterpErr::ArithmExpr (ArithmExprErr::UnexpectedToken (tok.clone()) ) ),
+						StatementOp::Semicolon | StatementOp::Comma 
+							=> Ok(true),
+					},
+					TokenContent::Keyword (..) 
+						=> Err( InterpErr::ArithmExpr (ArithmExprErr::UnexpectedToken (tok.clone()) ) ),
+				},
+		}
+	}
+	
+	fn check_brackets(&mut self, br: tokens_iter::Bracket) -> bool {
+		match br {
+			Bracket::Left => {
+				self.left_brackets_count += 1;
+				false
+			},
+			Bracket::Right => {
+				if self.left_brackets_count > 0 {
+					self.left_brackets_count -= 1;
+					false
+				} else {
+					true
+				}
+			},
+		}
 	}
 }
 
@@ -506,7 +580,9 @@ mod tests {
 	
 	fn test_expr_and_its_stack_eq(expr_str: &str, correct_expr_stack: Vec<Symbol>) {
 		let mut tokens_iter = TokensIter::new(CharsIter::new(expr_str));	
-		let expr_stack: Vec<(Token, Symbol)> = ArithmeticExpr::create_stack(&mut tokens_iter).unwrap();
+		let expr_stack: Vec<(Token, Symbol)> = ArithmeticExpr::create_stack(
+			&mut tokens_iter, 
+			ExprContext::new(ExprContextKind::ValueToAssign)).unwrap();
 		
 		let syms_expr_stack: Vec<Symbol> = expr_stack.iter().map(|(_tok, sym)| sym.clone()).collect();
 		
@@ -541,7 +617,9 @@ mod tests {
 	#[test]	
 	fn can_parse_single_number() {
 		let mut tokens_iter = TokensIter::new(CharsIter::new("3.125;"));	
-		let ar_expr: ArithmeticExpr = ArithmeticExpr::new(&mut tokens_iter).unwrap();
+		let ar_expr: ArithmeticExpr = ArithmeticExpr::new(
+			&mut tokens_iter,
+			ExprContextKind::ValueToAssign).unwrap();
 		assert_eq!(
 			ar_expr,
 			ArithmeticExpr {

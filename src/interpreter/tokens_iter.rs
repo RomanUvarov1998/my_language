@@ -156,7 +156,7 @@ impl Iterator for TokensIter<'_> {
 				CharKind::RightBracket => Ok( Token::new(pos, pos, TokenContent::Bracket ( Bracket::Right )) ),
 				CharKind::Eq => self.parse_assignment_or_equality(pos),
 				CharKind::Letter (first_char) => self.parse_name_or_keyword(pos, first_char),
-				CharKind::Whitespace => continue,
+			CharKind::Whitespace | CharKind::Control => continue,
 				CharKind::Punctuation (p) => match p {
 					Punctuation::Colon => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Colon)) ),
 					Punctuation::Semicolon => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Semicolon)) ),

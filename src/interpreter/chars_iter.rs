@@ -41,6 +41,8 @@ impl<'code> CharsIter<'code> {
 				CharKind::Letter (ch)
 			} else if let Some(value) = ch.to_digit(RADIX) {
 				CharKind::Digit(value, ch)
+			} else if ch.is_ascii_control() {
+				CharKind::Control
 			} else {
 				CharKind::Invalid (ch)
 			}
@@ -79,6 +81,7 @@ pub enum CharKind {
 	Letter (char),
 	Punctuation (Punctuation),
 	Whitespace,
+	Control,
 	Invalid (char),
 }
 
@@ -104,6 +107,7 @@ impl std::fmt::Display for CharKind {
 			CharKind::Eq => write!(f, "="),
 			CharKind::Letter (ch) => write!(f, "{}", ch),
 			CharKind::Whitespace => write!(f, "Whitespace"),
+			CharKind::Control => write!(f, "Control"),
 			CharKind::Punctuation (p) => match p {
 				Punctuation::Colon => write!(f, ":"),
 				Punctuation::Semicolon => write!(f, ";"),
