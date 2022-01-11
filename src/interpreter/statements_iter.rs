@@ -1,5 +1,5 @@
 use super::tokens_iter::*;
-use super::expr::Expr;
+use super::arithmetic_expr::ArithmeticExpr;
 use super::{ InterpErr, memory::DataType };
 
 pub struct StatementsIter<'code> {
@@ -55,7 +55,7 @@ impl<'code> StatementsIter<'code> {
 						} ) ),
 		};
 		
-		let value_expr = Expr::new(&mut self.tokens_iter)?;
+		let value_expr = ArithmeticExpr::new(&mut self.tokens_iter)?;
 		
 		
 		self.tokens_iter.expect(TokenContent::StatementOp ( StatementOp::Semicolon ))?.check()?;
@@ -69,7 +69,7 @@ impl<'code> StatementsIter<'code> {
 	}
 	
 	fn parse_variable_set(&mut self, var_name: String) -> Result<Statement, InterpErr> {		
-		let value_expr = Expr::new(&mut self.tokens_iter)?;
+		let value_expr = ArithmeticExpr::new(&mut self.tokens_iter)?;
 		
 		self.tokens_iter.expect(TokenContent::StatementOp ( StatementOp::Semicolon ))?.check()?;
 		
@@ -81,10 +81,10 @@ impl<'code> StatementsIter<'code> {
 	}
 
 	fn parse_func_call(&mut self, func_name: String) -> Result<Statement, InterpErr> {
-		let mut exprs = Vec::<Expr>::new();
+		let mut exprs = Vec::<ArithmeticExpr>::new();
 		
 		loop {
-			exprs.push(Expr::new(&mut self.tokens_iter)?);
+			exprs.push(ArithmeticExpr::new(&mut self.tokens_iter)?);
 			match self.tokens_iter.peek_or_err()? {
 				&Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {
 					self.tokens_iter.next_or_err()?;
@@ -149,14 +149,14 @@ impl Iterator for StatementsIter<'_> {
 #[derive(Debug, Eq, PartialEq)]
 pub enum Statement {
 	WithVariable (WithVariable),
-	FuncCall { name: String, args: Vec<Expr> },
+	FuncCall { name: String, args: Vec<ArithmeticExpr> },
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum WithVariable {
 	Declare { var_name: String, data_type: DataType },
-	DeclareSet { var_name: String, data_type: DataType, value_expr: Expr },
-	Set { var_name: String, value_expr: Expr },
+	DeclareSet { var_name: String, data_type: DataType, value_expr: ArithmeticExpr },
+	Set { var_name: String, value_expr: ArithmeticExpr },
 }
 
 #[derive(Debug, PartialEq, Eq)]

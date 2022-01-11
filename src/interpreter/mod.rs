@@ -1,5 +1,4 @@
 mod memory;
-mod expr;
 mod arithmetic_expr;
 mod chars_iter;
 mod tokens_iter;
@@ -52,7 +51,6 @@ impl Interpreter {
 #[derive(Debug, PartialEq, Eq)]
 pub enum InterpErr {
 	Token (TokenErr),
-	Expr (ExprErr),
 	ArithmExpr (ArithmExprErr),
 	Statement (StatementErr),
 	Var (VarErr),
@@ -63,7 +61,6 @@ impl std::fmt::Display for InterpErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {		
 		match self {
 			InterpErr::Token (err) => write!(f, "{}", err),
-			InterpErr::Expr (err) => write!(f, "{}", err),
 			InterpErr::ArithmExpr (err) => write!(f, "{}", err),
 			InterpErr::Statement (err) => write!(f, "{}", err),
 			InterpErr::Var (err) => write!(f, "{}", err),
@@ -92,13 +89,6 @@ impl From<&TokenErr> for InterpErr {
 	fn from(err: &TokenErr) -> InterpErr {
         InterpErr::Token(TokenErr::clone(err))
     }
-}
-
-use expr::ExprErr;
-impl From<ExprErr> for InterpErr {
-	fn from(err: ExprErr) -> InterpErr {
-        InterpErr::Expr(err)
-	}
 }
 
 use arithmetic_expr::ArithmExprErr;

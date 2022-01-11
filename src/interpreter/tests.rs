@@ -2,7 +2,7 @@ use super::memory::*;
 use super::chars_iter::*;
 use super::tokens_iter::*;
 use super::statements_iter::*;
-use super::expr::*;
+use super::arithmetic_expr::*;
 
 #[test]
 pub fn can_make_variable_declare_statement() {
@@ -25,14 +25,14 @@ pub fn can_make_variable_declare_statement() {
 pub fn can_calc_expression_without_variables() {
 	let mut tokens_iter = TokensIter::new(CharsIter::new("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;"));
 	
-	let expr = Expr::new(&mut tokens_iter).unwrap();
+	let expr = ArithmeticExpr::new(&mut tokens_iter).unwrap();
 	
 	let memory = Memory::new();
 	
 	let value_res = expr.calc(&memory).unwrap();
-	if let VarValue::Float32(res) = value_res {
-		assert!((res - 5.0_f32).abs() <= std::f32::EPSILON);
-	} else {
-		panic!("Test failed: {:?}", value_res);
+	
+	match value_res {
+		VarValue::Float32(res) => assert!((res - 5.0_f32).abs() <= std::f32::EPSILON),
+		_ => panic!("Test failed: {:?}", value_res),
 	}
 }

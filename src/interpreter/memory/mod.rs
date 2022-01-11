@@ -4,7 +4,7 @@ mod func_data;
 pub use var_data::*;
 pub use func_data::*;
 
-use super::expr::Expr;
+use super::arithmetic_expr::ArithmeticExpr;
 use super::InterpErr;
 
 pub struct Memory {
@@ -55,7 +55,7 @@ impl Memory {
 		}
 	}
 	
-	pub fn call_func(&mut self, name: String, arg_exprs: Vec<Expr>) -> Result<(), InterpErr> {
+	pub fn call_func(&mut self, name: String, arg_exprs: Vec<ArithmeticExpr>) -> Result<(), InterpErr> {
 		let func = self.find_func(&name)?;
 		
 		let mut args_data = Vec::<VarValue>::new();

@@ -29,7 +29,7 @@ impl ArithmeticExpr {
 				break;
 			}
 			
-			let token = dbg!(tokens_iter.next().unwrap()?);
+			let token = tokens_iter.next().unwrap()?;
 			
 			match token.content() {	
 				TokenContent::Number (num) => {
@@ -55,6 +55,7 @@ impl ArithmeticExpr {
 				
 				TokenContent::Operator (op) => {
 					let tok_op: tokens_iter::Operator = *op;
+					
 					match tok_op {
 						tokens_iter::Operator::Plus | tokens_iter::Operator::Minus => {
 							if prev_is_operand {
@@ -63,7 +64,10 @@ impl ArithmeticExpr {
 								tmp_stack.push( (token, Symbol::new_un_pref_op(tok_op)) );
 							}
 						},
-						tokens_iter::Operator::Mul | tokens_iter::Operator::Div => {
+						tokens_iter::Operator::Mul 
+							| tokens_iter::Operator::Div 
+							| tokens_iter::Operator::Pow 
+							=> {
 								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, token, tok_op)?;
 						},
 						tokens_iter::Operator::Equals | tokens_iter::Operator::Assign 
@@ -74,12 +78,13 @@ impl ArithmeticExpr {
 				},
 				
 				TokenContent::Bracket (br) => {
-					println!("here");
 					let tok_br: tokens_iter::Bracket = *br;
-					println!("adding bracket {:?}", tok_br);
 					Self::add_bracket(&mut expr_stack, &mut tmp_stack, token, tok_br)?;
 					
-					prev_is_operand = false;
+					prev_is_operand = match tok_br {
+						Bracket::Right => true,
+						Bracket::Left => false,
+					};
 				},
 				
 				TokenContent::Keyword (..) => {
@@ -88,8 +93,6 @@ impl ArithmeticExpr {
 				
 				TokenContent::StatementOp (..) => unreachable!(),
 			}
-				
-			println!("tmp_stack: {:?}", tmp_stack);
 		}
 		
 		while let Some(top_tok_sym) = tmp_stack.pop() {
@@ -121,21 +124,16 @@ impl ArithmeticExpr {
 									tmp_stack.pop().unwrap().0) ) )
 							},
 								
-							Symbol::LeftBracket => {
-								break;
-							},
+							Symbol::LeftBracket => break,
 							
 							Symbol::ArithmOperator ( top_op_ref ) => 
-								match top_op_ref {
-									ArithmOperator::Binary (..) => 
-										if top_op_ref.rank() >= ar_op.rank() {
-											tmp_stack.pop().unwrap()
-										} else {
-											break;
-										},
-									ArithmOperator::UnaryPrefix (..) => tmp_stack.pop().unwrap(),
-								}
+								if top_op_ref.rank() >= ar_op.rank() {
+									tmp_stack.pop().unwrap()
+								} else {
+									break;
+								},
 						},
+						
 					None => break,
 				};
 			
@@ -156,10 +154,8 @@ impl ArithmeticExpr {
 		match br {
 			Bracket::Left => {
 				tmp_stack.push( (tok, Symbol::new_left_bracket()) );
-				println!("push_left");
 			},
 			Bracket::Right => {
-				println!("get_right");
 				'out: loop {
 					match tmp_stack.pop() {
 						Some( tok_sym ) => match tok_sym.1 {
@@ -177,7 +173,7 @@ impl ArithmeticExpr {
 
 	fn create_tree(expr_stack: Vec<TokSym>) -> Result<Node, InterpErr> {
 		let (root, begin_ind) = Self::create_node(&expr_stack, expr_stack.len() - 1)?;
-		assert!(begin_ind == 0);
+		assert_eq!(begin_ind, 0);
 		Ok(root)
 	}
 	
@@ -214,6 +210,11 @@ impl ArithmeticExpr {
 			},
 		}
 	}
+
+	pub fn calc(&self, memory: &super::memory::Memory) -> Result<super::memory::VarValue, InterpErr> {
+		let result: f32 = self.root.calc(memory)?;
+		Ok(super::memory::VarValue::Float32 (result))
+	}
 }
 
 //------------------------------- Symbol ----------------------------------
@@ -234,9 +235,6 @@ impl Symbol {
 	}
 	fn new_left_bracket() -> Self {
 		Symbol::LeftBracket
-	}
-	fn new_bin_op(op: tokens_iter::Operator) -> Self {
-		Symbol::ArithmOperator( ArithmOperator::new_bin(op) )
 	}
 	fn new_un_pref_op(op: tokens_iter::Operator) -> Self {
 		Symbol::ArithmOperator( ArithmOperator::new_un_pref(op) )
@@ -277,6 +275,7 @@ impl ArithmOperator {
 			tokens_iter::Operator::Minus => BinOp::Minus,
 			tokens_iter::Operator::Mul => BinOp::Mul,
 			tokens_iter::Operator::Div => BinOp::Div,
+			tokens_iter::Operator::Pow => BinOp::Pow,
 			tokens_iter::Operator::Equals | tokens_iter::Operator::Assign => unreachable!(),
 		};
 		ArithmOperator::Binary (ar_op)
@@ -290,6 +289,7 @@ impl ArithmOperator {
 				| tokens_iter::Operator::Div 
 				| tokens_iter::Operator::Equals 
 				| tokens_iter::Operator::Assign 
+				| tokens_iter::Operator::Pow 
 				=> unreachable!(),
 		};
 		ArithmOperator::UnaryPrefix (ar_op)
@@ -300,6 +300,7 @@ impl ArithmOperator {
 			ArithmOperator::Binary (bin_op) => match bin_op {
 				BinOp::Plus | BinOp::Minus => 0_u32,
 				BinOp::Div | BinOp::Mul => 1_u32,
+				BinOp::Pow => 3_u32,
 			},
 			ArithmOperator::UnaryPrefix (un_op) => match un_op {
 				UnPrefOp::Plus | UnPrefOp::Minus => 2_u32,
@@ -314,6 +315,7 @@ enum BinOp {
 	Minus,
 	Div,
 	Mul,
+	Pow,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -346,6 +348,7 @@ impl Node {
 				BinOp::Minus => lhs.calc(memory)? - rhs.calc(memory)?,
 				BinOp::Div => 	lhs.calc(memory)? / rhs.calc(memory)?,
 				BinOp::Mul => 	lhs.calc(memory)? * rhs.calc(memory)?,
+				BinOp::Pow => 	lhs.calc(memory)?.powf(rhs.calc(memory)?),
 			},
 			Node::UnPrefOp { operand, operator } => match operator {
 				UnPrefOp::Plus => 	operand.calc(memory)?,
@@ -373,9 +376,7 @@ impl Node {
 pub enum ArithmExprErr {
 	UnexpectedToken (Token),
 	UnpairedBracket (Token),
-	NpOperandForOperator (Token),
-	WrongType (String),
-	Empty,
+	WrongType (String)
 }
 
 impl std::fmt::Display for ArithmExprErr {
@@ -389,12 +390,7 @@ impl std::fmt::Display for ArithmExprErr {
 				super::display_error_pos(f, token.pos_begin, token.pos_end)?;
 				write!(f, "Unpaired bracket {}", token)
 			},
-			ArithmExprErr::NpOperandForOperator  (token) => {
-				super::display_error_pos(f, token.pos_begin, token.pos_end)?;
-				write!(f, "No operand for operator")
-			},
 			ArithmExprErr::WrongType (type_name) => write!(f, "Wrong operand type: '{:?}'", type_name),
-			ArithmExprErr::Empty => write!(f, "No tokens to make an expression"),
 		}
 	}
 }
@@ -476,6 +472,36 @@ mod tests {
 			Symbol::ArithmOperator (ArithmOperator::UnaryPrefix (UnPrefOp::Minus)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Div)),
 		]);
+		test_expr_and_its_stack_eq("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
+			Symbol::Operand (Operand::Number (33_f32)),
+			Symbol::Operand (Operand::Number (1_f32)),
+			Symbol::Operand (Operand::Number (2_f32)),
+			Symbol::Operand (Operand::Number (3_f32)),
+			Symbol::Operand (Operand::Number (4_f32)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Mul)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
+			Symbol::Operand (Operand::Number (5_f32)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
+			Symbol::Operand (Operand::Number (10_f32)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Div)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
+			Symbol::Operand (Operand::Number (30_f32)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Minus)),
+		]);
+		test_expr_and_its_stack_eq("2^2;", vec![
+			Symbol::Operand (Operand::Number (2_f32)),
+			Symbol::Operand (Operand::Number (2_f32)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Pow)),
+		]);
+		test_expr_and_its_stack_eq("-2^2+4;", vec![
+			Symbol::Operand (Operand::Number (2_f32)),
+			Symbol::Operand (Operand::Number (2_f32)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Pow)),
+			Symbol::ArithmOperator (ArithmOperator::UnaryPrefix (UnPrefOp::Minus)),
+			Symbol::Operand (Operand::Number (4_f32)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
+		]);
 	}
 	
 	fn test_expr_and_its_stack_eq(expr_str: &str, correct_expr_stack: Vec<Symbol>) {
@@ -522,5 +548,10 @@ mod tests {
 				root: Node::Operand (Operand::Number (3.125_f32))
 			}
 		);
+	}
+
+	#[test]
+	fn can_calc() {
+		
 	}
 }
