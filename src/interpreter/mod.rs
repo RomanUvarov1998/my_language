@@ -3,6 +3,8 @@ mod arithmetic_expr;
 mod string_char;
 mod token;
 mod statement;
+mod var_data;
+mod func_data;
 
 #[cfg(test)]
 mod tests;
@@ -11,19 +13,37 @@ use string_char::CharsIter;
 use token::*;
 use statement::*;
 use memory::*;
+use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
+use var_data::{VarErr, VarValue, DataType};
 
 pub struct Interpreter {
 	memory: Memory,
+	builtin_func_defs: FuncsDefList,
 }
 
 impl Interpreter {
 	pub fn new() -> Self {
-		Self { 
+		let mut builtin_func_defs = FuncsDefList::new();
+		
+		builtin_func_defs.add(FuncDef::new(
+			"print".to_string(),
+			vec![
+				FuncArg::new("value".to_string(), DataType::Float32),
+			]
+		)).unwrap();
+		
+		builtin_func_defs.add(FuncDef::new(
+			"exit".to_string(),
+			Vec::new()
+		)).unwrap();
+		
+		Self {
 			memory: Memory::new(),
+			builtin_func_defs,
 		}
 	}
 	
-	pub fn run(&mut self, code: &str) -> Result<(), InterpErr> {
+	pub fn run(&mut self, code: &str) -> Result<InterpInnerSignal, InterpErr> {
 		let chars_iter = CharsIter::new(code);
 		let tokens_iter = TokensIter::new(chars_iter);
 		
@@ -39,13 +59,56 @@ impl Interpreter {
 					WithVariable::Set { var_name, value_expr } => 
 						self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?,
 				},
-				Statement::FuncCall { name, args } => 
-						self.memory.call_func(name, args)?,
+				Statement::FuncCall { kind, name, arg_exprs } => {
+					let types: Vec<DataType> = arg_exprs
+						.iter()
+						.map(|expr| expr.get_data_type())
+						.collect();
+					
+					match kind {
+						FuncKind::Builtin => {
+							let func_def: &FuncDef = self.builtin_func_defs.try_find(&name)?;
+							func_def.check_args(types)?;
+							
+							let mut arg_vals = Vec::<VarValue>::with_capacity(arg_exprs.len());
+							for expr in arg_exprs {
+								arg_vals.push(expr.calc(&self.memory)?);
+							}
+							
+							if let InterpInnerSignal::Exit = self.call_builtin_func(&name, arg_vals)? {
+								return Ok( InterpInnerSignal::Exit );
+							}
+						},
+						FuncKind::UserDefined => {
+							todo!();
+							//self.memory.call_func(name, args)?;
+						},
+					}
+				},
 			}
 		}	
 		
-		Ok(())
+		Ok( InterpInnerSignal::CanContinue )
 	}
+	
+	fn call_builtin_func(&self, name: &str, args_values: Vec<VarValue>) -> Result<InterpInnerSignal, InterpErr> {
+		match name {
+			"print" => {
+				println!("{:?}", args_values[0]);
+				Ok( InterpInnerSignal::CanContinue )
+			},
+			"exit" => {
+				Ok( InterpInnerSignal::Exit )
+			},
+			_ => unreachable!(),
+		}
+	}
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum InterpInnerSignal {
+	CanContinue,
+	Exit,
 }
 
 #[derive(Debug, PartialEq, Eq)]

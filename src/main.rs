@@ -9,8 +9,12 @@ fn main() {
 	let mut input = ConsoleReader::new();
 
 	loop  {
-		if let Err(err) = interpreter.run(input.next_line()) {
-			println!("{}", err);
+		match interpreter.run(input.next_line()) {
+			Ok(msg) => match msg {
+				InterpInnerSignal::CanContinue => {},
+				InterpInnerSignal::Exit => break,
+			},
+			Err(err) => println!("{}", err),
 		}
 	}
 }

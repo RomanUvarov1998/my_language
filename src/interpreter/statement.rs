@@ -1,6 +1,6 @@
 use super::token::*;
 use super::arithmetic_expr::{ArithmeticExpr, ExprContextKind};
-use super::{ InterpErr, memory::DataType };
+use super::{ InterpErr, var_data::DataType };
 
 pub struct StatementsIter<'code> {
 	tokens_iter: TokensIter<'code>
@@ -11,13 +11,14 @@ impl<'code> StatementsIter<'code> {
 		StatementsIter { tokens_iter }
 	}
 	
-	fn parse_variable_set_or_func_call(&mut self, name: String) -> Result<Statement, InterpErr> {
+	fn parse_variable_set_or_func_call(&mut self, name: String, is_builtin: bool) -> Result<Statement, InterpErr> {
 		let second = self.tokens_iter.next_or_err()?;
 		let statement = match second {
 			Token { content: TokenContent::Bracket(Bracket::Left), .. } => 
-				self.parse_func_call(name)?,
+				self.parse_func_call(name, is_builtin)?,
+				
 			Token { content: TokenContent::Operator (Operator::Assign), .. } => 
-				self.parse_variable_set(name)?,
+				self.parse_variable_set(name, is_builtin)?,
 			_ => return Err( InterpErr::Token ( TokenErr::ExpectedButFound { 
 					expected: vec![
 						TokenContent::Bracket(Bracket::Left),
@@ -70,7 +71,7 @@ impl<'code> StatementsIter<'code> {
 		) )
 	}
 	
-	fn parse_variable_set(&mut self, var_name: String) -> Result<Statement, InterpErr> {		
+	fn parse_variable_set(&mut self, var_name: String, is_builtin: bool) -> Result<Statement, InterpErr> {		
 		let value_expr = ArithmeticExpr::new(
 			&mut self.tokens_iter,
 			ExprContextKind::ValueToAssign)?;
@@ -84,21 +85,29 @@ impl<'code> StatementsIter<'code> {
 		) )
 	}
 
-	fn parse_func_call(&mut self, func_name: String) -> Result<Statement, InterpErr> {
-		let mut exprs = Vec::<ArithmeticExpr>::new();
+	fn parse_func_call(&mut self, func_name: String, is_builtin: bool) -> Result<Statement, InterpErr> {
+		let mut arg_exprs = Vec::<ArithmeticExpr>::new();
 		
 		loop {
-			exprs.push(ArithmeticExpr::new(
+			if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_err()?.content() {
+				self.tokens_iter.next_or_err()?;
+				break;
+			}
+			
+			arg_exprs.push(ArithmeticExpr::new(
 				&mut self.tokens_iter,
 				ExprContextKind::FunctionArg)?);
+				
 			match self.tokens_iter.peek_or_err()? {
 				&Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {
 					self.tokens_iter.next_or_err()?;
 				},
+				
 				&Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => {
 					self.tokens_iter.next_or_err()?;
 					break;
 				},
+				
 				_ => {
 					let found = self.tokens_iter.next_or_err()?;
 					return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
@@ -115,8 +124,9 @@ impl<'code> StatementsIter<'code> {
 		self.tokens_iter.expect(TokenContent::StatementOp ( StatementOp::Semicolon ))?.check()?;
 		
 		Ok ( Statement::FuncCall {
+			kind: if is_builtin { FuncKind::Builtin } else { FuncKind::UserDefined },
 			name: func_name, 
-			args: exprs,
+			arg_exprs,
 		} )
 	}
 }
@@ -136,8 +146,13 @@ impl Iterator for StatementsIter<'_> {
 		let statement_result = match first {
 			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => 
 				self.parse_varable_declaration(),	
+			
 			Token { content: TokenContent::Name( name ), .. } => 
-				self.parse_variable_set_or_func_call(name),
+				self.parse_variable_set_or_func_call(name, false),
+			
+			Token { content: TokenContent::BuiltinName( name ), .. } =>
+				self.parse_variable_set_or_func_call(name, true),
+				
 			found @ _ => 
 				Err( InterpErr::Token( TokenErr::ExpectedButFound { 
 					expected: vec![
@@ -152,10 +167,16 @@ impl Iterator for StatementsIter<'_> {
 	}	
 }
 
+//------------------- Statement --------------------
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum Statement {
 	WithVariable (WithVariable),
-	FuncCall { name: String, args: Vec<ArithmeticExpr> },
+	FuncCall { 
+		kind: FuncKind,
+		name: String, 
+		arg_exprs: Vec<ArithmeticExpr> 
+	},
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -164,6 +185,14 @@ pub enum WithVariable {
 	DeclareSet { var_name: String, data_type: DataType, value_expr: ArithmeticExpr },
 	Set { var_name: String, value_expr: ArithmeticExpr },
 }
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum FuncKind {
+	UserDefined,
+	Builtin,
+}
+
+//------------------- StatementErr --------------------
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum StatementErr {
@@ -187,14 +216,15 @@ mod tests {
 
 	#[test]
 	fn can_parse_builtin_funcs_call() {
-		let tokens_iter = TokensIter::new(CharsIter::new("print(1.2 + 3.4);"));
+		let tokens_iter = TokensIter::new(CharsIter::new("@print(1.2 + 3.4);"));
 		let mut st_iter = StatementsIter::new(tokens_iter);
 		
 		assert_eq!(
 			st_iter.next().unwrap().unwrap(),
 			Statement::FuncCall {
+				kind: FuncKind::Builtin,
 				name: String::from("print"), 
-				args: vec![
+				arg_exprs: vec![
 					ArithmeticExpr::new(
 						&mut TokensIter::new(CharsIter::new("1.2 + 3.4);")),
 						ExprContextKind::FunctionArg).unwrap(),

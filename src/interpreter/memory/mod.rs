@@ -1,36 +1,20 @@
-mod var_data;
-mod func_data;
-
-pub use var_data::*;
-pub use func_data::*;
+use super::var_data::{VarData, DataType, VarErr, VarValue};
+//use super::func_data::{FuncsDataList, FuncData, BoxedFuncBodyClosure, FuncArg, FuncErr};
 
 use super::arithmetic_expr::ArithmeticExpr;
 use super::InterpErr;
+use super::func_data::FuncsDefList;
 
 pub struct Memory {
 	vars: Vec<VarData>,
-	funcs: Vec<FuncData>,
+	user_defined_funcs: FuncsDefList,
 }
 
 impl Memory {
 	pub fn new() -> Self {
 		Self {
 			vars: Vec::new(),
-			funcs: vec![
-
-				FuncData::new(
-					String::from("print"), 
-					vec![
-						FuncArg::new(String::from("value"), DataType::Float32),
-					],
-					Box::new(
-						|args_data: Vec<VarValue>| -> () {
-							println!(">>> {:?}", args_data[0]);
-						}
-					) as BoxedFuncBodyClosure,
-				),
-
-			]
+			user_defined_funcs: FuncsDefList::new(),
 		}
 	}
 	
@@ -58,17 +42,8 @@ impl Memory {
 	}
 	
 	pub fn call_func(&mut self, name: String, arg_exprs: Vec<ArithmeticExpr>) -> Result<(), InterpErr> {
-		let func: &FuncData = self.find_func(&name)?;
-		
-		let mut args_data = Vec::<VarValue>::new();
-		
-		for expr in arg_exprs {
-			args_data.push(expr.calc(&self)?);
-		}
-		
-		func.call(args_data)?;
-		
-		Ok(())
+		todo!();
+		//self.user_defined_funcs.try_call(&name, arg_exprs)
 	}
 	
 	fn find_var<'mem>(&'mem self, name: &str) -> Result<&'mem VarData, VarErr> {
@@ -82,13 +57,6 @@ impl Memory {
 		match self.vars.iter_mut().find(|var| var.get_name() == name) {
 			Some(var) => Ok(var),
 			None => Err( VarErr::NotDefined { name: name.to_string() } ),
-		}
-	}
-	
-	fn find_func<'mem>(&'mem self, name: &str) -> Result<&'mem FuncData, FuncErr> {
-		match self.funcs.iter().find(|func| func.get_name() == name) {
-			Some(func) => Ok(func),
-			None => Err( FuncErr::NotDefined { name: name.to_string() } ),
 		}
 	}
 }

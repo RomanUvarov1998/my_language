@@ -24,6 +24,7 @@ impl<'code> CharsIter<'code> {
 	
 	fn get_kind(ch: char) -> CharKind {
 		match ch {
+			'@' => CharKind::Dog,
 			'.' => CharKind::Dot,
 			'+' => CharKind::Plus,
 			'-' => CharKind::Minus,
@@ -69,6 +70,7 @@ impl Iterator for CharsIter<'_> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CharKind {
 	Digit (u32, char),
+	Dog,
 	Dot,
 	Plus,
 	Minus,
@@ -97,6 +99,7 @@ impl std::fmt::Display for CharKind {
 		match self {
 			CharKind::Digit (_value, ch) => write!(f, "{}", ch),
 			CharKind::Dot => write!(f, "."),
+			CharKind::Dog => write!(f, "@"),
 			CharKind::Plus => write!(f, "+"),
 			CharKind::Minus => write!(f, "-"),
 			CharKind::Asterisk => write!(f, "*"),
@@ -113,7 +116,7 @@ impl std::fmt::Display for CharKind {
 				Punctuation::Semicolon => write!(f, ";"),
 				Punctuation::Comma => write!(f, ","),
 			},
-			CharKind::Invalid (ch) => write!(f, "invalid char {}", ch),
+			CharKind::Invalid (ch) => write!(f, "{}", ch),
 		}
 	}
 }

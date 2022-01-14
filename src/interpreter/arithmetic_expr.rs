@@ -1,8 +1,10 @@
 use super::token::*;
 use super::InterpErr;
+use super::var_data::DataType;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ArithmeticExpr {
+	data_type: DataType,
 	root: Node,
 }
 
@@ -15,7 +17,11 @@ impl ArithmeticExpr {
 		
 		let root = Self::create_tree(expr_stack)?;
 		
-		Ok( Self { root } )
+		Ok( Self { data_type: DataType::Float32, root } )
+	}
+	
+	pub fn get_data_type(&self) -> DataType {
+		self.data_type
 	}
 	
 	fn create_stack(tokens_iter: &mut TokensIter, mut context: ExprContext) -> Result<Vec<TokSym>, InterpErr> {
@@ -53,6 +59,16 @@ impl ArithmeticExpr {
 					}					
 					
 					let sym = Symbol::new_name(name.clone());
+					expr_stack.push((token, sym));
+					
+					prev_is_operand = true;
+				},
+				TokenContent::BuiltinName (name) => {
+					if prev_is_operand {
+						return Err( InterpErr::ArithmExpr( ArithmExprErr::UnexpectedToken (token) ) );
+					}					
+					
+					let sym = Symbol::new_builtin_name(name.clone());
 					expr_stack.push((token, sym));
 					
 					prev_is_operand = true;
@@ -217,9 +233,9 @@ impl ArithmeticExpr {
 		}
 	}
 
-	pub fn calc(&self, memory: &super::memory::Memory) -> Result<super::memory::VarValue, InterpErr> {
+	pub fn calc(&self, memory: &super::memory::Memory) -> Result<super::var_data::VarValue, InterpErr> {
 		let result: f32 = self.root.calc(memory)?;
-		Ok(super::memory::VarValue::Float32 (result))
+		Ok(super::var_data::VarValue::Float32 (result))
 	}
 }
 
@@ -248,7 +264,10 @@ impl ExprContext {
 		match self.kind {
 			ExprContextKind::ValueToAssign =>
 				match tok.content() {
-					TokenContent::Number (..) | TokenContent::Operator (..) | TokenContent::Name (..)
+					TokenContent::Number (..) | 
+						TokenContent::Operator (..) | 
+						TokenContent::Name (..) |
+						TokenContent::BuiltinName (..)
 						=> Ok(false),
 					TokenContent::Bracket (br) 
 						=> Ok( self.check_brackets(*br) ),
@@ -262,7 +281,10 @@ impl ExprContext {
 				},
 			ExprContextKind::FunctionArg =>
 				match tok.content() {
-					TokenContent::Number (..) | TokenContent::Operator (..) | TokenContent::Name (..)
+					TokenContent::Number (..) | 
+						TokenContent::Operator (..) | 
+						TokenContent::Name (..) |
+						TokenContent::BuiltinName (..)
 						=> Ok(false),
 					TokenContent::Bracket (br) 
 						=> Ok( self.check_brackets(*br) ),
@@ -312,6 +334,9 @@ impl Symbol {
 	fn new_name(name: String) -> Self {
 		Symbol::Operand( Operand::Name (name) )
 	}
+	fn new_builtin_name(name: String) -> Self {
+		Symbol::Operand( Operand::BuiltinName (name) )
+	}
 	fn new_left_bracket() -> Self {
 		Symbol::LeftBracket
 	}
@@ -324,6 +349,7 @@ impl Symbol {
 enum Operand {
 	Number (f32),
 	Name (String),
+	BuiltinName (String),
 }
 impl Eq for Operand {}
 impl PartialEq for Operand {
@@ -335,6 +361,10 @@ impl PartialEq for Operand {
 			},
 			Operand::Name (op1) => match other {
 				Operand::Name (op2) => op1 == op2,
+				_ => false,
+			},
+			Operand::BuiltinName (op1) => match other {
+				Operand::BuiltinName (op2) => op1 == op2,
 				_ => false,
 			},
 		}
@@ -436,11 +466,14 @@ impl Node {
 			Node::Operand (operand) => match operand {
 				Operand::Number (val) => *val,
 				Operand::Name (name) => {
-					use super::memory::VarValue;
+					use super::var_data::VarValue;
 					let var_value: &VarValue = memory.get_variable(name)?;
 					match var_value {
 						VarValue::Float32(value) => *value,
 					}
+				},
+				Operand::BuiltinName (name) => {
+					todo!();
 				},
 			},
 		};
@@ -633,7 +666,8 @@ mod tests {
 		assert_eq!(
 			ar_expr,
 			ArithmeticExpr {
-				root: Node::Operand (Operand::Number (3.125_f32))
+				root: Node::Operand (Operand::Number (3.125_f32)),
+				data_type: DataType::Float32,
 			}
 		);
 	}

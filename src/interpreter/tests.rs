@@ -3,6 +3,8 @@ use super::string_char::*;
 use super::token::*;
 use super::statement::*;
 use super::arithmetic_expr::*;
+use super::var_data::*;
+use super::func_data::*;
 
 #[test]
 pub fn can_make_variable_declare_statement() {

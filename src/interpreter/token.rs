@@ -80,7 +80,15 @@ impl<'code> TokensIter<'code> {
 	}
 
 	fn parse_name_or_keyword(&mut self, pos_begin: usize, first_char: char) -> Result<Token, TokenErr> {
-		let mut name = String::from(first_char);
+		let mut is_builtin: bool;
+		let mut name = if first_char == '@' {
+			is_builtin = true;
+			String::new()
+		} else {
+			is_builtin = false;
+			String::from(first_char)
+		};
+		
 		let mut pos_end: usize = pos_begin;
 		
 		loop {
@@ -105,7 +113,11 @@ impl<'code> TokensIter<'code> {
 		
 		let token = match name.as_str() {
 			"var" => Token::new(pos_begin, pos_end, TokenContent::Keyword ( Keyword::Var )),
-			_ => Token::new(pos_begin, pos_end, TokenContent::Name (name)),
+			_ => if is_builtin {
+					Token::new(pos_begin, pos_end, TokenContent::BuiltinName (name))
+				} else {
+					Token::new(pos_begin, pos_end, TokenContent::Name (name))
+				},
 		};
 		
 		Ok( token )
@@ -156,7 +168,8 @@ impl Iterator for TokensIter<'_> {
 				CharKind::RightBracket => Ok( Token::new(pos, pos, TokenContent::Bracket ( Bracket::Right )) ),
 				CharKind::Eq => self.parse_assignment_or_equality(pos),
 				CharKind::Letter (first_char) => self.parse_name_or_keyword(pos, first_char),
-			CharKind::Whitespace | CharKind::Control => continue,
+				CharKind::Dog => self.parse_name_or_keyword(pos, '@'),
+				CharKind::Whitespace | CharKind::Control => continue,
 				CharKind::Punctuation (p) => match p {
 					Punctuation::Colon => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Colon)) ),
 					Punctuation::Semicolon => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Semicolon)) ),
@@ -198,6 +211,7 @@ impl std::fmt::Display for Token {
 #[derive(Debug, Clone)]
 pub enum TokenContent {
 	Number (f32),
+	BuiltinName (String),
 	Operator (Operator),
 	Bracket (Bracket),
 	Name (String),
@@ -223,6 +237,7 @@ impl std::fmt::Display for TokenContent {
 				Bracket::Left => write!(f, "'{}'", "("),
 			},
 			TokenContent::Name (name) => write!(f, "'{}'", name),
+			TokenContent::BuiltinName (name) => write!(f, "'{}'", name),
 			TokenContent::StatementOp (op) => match op {
 				StatementOp::Colon => write!(f, "'{}'", ":"),
 				StatementOp::Semicolon => write!(f, "'{}'", ";"),
@@ -260,6 +275,10 @@ impl PartialEq for TokenContent {
 			},
 			TokenContent::Keyword (kw1) => match other {
 				TokenContent::Keyword (kw2) => kw1 == kw2,
+				_ => false,
+			},
+			TokenContent::BuiltinName (n1) => match other {
+				TokenContent::BuiltinName (n2) => n1 == n2,
 				_ => false,
 			},
 		}
@@ -386,6 +405,7 @@ mod tests {
 		test_token_content_detection(";", TokenContent::StatementOp (StatementOp::Semicolon));
 		test_token_content_detection(",", TokenContent::StatementOp (StatementOp::Comma));
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
+		test_token_content_detection("@print", TokenContent::BuiltinName (String::from("print")));
 	}
 
 	#[test]
