@@ -1,4 +1,4 @@
-use super::token::{self, *};
+use super::token::*;
 use super::InterpErr;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -27,6 +27,10 @@ impl ArithmeticExpr {
 			let next_token_ref = tokens_iter.peek_or_err()?;
 			
 			if context.check_expr_end(next_token_ref)? {		
+				if expr_stack.len() == 0 {
+					let found_token = tokens_iter.next().unwrap()?;
+					return Err( InterpErr::from(ArithmExprErr::ExpectedExprButFound(found_token)) );
+				}
 				break;
 			}
 			
@@ -173,6 +177,7 @@ impl ArithmeticExpr {
 	}
 
 	fn create_tree(expr_stack: Vec<TokSym>) -> Result<Node, InterpErr> {
+		assert!(expr_stack.len() > 0);
 		let (root, begin_ind) = Self::create_node(&expr_stack, expr_stack.len() - 1)?;
 		assert_eq!(begin_ind, 0);
 		Ok(root)
@@ -450,7 +455,8 @@ impl Node {
 pub enum ArithmExprErr {
 	UnexpectedToken (Token),
 	UnpairedBracket (Token),
-	WrongType (String)
+	WrongType (String),
+	ExpectedExprButFound (Token),
 }
 
 impl std::fmt::Display for ArithmExprErr {
@@ -465,6 +471,10 @@ impl std::fmt::Display for ArithmExprErr {
 				write!(f, "Unpaired bracket {}", token)
 			},
 			ArithmExprErr::WrongType (type_name) => write!(f, "Wrong operand type: '{:?}'", type_name),
+			ArithmExprErr::ExpectedExprButFound (token) => {
+				super::display_error_pos(f, token.pos_begin, token.pos_end)?;
+				write!(f, "Expected arithmetical expression, but found {}", token)
+			},
 		}
 	}
 }
