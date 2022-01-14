@@ -21,8 +21,8 @@ impl FuncData {
 		if self.args.len() != args_data.len() {
 			return Err( FuncErr::ParamsCnt { 
 				func_name: self.name.clone(), 
-				actual_cnt: args_data.len(),
-				given_cnt: self.args.len(),
+				actual_cnt: self.args.len(),
+				given_cnt: args_data.len(),
 			} );
 		}
 		

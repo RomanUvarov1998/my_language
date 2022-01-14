@@ -17,17 +17,19 @@ impl Memory {
 		Self {
 			vars: Vec::new(),
 			funcs: vec![
+
 				FuncData::new(
 					String::from("print"), 
 					vec![
 						FuncArg::new(String::from("value"), DataType::Float32),
-					], 
+					],
 					Box::new(
 						|args_data: Vec<VarValue>| -> () {
 							println!(">>> {:?}", args_data[0]);
 						}
 					) as BoxedFuncBodyClosure,
 				),
+
 			]
 		}
 	}
@@ -56,7 +58,7 @@ impl Memory {
 	}
 	
 	pub fn call_func(&mut self, name: String, arg_exprs: Vec<ArithmeticExpr>) -> Result<(), InterpErr> {
-		let func = self.find_func(&name)?;
+		let func: &FuncData = self.find_func(&name)?;
 		
 		let mut args_data = Vec::<VarValue>::new();
 		
