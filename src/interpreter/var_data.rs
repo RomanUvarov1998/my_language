@@ -48,7 +48,7 @@ impl DataType {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum VarValue {
 	Float32 (f32),
 }

@@ -1,5 +1,5 @@
-use super::var_data::{DataType, VarValue};
-use super::{InterpErr, arithmetic_expr::ArithmeticExpr};
+use super::var_data::DataType;
+use super::InterpErr;
 
 //------------------------- FuncsDefList -----------------------
 

@@ -213,24 +213,37 @@ mod tests {
 	use super::super::string_char::*;
 	use super::super::token::*;
 	use super::*;
+	use super::super::var_data::VarValue;
+	use super::super::memory::Memory;
 
 	#[test]
 	fn can_parse_builtin_funcs_call() {
 		let tokens_iter = TokensIter::new(CharsIter::new("@print(1.2 + 3.4);"));
 		let mut st_iter = StatementsIter::new(tokens_iter);
 		
-		assert_eq!(
-			st_iter.next().unwrap().unwrap(),
+		match st_iter.next().unwrap().unwrap() {
 			Statement::FuncCall {
 				kind: FuncKind::Builtin,
-				name: String::from("print"), 
-				arg_exprs: vec![
+				name, 
+				arg_exprs
+			} => {
+				assert_eq!("print", &name);
+				
+				let desired_arg_exprs = vec![
 					ArithmeticExpr::new(
 						&mut TokensIter::new(CharsIter::new("1.2 + 3.4);")),
 						ExprContextKind::FunctionArg).unwrap(),
-				]
+				];
+				
+				let mem = Memory::new();
+				
+				match desired_arg_exprs[0].calc(&mem).unwrap() {
+					VarValue::Float32 (val) => assert!((val - (1.2_f32 + 3.4_f32)).abs() <= std::f32::EPSILON * 2.0),
+					ans @ _ => panic!("Wrong answer {:?}", ans),
+				}
 			},
-		);
+			st @ _ => panic!("Wrong pattern {:?}", st),
+		};
 		
 		assert_eq!(
 			st_iter.next(),

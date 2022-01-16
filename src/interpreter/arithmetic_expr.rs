@@ -1,29 +1,62 @@
-use super::token::*;
+use super::token::{Token, TokenContent, Operator, Bracket, TokensIter, StatementOp};
 use super::InterpErr;
-use super::var_data::DataType;
+use super::memory::Memory;
+use super::var_data::{VarValue, DataType};
+
+type TokSym = (Token, Symbol);
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ArithmeticExpr {
 	data_type: DataType,
-	root: Node,
+	expr_stack: Vec<TokSym>,
 }
-
-type TokSym = (Token, Symbol);
 
 impl ArithmeticExpr {	
 	pub fn new(tokens_iter: &mut TokensIter, context_kind: ExprContextKind) -> Result<Self, InterpErr> {
 		let context = ExprContext::new(context_kind);
 		let expr_stack = Self::create_stack(tokens_iter, context)?;
 		
-		let root = Self::create_tree(expr_stack)?;
-		
-		Ok( Self { data_type: DataType::Float32, root } )
+		Ok( Self { data_type: DataType::Float32, expr_stack } )
 	}
 	
 	pub fn get_data_type(&self) -> DataType {
 		self.data_type
 	}
 	
+	pub fn calc(&self, memory: &Memory) -> Result<VarValue, InterpErr> {
+		let mut calc_stack = Vec::<VarValue>::with_capacity(self.expr_stack.len());
+		let mut expr = self.expr_stack.clone();
+		expr.reverse();
+		
+		while let Some((tok, sym)) = expr.pop() {
+			match sym {
+				Symbol::Operand (opnd) => {
+					let value: VarValue = match opnd {
+						Operand::Number (val) => VarValue::Float32(val),
+						Operand::Name (name) => memory.get_variable(&name)?.clone(),
+						Operand::BuiltinName (name) => todo!(),
+					};
+					calc_stack.push(value);
+				},
+				
+				Symbol::LeftBracket => unreachable!(),
+				
+				Symbol::ArithmOperator (op) => {
+					let value: VarValue = match op.apply(&mut calc_stack) {
+						Err( err ) => return Err( InterpErr::from(ArithmExprErr::Operator { err, tok }) ),
+						Ok(val) => val,
+					};
+					calc_stack.push(value);
+				},
+			}
+		}
+		
+		let result: VarValue = calc_stack.pop().unwrap();
+		assert_eq!(calc_stack.pop(), None);
+		
+		Ok(result)
+	}
+
 	fn create_stack(tokens_iter: &mut TokensIter, mut context: ExprContext) -> Result<Vec<TokSym>, InterpErr> {
 		let mut tmp_stack = Vec::<TokSym>::new();
 		let mut expr_stack = Vec::<TokSym>::new();
@@ -191,52 +224,6 @@ impl ArithmeticExpr {
 		
 		Ok(())
 	}
-
-	fn create_tree(expr_stack: Vec<TokSym>) -> Result<Node, InterpErr> {
-		assert!(expr_stack.len() > 0);
-		let (root, begin_ind) = Self::create_node(&expr_stack, expr_stack.len() - 1)?;
-		assert_eq!(begin_ind, 0);
-		Ok(root)
-	}
-	
-	fn create_node(expr_stack: &Vec<TokSym>, local_root_ind: usize) -> Result<(Node, usize), InterpErr> {		
-		match &expr_stack[local_root_ind].1 {
-			Symbol::Operand (operand) => Ok( (Node::Operand(operand.clone()), local_root_ind) ),
-			
-			Symbol::LeftBracket => unreachable!(),
-			
-			Symbol::ArithmOperator (op_ref) => {				
-				let (node, node_begin_ind): (Node, usize) = match op_ref {
-					ArithmOperator::Binary (bin_op_ref) => {
-						let (rhs_node, rhs_begin_ind) = Self::create_node(&expr_stack, local_root_ind - 1)?;
-						let (lhs_node, lhs_begin_ind) = Self::create_node(&expr_stack, rhs_begin_ind - 1)?;
-						
-						(Node::BinOp {
-							lhs: Box::new(lhs_node),
-							operator: *bin_op_ref,
-							rhs: Box::new(rhs_node),
-						}, lhs_begin_ind)
-					},
-						
-					ArithmOperator::UnaryPrefix (un_pref_op_ref) => {
-						let (operand_node, operand_begin_ind) = Self::create_node(&expr_stack, local_root_ind - 1)?;
-						
-						(Node::UnPrefOp {
-							operand: Box::new(operand_node),
-							operator: *un_pref_op_ref,
-						}, operand_begin_ind)
-					}
-				};
-				
-				Ok((node, node_begin_ind))
-			},
-		}
-	}
-
-	pub fn calc(&self, memory: &super::memory::Memory) -> Result<super::var_data::VarValue, InterpErr> {
-		let result: f32 = self.root.calc(memory)?;
-		Ok(super::var_data::VarValue::Float32 (result))
-	}
 }
 
 //------------------------------- ExprContext ----------------------------------
@@ -317,6 +304,70 @@ impl ExprContext {
 		}
 	}
 }
+
+//------------------------------- Symbol''' ----------------------------------
+/*
+struct Expr {
+	syms: Vec<&'static dyn Optr>,	
+}
+
+impl Expr {
+	fn push<T: Optr + 'static>(&mut self, optr: &'static T) {
+		self.syms.push(optr as &'static dyn Optr);
+	}
+}
+
+trait Optr: std::fmt::Debug {
+	fn rank(&self) -> u32;
+	fn apply(&self, calc_stack: &mut Vec<VarValue>);
+	fn assoc(&self) -> Assoc;
+	fn arity(&self) -> Arity;
+}
+
+#[derive(Debug)]
+struct Plus {
+	rank: u32,
+	assoc: Assoc,
+	arity: Arity,
+	tc: Operator,
+}
+
+impl Optr for Plus {
+	fn rank(&self) -> u32 { self.rank }
+	fn apply(&self, calc_stack: &mut Vec<VarValue>) {  }
+	fn assoc(&self) -> Assoc { self.assoc }
+	fn arity(&self) -> Arity { self.arity }
+}
+
+static operators: [Op; 7] = [
+	Op { rank: 0, assoc: Assoc::L, arity: Arity::B, tc: Operator::Plus },
+	Op { rank: 0, assoc: Assoc::L, arity: Arity::B, tc: Operator::Minus },
+	Op { rank: 1, assoc: Assoc::L, arity: Arity::B, tc: Operator::Mul },
+	Op { rank: 1, assoc: Assoc::L, arity: Arity::B, tc: Operator::Div },
+	Op { rank: 2, assoc: Assoc::L, arity: Arity::U, tc: Operator::Plus },
+	Op { rank: 2, assoc: Assoc::L, arity: Arity::U, tc: Operator::Minus },
+	Op { rank: 3, assoc: Assoc::L, arity: Arity::B, tc: Operator::Pow },
+];
+
+struct Op {
+	rank: u32,
+	assoc: Assoc,
+	arity: Arity,
+	tc: Operator,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Assoc {
+	L,
+	R,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Arity {
+	U,
+	B,
+}
+*/
 
 //------------------------------- Symbol ----------------------------------
 
@@ -416,6 +467,71 @@ impl ArithmOperator {
 			},
 		}
 	}
+
+	#[allow(unreachable_patterns)]
+	fn apply(&self, calc_stack: &mut Vec<VarValue>) -> Result<VarValue, OperatorErr> {		
+		let create_err = |values: &[&VarValue]| -> OperatorErr {
+			let types: Vec<DataType> = values
+				.iter()
+				.map(|val| val.get_type())
+				.collect();
+			
+			OperatorErr::WrongType { 
+				descr: String::from(format!(
+					"Operator {:?} cannot be applied to type(-s) {:?}", 
+					self, 
+					&types[..]))
+			}
+		};
+		
+		match self {
+			ArithmOperator::Binary (bin_op) => {
+				let rhs: VarValue = calc_stack
+					.pop()
+					.ok_or(OperatorErr::NotEnoughOperands { 
+						provided_cnt: 0,
+						required_cnt: 2, 
+					} )?;
+				let lhs: VarValue = calc_stack
+					.pop()
+					.ok_or(OperatorErr::NotEnoughOperands { 
+						provided_cnt: 1,
+						required_cnt: 2, 
+					} )?;
+					
+				let (val1, val2): (f32, f32) = match (lhs, rhs) { 
+					(VarValue::Float32 (val1), VarValue::Float32 (val2)) => (val1, val2),
+					ops @ _ => return Err( create_err(&[&ops.0, &ops.1]) ),
+				};
+			
+				match bin_op {
+					BinOp::Plus => Ok( VarValue::Float32(val1 + val2) ),
+					BinOp::Minus => Ok( VarValue::Float32(val1 - val2) ),
+					BinOp::Div => Ok( VarValue::Float32(val1 / val2) ),
+					BinOp::Mul => Ok( VarValue::Float32(val1 * val2) ),
+					BinOp::Pow => Ok( VarValue::Float32(val1.powf(val2)) ),
+				}
+			},
+			ArithmOperator::UnaryPrefix (un_pref_op) => {
+				let op: VarValue = calc_stack
+					.pop()
+					.ok_or(OperatorErr::NotEnoughOperands { 
+						provided_cnt: 0,
+						required_cnt: 1, 
+					} )?;
+
+				let val: f32 = match op { 
+					VarValue::Float32 (val) => val,
+					_ => return Err( create_err(&[&op]) ),
+				};
+
+				match un_pref_op {
+					UnPrefOp::Plus => Ok( VarValue::Float32(val) ),
+					UnPrefOp::Minus => Ok( VarValue::Float32(-val) ),
+				}
+			},
+		}
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -433,53 +549,15 @@ enum UnPrefOp {
 	Minus,
 }
 
-//------------------------------- Node ----------------------------------
-
 #[derive(Debug, PartialEq, Eq)]
-enum Node {
-	BinOp {
-		lhs: Box<Node>,
-		operator: BinOp,
-		rhs: Box<Node>,
+pub enum OperatorErr {
+	WrongType {
+		descr: String,
 	},
-	UnPrefOp {
-		operand: Box<Node>,
-		operator: UnPrefOp,
+	NotEnoughOperands {
+		provided_cnt: u32,
+		required_cnt: u32,
 	},
-	Operand (Operand),
-}
-
-impl Node {		
-	fn calc(&self, memory: &super::memory::Memory) -> Result<f32, InterpErr> {
-		let res: f32 = match self {
-			Node::BinOp { lhs, operator, rhs } => match operator {
-				BinOp::Plus => 	lhs.calc(memory)? + rhs.calc(memory)?,
-				BinOp::Minus => lhs.calc(memory)? - rhs.calc(memory)?,
-				BinOp::Div => 	lhs.calc(memory)? / rhs.calc(memory)?,
-				BinOp::Mul => 	lhs.calc(memory)? * rhs.calc(memory)?,
-				BinOp::Pow => 	lhs.calc(memory)?.powf(rhs.calc(memory)?),
-			},
-			Node::UnPrefOp { operand, operator } => match operator {
-				UnPrefOp::Plus => 	operand.calc(memory)?,
-				UnPrefOp::Minus => 	-operand.calc(memory)?,
-			},
-			Node::Operand (operand) => match operand {
-				Operand::Number (val) => *val,
-				Operand::Name (name) => {
-					use super::var_data::VarValue;
-					let var_value: &VarValue = memory.get_variable(name)?;
-					match var_value {
-						VarValue::Float32(value) => *value,
-					}
-				},
-				Operand::BuiltinName (name) => {
-					todo!();
-				},
-			},
-		};
-		
-		Ok(res)
-	}
 }
 
 //------------------------------- ArithmExprErr ----------------------------------
@@ -488,8 +566,11 @@ impl Node {
 pub enum ArithmExprErr {
 	UnexpectedToken (Token),
 	UnpairedBracket (Token),
-	WrongType (String),
 	ExpectedExprButFound (Token),
+	Operator { 
+		err: OperatorErr, 
+		tok: Token 
+	},
 }
 
 impl std::fmt::Display for ArithmExprErr {
@@ -503,10 +584,19 @@ impl std::fmt::Display for ArithmExprErr {
 				super::display_error_pos(f, token.pos_begin, token.pos_end)?;
 				write!(f, "Unpaired bracket {}", token)
 			},
-			ArithmExprErr::WrongType (type_name) => write!(f, "Wrong operand type: '{:?}'", type_name),
 			ArithmExprErr::ExpectedExprButFound (token) => {
 				super::display_error_pos(f, token.pos_begin, token.pos_end)?;
 				write!(f, "Expected arithmetical expression, but found {}", token)
+			},
+			ArithmExprErr::Operator { err, tok } => match err {
+				OperatorErr::WrongType { descr } => {
+					super::display_error_pos(f, tok.pos_begin, tok.pos_end)?;
+					write!(f, "{}", descr)
+				},
+				OperatorErr::NotEnoughOperands { provided_cnt, required_cnt } => {
+					super::display_error_pos(f, tok.pos_begin, tok.pos_end)?;
+					write!(f, "Expected {} operand(-s) for operator for operator {:?}, but found {}", provided_cnt, tok, required_cnt)
+				}
 			},
 		}
 	}
@@ -522,73 +612,89 @@ mod tests {
 	use super::*;
 	
 	#[test]
-	fn check_stack_creation() {
+	fn check_stack_creation_and_calc() {
 		test_expr_and_its_stack_eq("3.125;", vec![
 			Symbol::Operand (Operand::Number (3.125_f32)),
-		]);
+		],
+		3.125_f32);
+		
 		test_expr_and_its_stack_eq("3.125 + 5.4;", vec![
 			Symbol::Operand (Operand::Number (3.125_f32)),
 			Symbol::Operand (Operand::Number (5.4_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
-		]);
+		],
+		3.125_f32 + 5.4_f32);
+		
 		test_expr_and_its_stack_eq("3.125 + 5.4 * 2.46;", vec![
 			Symbol::Operand (Operand::Number (3.125_f32)),
 			Symbol::Operand (Operand::Number (5.4_f32)),
 			Symbol::Operand (Operand::Number (2.46_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Mul)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
-		]);
-		test_expr_and_its_stack_eq("3.125 + 0 + 5.4 * 2.46 - 3.14 / 2 * 4.9;", vec![
+		],
+		3.125_f32 + 5.4_f32 * 2.46_f32);
+		
+		test_expr_and_its_stack_eq("3.125 + 0 + 5.25 * 2.25 - 3.25 / 2 * 4.25;", vec![
 			Symbol::Operand (Operand::Number (3.125_f32)),
 			Symbol::Operand (Operand::Number (0_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
-			Symbol::Operand (Operand::Number (5.4_f32)),
-			Symbol::Operand (Operand::Number (2.46_f32)),
+			Symbol::Operand (Operand::Number (5.25_f32)),
+			Symbol::Operand (Operand::Number (2.25_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Mul)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
-			Symbol::Operand (Operand::Number (3.14_f32)),
+			Symbol::Operand (Operand::Number (3.25_f32)),
 			Symbol::Operand (Operand::Number (2_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Div)),
-			Symbol::Operand (Operand::Number (4.9_f32)),
+			Symbol::Operand (Operand::Number (4.25_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Mul)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Minus)),
-		]);
-		test_expr_and_its_stack_eq("3.125 + -5.4 * 2.46;", vec![
+		],
+		3.125_f32 + 0.0_f32 + 5.25_f32 * 2.25_f32 - 3.25_f32 / 2.0_f32 * 4.25_f32);
+		
+		test_expr_and_its_stack_eq("3.125 + -5.25 * 2.25;", vec![
 			Symbol::Operand (Operand::Number (3.125_f32)),
-			Symbol::Operand (Operand::Number (5.4_f32)),
+			Symbol::Operand (Operand::Number (5.25_f32)),
 			Symbol::ArithmOperator (ArithmOperator::UnaryPrefix (UnPrefOp::Minus)),
-			Symbol::Operand (Operand::Number (2.46_f32)),
+			Symbol::Operand (Operand::Number (2.25_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Mul)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
-		]);
-		test_expr_and_its_stack_eq("2.34 * ---5.67;", vec![
-			Symbol::Operand (Operand::Number (2.34_f32)),
-			Symbol::Operand (Operand::Number (5.67_f32)),
+		],
+		3.125_f32 + -5.25_f32 * 2.25_f32);
+		
+		test_expr_and_its_stack_eq("2.5 * ---5.5;", vec![
+			Symbol::Operand (Operand::Number (2.5_f32)),
+			Symbol::Operand (Operand::Number (5.5_f32)),
 			Symbol::ArithmOperator (ArithmOperator::UnaryPrefix (UnPrefOp::Minus)),
 			Symbol::ArithmOperator (ArithmOperator::UnaryPrefix (UnPrefOp::Minus)),
 			Symbol::ArithmOperator (ArithmOperator::UnaryPrefix (UnPrefOp::Minus)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Mul)),
-		]);
-		test_expr_and_its_stack_eq("1.23 * (3.45 + 2.34);", vec![
-			Symbol::Operand (Operand::Number (1.23_f32)),
-			Symbol::Operand (Operand::Number (3.45_f32)),
-			Symbol::Operand (Operand::Number (2.34_f32)),
+		],
+		2.5_f32 * ---5.5_f32);
+		
+		test_expr_and_its_stack_eq("1.125 * (3.125 + 2.125);", vec![
+			Symbol::Operand (Operand::Number (1.125_f32)),
+			Symbol::Operand (Operand::Number (3.125_f32)),
+			Symbol::Operand (Operand::Number (2.125_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Mul)),
-		]);
-		test_expr_and_its_stack_eq("-(8.79 - 2.34 * 5.67 + 4.56) / -3.4;", vec![
-			Symbol::Operand (Operand::Number (8.79_f32)),
-			Symbol::Operand (Operand::Number (2.34_f32)),
-			Symbol::Operand (Operand::Number (5.67_f32)),
+		],
+		1.125_f32 * (3.125_f32 + 2.125_f32));
+		
+		test_expr_and_its_stack_eq("-(8 - 2.125 * 5.125 + 4.125) / -3.125;", vec![
+			Symbol::Operand (Operand::Number (8_f32)),
+			Symbol::Operand (Operand::Number (2.125_f32)),
+			Symbol::Operand (Operand::Number (5.125_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Mul)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Minus)),
-			Symbol::Operand (Operand::Number (4.56_f32)),
+			Symbol::Operand (Operand::Number (4.125_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
 			Symbol::ArithmOperator (ArithmOperator::UnaryPrefix (UnPrefOp::Minus)),
-			Symbol::Operand (Operand::Number (3.4_f32)),
+			Symbol::Operand (Operand::Number (3.125_f32)),
 			Symbol::ArithmOperator (ArithmOperator::UnaryPrefix (UnPrefOp::Minus)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Div)),
-		]);
+		],
+		-(8_f32 - 2.125_f32 * 5.125_f32 + 4.125_f32) / -3.125_f32);
+		
 		test_expr_and_its_stack_eq("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
 			Symbol::Operand (Operand::Number (33_f32)),
 			Symbol::Operand (Operand::Number (1_f32)),
@@ -605,12 +711,16 @@ mod tests {
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
 			Symbol::Operand (Operand::Number (30_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Minus)),
-		]);
+		],
+		33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32);
+		
 		test_expr_and_its_stack_eq("2^2;", vec![
 			Symbol::Operand (Operand::Number (2_f32)),
 			Symbol::Operand (Operand::Number (2_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Pow)),
-		]);
+		],
+		2_f32.powf(2_f32));
+		
 		test_expr_and_its_stack_eq("-2^2+4;", vec![
 			Symbol::Operand (Operand::Number (2_f32)),
 			Symbol::Operand (Operand::Number (2_f32)),
@@ -618,10 +728,24 @@ mod tests {
 			Symbol::ArithmOperator (ArithmOperator::UnaryPrefix (UnPrefOp::Minus)),
 			Symbol::Operand (Operand::Number (4_f32)),
 			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Plus)),
-		]);
+		],
+		-2_f32.powf(2_f32) + 4_f32);
+		
+		test_expr_and_its_stack_eq("3^1^2;", vec![
+			Symbol::Operand (Operand::Number (3_f32)),
+			Symbol::Operand (Operand::Number (1_f32)),
+			Symbol::Operand (Operand::Number (2_f32)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Pow)),
+			Symbol::ArithmOperator (ArithmOperator::Binary (BinOp::Pow)),
+		],
+		3_f32.powf(1_f32.powf(2_f32)));
 	}
 	
-	fn test_expr_and_its_stack_eq(expr_str: &str, correct_expr_stack: Vec<Symbol>) {
+	fn test_expr_and_its_stack_eq(
+		expr_str: &str, 
+		correct_expr_stack: Vec<Symbol>,
+		result: f32
+	) {
 		let mut tokens_iter = TokensIter::new(CharsIter::new(expr_str));	
 		let expr_stack: Vec<(Token, Symbol)> = ArithmeticExpr::create_stack(
 			&mut tokens_iter, 
@@ -629,9 +753,23 @@ mod tests {
 		
 		let syms_expr_stack: Vec<Symbol> = expr_stack.iter().map(|(_tok, sym)| sym.clone()).collect();
 		
-		if syms_expr_stack == correct_expr_stack { return; }
-		
-		let mut has_error = false;
+		if syms_expr_stack == correct_expr_stack { 
+			let mut tokens_iter = TokensIter::new(CharsIter::new(expr_str));	
+			let expr = ArithmeticExpr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
+			
+			let memory = Memory::new();
+			
+			match expr.calc(&memory).unwrap() {
+				VarValue::Float32 (res) => if (result - res).abs() > std::f32::EPSILON * 3.0 {
+					panic!("Wrong result '{}' != {:?} instead of {}", expr_str, res, result);
+				},
+				res @ _ => panic!("Wrong result type for code '{}', expected VarValue::Float32, got {:?}", expr_str, res),
+			}
+			
+			println!("Ok: '{}'", expr_str);
+			
+			return; 
+		}
 		
 		let max_len = std::cmp::max(expr_stack.len(), syms_expr_stack.len());
 		for i in 0..max_len {
@@ -643,7 +781,6 @@ mod tests {
 				true => print!(" == "),
 			false => {
 				print!(" != "); 
-				has_error = true; 
 			},
 			}
 			match correct_expr_stack.get(i) {
@@ -652,28 +789,6 @@ mod tests {
 			}
 		}
 		
-		if has_error {
-			panic!("Error ^^^^");
-		}
-	}
-	
-	#[test]	
-	fn can_parse_single_number() {
-		let mut tokens_iter = TokensIter::new(CharsIter::new("3.125;"));	
-		let ar_expr: ArithmeticExpr = ArithmeticExpr::new(
-			&mut tokens_iter,
-			ExprContextKind::ValueToAssign).unwrap();
-		assert_eq!(
-			ar_expr,
-			ArithmeticExpr {
-				root: Node::Operand (Operand::Number (3.125_f32)),
-				data_type: DataType::Float32,
-			}
-		);
-	}
-
-	#[test]
-	fn can_calc() {
-		
+		panic!("Test failed ^^^");
 	}
 }
