@@ -18,39 +18,11 @@ impl<'code> CharsIter<'code> {
 	
 	pub fn peek(&mut self) -> Option<(CharKind, usize)> {
 		let ch = self.ch_iter.peek()?;
-		Some( ( Self::get_kind(*ch), self.pos ) )
+		Some( ( CharKind::from(*ch), self.pos ) )
 	}
 	
 	pub fn last_pos(&self) -> usize {
 		self.pos
-	}
-	
-	fn get_kind(ch: char) -> CharKind {
-		match ch {
-			'@' => CharKind::Dog,
-			'.' => CharKind::Dot,
-			'+' => CharKind::Plus,
-			'-' => CharKind::Minus,
-			'*' => CharKind::Asterisk,
-			'^' => CharKind::Circumflex,
-			'/' => CharKind::LeftSlash,
-			'(' => CharKind::LeftBracket,
-			')' => CharKind::RightBracket,
-			'=' => CharKind::Eq,
-			' ' | '\n' | '\t' => CharKind::Whitespace,
-			':' => CharKind::Punctuation (Punctuation::Colon),
-			';' => CharKind::Punctuation (Punctuation::Semicolon),
-			',' => CharKind::Punctuation (Punctuation::Comma),
-			_ => if ch.is_alphabetic() {
-				CharKind::Letter (ch)
-			} else if let Some(value) = ch.to_digit(RADIX) {
-				CharKind::Digit(value, ch)
-			} else if ch.is_ascii_control() {
-				CharKind::Control
-			} else {
-				CharKind::Invalid (ch)
-			}
-		}
 	}
 }
 
@@ -60,7 +32,7 @@ impl Iterator for CharsIter<'_> {
 	fn next(&mut self) -> Option<Self::Item> {
 		let ch: char = self.ch_iter.next()?;
 		
-		let char_kind: CharKind = Self::get_kind(ch);
+		let char_kind = CharKind::from(ch);
 		
 		let res = Some( ( char_kind, self.pos ) );
 		
@@ -88,6 +60,36 @@ pub enum CharKind {
 	Whitespace,
 	Control,
 	Invalid (char),
+}
+
+impl From<char> for CharKind {
+	fn from(ch: char) -> Self {
+		match ch {
+			'@' => CharKind::Dog,
+			'.' => CharKind::Dot,
+			'+' => CharKind::Plus,
+			'-' => CharKind::Minus,
+			'*' => CharKind::Asterisk,
+			'^' => CharKind::Circumflex,
+			'/' => CharKind::LeftSlash,
+			'(' => CharKind::LeftBracket,
+			')' => CharKind::RightBracket,
+			'=' => CharKind::Eq,
+			' ' | '\n' | '\t' => CharKind::Whitespace,
+			':' => CharKind::Punctuation (Punctuation::Colon),
+			';' => CharKind::Punctuation (Punctuation::Semicolon),
+			',' => CharKind::Punctuation (Punctuation::Comma),
+			_ => if ch.is_alphabetic() {
+				CharKind::Letter (ch)
+			} else if let Some(value) = ch.to_digit(RADIX) {
+				CharKind::Digit(value, ch)
+			} else if ch.is_ascii_control() {
+				CharKind::Control
+			} else {
+				CharKind::Invalid (ch)
+			}
+		}
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
