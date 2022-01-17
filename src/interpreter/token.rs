@@ -1,5 +1,7 @@
 use super::string_char::*;
 
+//---------------------------- TokensIter --------------------------------
+
 pub struct TokensIter<'code> {
 	iter: CharsIter<'code>,
 	peeked_token: Option<Result<Token, TokenErr>>,
@@ -185,6 +187,8 @@ impl Iterator for TokensIter<'_> {
 	}
 }
 
+//---------------------------- Token --------------------------------
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
 	pub pos_begin: usize,
@@ -207,6 +211,8 @@ impl std::fmt::Display for Token {
 		write!(f, "{}", self.content())
 	}
 }
+
+//---------------------------- TokenContent --------------------------------
 
 #[derive(Debug, Clone)]
 pub enum TokenContent {
@@ -296,6 +302,8 @@ pub enum Operator {
 	Equals,
 	Assign,
 }
+
+//---------------------------- Extra... --------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Bracket {
