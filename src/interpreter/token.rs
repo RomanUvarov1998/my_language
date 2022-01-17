@@ -80,7 +80,7 @@ impl<'code> TokensIter<'code> {
 	}
 
 	fn parse_name_or_keyword(&mut self, pos_begin: usize, first_char: char) -> Result<Token, TokenErr> {
-		let mut is_builtin: bool;
+		let is_builtin: bool;
 		let mut name = if first_char == '@' {
 			is_builtin = true;
 			String::new()

@@ -229,15 +229,11 @@ mod tests {
 			} => {
 				assert_eq!("print", &name);
 				
-				let desired_arg_exprs = vec![
-					ArithmeticExpr::new(
-						&mut TokensIter::new(CharsIter::new("1.2 + 3.4);")),
-						ExprContextKind::FunctionArg).unwrap(),
-				];
+				assert_eq!(arg_exprs.len(), 1);
 				
 				let mem = Memory::new();
 				
-				match desired_arg_exprs[0].calc(&mem).unwrap() {
+				match arg_exprs[0].calc(&mem).unwrap() {
 					VarValue::Float32 (val) => assert!((val - (1.2_f32 + 3.4_f32)).abs() <= std::f32::EPSILON * 2.0),
 					ans @ _ => panic!("Wrong answer {:?}", ans),
 				}
