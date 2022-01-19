@@ -437,8 +437,10 @@ mod tests {
 						
 			assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), tc);
 			
-			let end_pos: usize = code.len();
-			assert_eq!(tokens_iter.next_or_err().unwrap_err(), TokenErr::EndReached { pos: end_pos });
+			match tokens_iter.next_or_err().unwrap_err() {
+				TokenErr::EndReached { .. } => {},
+				err @ _ => panic!("Unexpected err: {:?}", err),
+			}
 		};
 		
 		test_token_content_detection("123", TokenContent::Number (123_f32));
@@ -535,9 +537,11 @@ mod tests {
 		assert_eq!(
 			*tokens_iter.next_or_err().unwrap().content(), 
 			TokenContent::Keyword ( Keyword::Var ));
-		assert_eq!(
-			tokens_iter.next_or_err().unwrap_err(), 
-			TokenErr::EndReached { pos: code.len() });
+		
+		match tokens_iter.next_or_err().unwrap_err() {
+			TokenErr::EndReached { .. } => {},
+			err @ _ => panic!("Unexpected err: {:?}", err),
+		}
 	}
 
 	#[test]

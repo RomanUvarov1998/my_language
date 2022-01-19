@@ -190,7 +190,7 @@ impl std::fmt::Display for CharKind {
 
 #[cfg(test)]
 mod tests {	
-	use super::{CharsIter, CharKind};
+	use super::{CharsIter, CharKind, CharPos};
 	use std::collections::VecDeque;
 
 	#[test]
@@ -205,9 +205,11 @@ mod tests {
 			"abc".to_string(),
 		]));
 		
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('a'), 0_usize)));
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('b'), 1_usize)));
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('c'), 2_usize)));
+		let mut pos = CharPos::new();
+		
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('a'), pos))); pos.do_step(CharKind::Dot);
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('b'), pos))); pos.do_step(CharKind::Dot);
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('c'), pos))); pos.do_step(CharKind::Dot);
 		assert_eq!(ch_it.next(), None);
 		assert_eq!(ch_it.strings_queue, VecDeque::new());
 		
@@ -219,12 +221,12 @@ mod tests {
 			"ghi".to_string(),
 		]));
 		
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('d'), 3_usize)));
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('e'), 4_usize)));
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('f'), 5_usize)));
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('g'), 6_usize)));
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('h'), 7_usize)));
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('i'), 8_usize)));
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('d'), pos))); pos.do_step(CharKind::Dot);
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('e'), pos))); pos.do_step(CharKind::Dot);
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('f'), pos))); pos.do_step(CharKind::Dot);
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('g'), pos))); pos.do_step(CharKind::Dot);
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('h'), pos))); pos.do_step(CharKind::Dot);
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('i'), pos))); pos.do_step(CharKind::Dot);
 		assert_eq!(ch_it.next(), None);		
 		assert_eq!(ch_it.strings_queue, VecDeque::new());
 		
