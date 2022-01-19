@@ -1,24 +1,34 @@
-use std::iter::Peekable;
-use std::str::Chars;
+use std::collections::VecDeque;
 
-pub struct CharsIter<'code> {
-	ch_iter: Peekable<Chars<'code>>,
+#[derive(Debug)]
+pub struct CharsIter {
+	strings_queue: VecDeque<String>,
+	chars_queue: VecDeque<CharKind>,
+	peeked_char: Option<(CharKind, usize)>,
 	pos: usize,
 }
 
 const RADIX: u32 = 10_u32;
 
-impl<'code> CharsIter<'code> {
-	pub fn new(text: &'code str) -> Self {
+impl CharsIter {
+	pub fn new() -> Self {
 		Self {
-			ch_iter: text.chars().peekable(),
+			strings_queue: VecDeque::<String>::new(),
+			chars_queue: VecDeque::<CharKind>::new(),
+			peeked_char: None,
 			pos: 0_usize,
 		}
 	}
+		
+	pub fn push_string(&mut self, string: String) {
+		self.strings_queue.push_back(string);
+	}
 	
 	pub fn peek(&mut self) -> Option<(CharKind, usize)> {
-		let ch = self.ch_iter.peek()?;
-		Some( ( CharKind::from(*ch), self.pos ) )
+		if let None = self.peeked_char {
+			self.peeked_char = self.next();
+		}
+		self.peeked_char
 	}
 	
 	pub fn last_pos(&self) -> usize {
@@ -26,19 +36,25 @@ impl<'code> CharsIter<'code> {
 	}
 }
 
-impl Iterator for CharsIter<'_> {		
+impl Iterator for CharsIter {		
 	type Item = (CharKind, usize);
 	
 	fn next(&mut self) -> Option<Self::Item> {
-		let ch: char = self.ch_iter.next()?;
+		if self.peeked_char.is_some() {
+			return self.peeked_char.take();
+		}
 		
-		let char_kind = CharKind::from(ch);
-		
-		let res = Some( ( char_kind, self.pos ) );
-		
+		while self.strings_queue.len() > 0 && self.chars_queue.is_empty() {
+			let cur_string = self.strings_queue.pop_front().unwrap();
+			
+			for ch in cur_string.chars() {
+				self.chars_queue.push_back(CharKind::from(ch));
+			}
+		}
+			
+		let res = (self.chars_queue.pop_front()?, self.pos);
 		self.pos += 1;
-		
-		res
+		Some(res)
 	}
 }
 
@@ -126,54 +142,14 @@ impl std::fmt::Display for CharKind {
 	}
 }
 
-//#[test]
-mod tests {
-	use std::iter::Peekable;
-	use std::str::Chars;
+#[cfg(test)]
+mod tests {	
+	use super::{CharsIter, CharKind};
 	use std::collections::VecDeque;
-	use super::CharKind;
-	
-	struct ChIt {
-		strings_queue: VecDeque<String>,
-		chars_queue: VecDeque<char>,
-	}
-	
-	impl ChIt {
-		fn new() -> Self {
-			Self {
-				strings_queue: VecDeque::<String>::new(),
-				chars_queue: VecDeque::<char>::new(),
-			}
-		}
-		
-		fn push_string(&mut self, string: String) {
-			self.strings_queue.push_back(string);
-		}
-	}
-	
-	impl Iterator for ChIt {
-		type Item = char;
-		
-		fn next(&mut self) -> Option<Self::Item> {			
-			while self.strings_queue.len() > 0 && self.chars_queue.is_empty() {
-				let cur_string = self.strings_queue.pop_front().unwrap();
-				
-				println!("start '{}'", cur_string);
-				
-				for ch in cur_string.chars() {
-					self.chars_queue.push_back(ch);
-				}
-			}
-			
-			self.chars_queue.pop_front()
-		}
-	}
-	
+
 	#[test]
-	fn try_ch_it() {
-		let mut ch_it = ChIt::new();
-		use std::collections::VecDeque;
-		use std::iter::FromIterator;
+	fn try_chars_iter() {
+		let mut ch_it = CharsIter::new();
 		
 		assert_eq!(ch_it.next(), None);
 		
@@ -183,9 +159,9 @@ mod tests {
 			"abc".to_string(),
 		]));
 		
-		assert_eq!(ch_it.next(), Some('a'));
-		assert_eq!(ch_it.next(), Some('b'));
-		assert_eq!(ch_it.next(), Some('c'));
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('a'), 0_usize)));
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('b'), 1_usize)));
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('c'), 2_usize)));
 		assert_eq!(ch_it.next(), None);
 		assert_eq!(ch_it.strings_queue, VecDeque::new());
 		
@@ -197,12 +173,12 @@ mod tests {
 			"ghi".to_string(),
 		]));
 		
-		assert_eq!(ch_it.next(), Some('d'));
-		assert_eq!(ch_it.next(), Some('e'));
-		assert_eq!(ch_it.next(), Some('f'));
-		assert_eq!(ch_it.next(), Some('g'));
-		assert_eq!(ch_it.next(), Some('h'));
-		assert_eq!(ch_it.next(), Some('i'));
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('d'), 3_usize)));
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('e'), 4_usize)));
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('f'), 5_usize)));
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('g'), 6_usize)));
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('h'), 7_usize)));
+		assert_eq!(ch_it.next(), Some((CharKind::Letter('i'), 8_usize)));
 		assert_eq!(ch_it.next(), None);		
 		assert_eq!(ch_it.strings_queue, VecDeque::new());
 		

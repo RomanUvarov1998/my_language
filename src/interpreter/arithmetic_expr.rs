@@ -1,4 +1,4 @@
-use super::token::{Token, TokenContent, Operator, Bracket, TokensIter, StatementOp};
+use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp};
 use super::InterpErr;
 use super::memory::Memory;
 use super::var_data::{VarValue, DataType};
@@ -34,7 +34,7 @@ impl ArithmeticExpr {
 					let value: VarValue = match opnd {
 						Operand::Number (val) => VarValue::Float32(val),
 						Operand::Name (name) => memory.get_variable(&name)?.clone(),
-						Operand::BuiltinName (name) => todo!(),
+						Operand::BuiltinName (_name) => todo!(),
 					};
 					calc_stack.push(value);
 				},
@@ -67,7 +67,7 @@ impl ArithmeticExpr {
 			
 			if context.check_expr_end(next_token_ref)? {		
 				if expr_stack.len() == 0 {
-					let found_token = tokens_iter.next().unwrap()?;
+					let found_token = tokens_iter.next_or_err()?;
 					return Err( InterpErr::from(ArithmExprErr::ExpectedExprButFound(found_token)) );
 				}
 				break;
@@ -156,6 +156,8 @@ impl ArithmeticExpr {
 				Symbol::ArithmOperator (..) => expr_stack.push(top_tok_sym),
 			}
 		}
+		
+		dbg!(&expr_stack);
 		
 		Ok(expr_stack)
 	}
@@ -564,9 +566,7 @@ impl std::fmt::Display for ArithmExprErr {
 
 #[cfg(test)]
 mod tests {
-	use super::super::statement::*;
 	use super::super::token::*;
-	use super::super::string_char::CharsIter;
 	use super::*;
 	
 	#[test]
@@ -663,6 +663,25 @@ mod tests {
 		],
 		1.125_f32 * (3.125_f32 + 2.125_f32));
 		
+		test_expr_and_its_stack_eq("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
+			Symbol::Operand (Operand::Number (33_f32)),
+			Symbol::Operand (Operand::Number (1_f32)),
+			Symbol::Operand (Operand::Number (2_f32)),
+			Symbol::Operand (Operand::Number (3_f32)),
+			Symbol::Operand (Operand::Number (4_f32)),
+			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ArithmOperator (ArithmOperator::Mul),
+			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::Operand (Operand::Number (5_f32)),
+			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::Operand (Operand::Number (10_f32)),
+			Symbol::ArithmOperator (ArithmOperator::Div),
+			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::Operand (Operand::Number (30_f32)),
+			Symbol::ArithmOperator (ArithmOperator::BinMinus),
+		],
+		33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32);
+		
 		test_expr_and_its_stack_eq("-(8 - 2.125 * 5.125 + 4.125) / -3.125;", vec![
 			Symbol::Operand (Operand::Number (8_f32)),
 			Symbol::Operand (Operand::Number (2.125_f32)),
@@ -729,7 +748,10 @@ mod tests {
 		correct_expr_stack: Vec<Symbol>,
 		result: f32
 	) {
-		let mut tokens_iter = TokensIter::new(CharsIter::new(expr_str));	
+		let mut tokens_iter = TokensIter::new();	
+		tokens_iter.push_string(expr_str.to_string());
+		assert!(tokens_iter.cache_until_semicolon().unwrap());
+		
 		let expr_stack: Vec<(Token, Symbol)> = ArithmeticExpr::create_stack(
 			&mut tokens_iter, 
 			ExprContext::new(ExprContextKind::ValueToAssign)).unwrap();
@@ -737,7 +759,10 @@ mod tests {
 		let syms_expr_stack: Vec<Symbol> = expr_stack.iter().map(|(_tok, sym)| sym.clone()).collect();
 		
 		if syms_expr_stack == correct_expr_stack { 
-			let mut tokens_iter = TokensIter::new(CharsIter::new(expr_str));	
+			let mut tokens_iter = TokensIter::new();	
+			tokens_iter.push_string(expr_str.to_string());
+			assert!(tokens_iter.cache_until_semicolon().unwrap());
+		
 			let expr = ArithmeticExpr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
 			
 			let memory = Memory::new();
@@ -746,7 +771,7 @@ mod tests {
 				VarValue::Float32 (res) => if (result - res).abs() > std::f32::EPSILON * 3.0 {
 					panic!("Wrong result '{}' != {:?} instead of {}", expr_str, res, result);
 				},
-				res @ _ => panic!("Wrong result type for code '{}', expected VarValue::Float32, got {:?}", expr_str, res),
+				//res @ _ => panic!("Wrong result type for code '{}', expected VarValue::Float32, got {:?}", expr_str, res),
 			}
 			
 			println!("Ok: '{}'", expr_str);
@@ -762,9 +787,9 @@ mod tests {
 			}
 			match syms_expr_stack.get(i) == correct_expr_stack.get(i) {
 				true => print!(" == "),
-			false => {
-				print!(" != "); 
-			},
+				false => {
+					print!(" != "); 
+				},
 			}
 			match correct_expr_stack.get(i) {
 				Some(sym) => println!("{:?}", sym),

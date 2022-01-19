@@ -6,11 +6,6 @@ mod statement;
 mod var_data;
 mod func_data;
 
-#[cfg(test)]
-mod tests;
-
-use string_char::CharsIter;
-use token::*;
 use statement::*;
 use memory::*;
 use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
@@ -19,6 +14,7 @@ use var_data::{VarErr, VarValue, DataType};
 pub struct Interpreter {
 	memory: Memory,
 	builtin_func_defs: FuncsDefList,
+	statements_iter: StatementsIter,
 }
 
 impl Interpreter {
@@ -40,14 +36,14 @@ impl Interpreter {
 		Self {
 			memory: Memory::new(),
 			builtin_func_defs,
+			statements_iter: StatementsIter::new(),
 		}
 	}
 	
-	pub fn run(&mut self, code: &str) -> Result<InterpInnerSignal, InterpErr> {
-		let chars_iter = CharsIter::new(code);
-		let tokens_iter = TokensIter::new(chars_iter);
-		
-		for statement_result in StatementsIter::new(tokens_iter) {
+	pub fn run(&mut self, code: &str) -> Result<InterpInnerSignal, InterpErr> {		
+		self.statements_iter.push_string(code.to_string());
+	
+		while let Some(statement_result) = self.statements_iter.next() {
 			match statement_result? {
 				Statement::WithVariable (st) => match st {
 					WithVariable::Declare { var_name, data_type } => 

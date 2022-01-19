@@ -1,46 +1,94 @@
 use super::string_char::*;
+use std::collections::VecDeque;
 
 //---------------------------- TokensIter --------------------------------
 
-pub struct TokensIter<'code> {
-	iter: CharsIter<'code>,
-	peeked_token: Option<Result<Token, TokenErr>>,
+#[derive(Debug)]
+pub struct TokensIter {
+	iter: CharsIter,
+	peeked_token: Option<Token>,
+	cached_queue: VecDeque<Token>,
 }
 
-impl<'code> TokensIter<'code> {
-	pub fn new(iter: CharsIter<'code>) -> Self {
+impl TokensIter {
+	pub fn new() -> Self {
 		Self { 
-			iter,
+			iter: CharsIter::new(),
 			peeked_token: None,
+			cached_queue: VecDeque::new(),
 		}
 	}
 	
-	pub fn peek_or_err<'iter>(&'iter mut self) -> Result<&'iter Token, &'iter TokenErr> {
+	pub fn push_string(&mut self, text: String) {
+		self.iter.push_string(text);
+	}
+	
+	pub fn cache_until_semicolon(&mut self) -> Result<bool, TokenErr> { 
+		loop {
+			match self.parse_next_token() {
+				Some(Ok(token)) => {
+					self.cached_queue.push_back(token);
+					
+					match self.cached_queue.back().unwrap() {
+						Token { content: TokenContent::StatementOp (StatementOp::Semicolon), .. } 
+							=> return Ok(true),
+						_ => {},
+					}
+				},
+				
+				Some(Err(err)) => return Err(TokenErr::from(err)),
+				
+				None => return Ok(false),
+			}
+		}
+	}
+	
+	pub fn cached_queue_is_empty(&self) -> bool {
+		self.cached_queue.is_empty()
+	}
+	
+	pub fn peek_or_err(&mut self) -> Result<&Token, TokenErr> {
 		if self.peeked_token.is_none() {
-			self.peeked_token = Some( self.next_or_err() );
-		}		
-		self.peeked_token.as_ref().unwrap().as_ref()
+			self.peeked_token = Some(self.next_or_err()?);
+		}
+		Ok(self.peeked_token.as_ref().unwrap())
 	}
 	
 	pub fn next_or_err(&mut self) -> Result<Token, TokenErr> {
-		self.next().unwrap_or( Err( TokenErr::EndReached { pos: self.iter.last_pos() } ) )
+		match self.next() {
+			Some(token_result) => token_result,
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
 	}
 	
-	pub fn expect(&mut self, expected_token: TokenContent) -> Result<TokenExpectation, TokenErr> {
-		let found = self.next_or_err()?;
-		Ok( TokenExpectation::new(expected_token, found) )
+	pub fn next_name_or_err(&mut self) -> Result<String, TokenErr> {
+		match self.next() {
+			Some(token_result) => match token_result? {
+				Token { content: TokenContent::Name (name), .. } => Ok(name),
+				found @ _ => Err( TokenErr::ExpectedButFound {
+							expected: vec![TokenContent::Name ("<name>".to_string())], 
+							found,
+						} )
+			},
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
 	}
 	
-	pub fn expect_name(&mut self) -> Result<String, TokenErr> {
-		let found = self.next_or_err()?;
-		match found.content {
-			TokenContent::Name ( name ) => Ok( name ),
-			_ => return Err( TokenErr::ExpectedButFound { 
-							expected: vec![
-								TokenContent::Name(String::from("<name>")),
-							], 
-							found
-						} ),
+	pub fn next_expect_semicolon(&mut self) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::StatementOp (StatementOp::Semicolon)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
+	}
+	
+	pub fn next_expect_colon(&mut self) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::StatementOp (StatementOp::Colon)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 		}
 	}
 	
@@ -141,16 +189,19 @@ impl<'code> TokensIter<'code> {
 			None => Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Assign)) ),
 		}
 	}
-}
 
-impl Iterator for TokensIter<'_> {
-	type Item = Result<Token, TokenErr>;
-	
-	fn next(&mut self) -> Option<Self::Item> {
-		if self.peeked_token.is_some() {
-			return Some( self.peeked_token.take().unwrap() );
+	fn expect(actual_token: Token, expected_tc: TokenContent) -> Result<(), TokenErr> {
+		if *actual_token.content() == expected_tc {
+			Ok(())
+		} else {
+			Err( TokenErr::ExpectedButFound {
+				expected: vec![expected_tc], 
+				found: actual_token,
+			} )
 		}
+	}
 
+	fn parse_next_token(&mut self) -> Option<Result<Token, TokenErr>> {		
 		for ( ch, pos ) in self.iter.by_ref() {			
 			let token_result = match ch {
 				CharKind::Digit (first_digit, _) => self.parse_number(pos, first_digit, false),
@@ -180,7 +231,23 @@ impl Iterator for TokensIter<'_> {
 				CharKind::Invalid (..) => Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos } ),
 			};
 			
-			return Some( token_result );
+			return Some(token_result);
+		}
+		
+		None
+	}
+}
+
+impl Iterator for TokensIter {
+	type Item = Result<Token, TokenErr>;
+	
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.peeked_token.is_some() {
+			return Some( Ok( self.peeked_token.take().unwrap() ) );
+		}
+		
+		if let Some(token) = self.cached_queue.pop_front() {
+			return Some(Ok(token));
 		}
 		
 		Some( Err( TokenErr::EndReached { pos: self.iter.last_pos() } ) )
@@ -354,35 +421,6 @@ impl std::fmt::Display for TokenErr {
 	}
 }
 
-pub struct TokenExpectation {
-	expected: Vec<TokenContent>, found: Token
-}
-
-impl TokenExpectation {
-	fn new(expected_token: TokenContent, found: Token) -> Self {
-		Self {
-			expected: vec![expected_token], 
-			found,
-		}
-	}
-	
-	#[allow(unused)]
-	pub fn or(mut self, expected_token: TokenContent) -> Self {
-		self.expected.push(expected_token);
-		self
-	}
-	
-	pub fn check(self) -> Result<(), TokenErr> {
-		match self.expected.iter().find(|c| c.eq(&self.found.content())) {
-			Some (_) => Ok(()),
-			None => {
-				let TokenExpectation { expected, found } = self;
-				Err( TokenErr::ExpectedButFound { expected, found } )
-			},
-		}
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -390,8 +428,11 @@ mod tests {
 	#[test]
 	pub fn can_parse_tokens() {
 		let test_token_content_detection = |code: &str, tc: TokenContent| {
-			let mut tokens_iter = TokensIter::new(CharsIter::new(code));
-			assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), tc);
+			let mut tokens_iter = TokensIter::new();
+			tokens_iter.push_string(code.to_string());
+						
+			assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), tc);
+			
 			let end_pos: usize = code.len();
 			assert_eq!(tokens_iter.next_or_err().unwrap_err(), TokenErr::EndReached { pos: end_pos });
 		};
@@ -418,34 +459,109 @@ mod tests {
 
 	#[test]
 	pub fn can_parse_simple_expr() {
-		let mut tokens_iter = TokensIter::new(CharsIter::new("1+23.4-45.6*7.8/9 var1var"));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Minus));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Mul));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var1var")));
-		assert_eq!(tokens_iter.next_or_err().unwrap_err(), TokenErr::EndReached { pos: 25 });
+		let mut tokens_iter = TokensIter::new();
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var".to_string());
+		
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (1_f32));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Minus));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Mul));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (9_f32));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Name (String::from("var1var")));
+		assert_eq!(tokens_iter.parse_next_token(), None);
 	}
 
 	#[test]
 	pub fn can_parse_simple_expr_with_whitespaces() {
-		let mut tokens_iter = TokensIter::new(CharsIter::new("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var"));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Minus));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Mul));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var1")));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
-		assert_eq!(tokens_iter.next_or_err().unwrap_err(), TokenErr::EndReached { pos: 43 });
+		let mut tokens_iter = TokensIter::new();
+		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var".to_string());
+		
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (1_f32));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Minus));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Mul));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (9_f32));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Name (String::from("var1")));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
+		assert_eq!(tokens_iter.parse_next_token(), None);
+	}
+
+	#[test]
+	pub fn cannot_cache_if_no_semicolon() {
+		let mut tokens_iter = TokensIter::new();
+		let code = "1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var";
+		tokens_iter.push_string(code.to_string());
+		
+		assert_eq!(tokens_iter.cached_queue_is_empty(), true);
+		
+		assert_eq!(tokens_iter.cache_until_semicolon().unwrap(), false);
+		
+		assert_eq!(tokens_iter.cached_queue_is_empty(), false);
+		
+		assert_eq!(tokens_iter.parse_next_token(), None);
+		
+		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (1_f32));
+		assert_eq!(
+			*tokens_iter.next_or_err().unwrap().content(), 
+			TokenContent::Operator (Operator::Plus));
+		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (23.4_f32));
+		assert_eq!(
+			*tokens_iter.next_or_err().unwrap().content(), 
+			TokenContent::Operator (Operator::Minus));
+		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (45.6_f32));
+		assert_eq!(
+			*tokens_iter.next_or_err().unwrap().content(), 
+			TokenContent::Operator (Operator::Mul));
+		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (7.8_f32));
+		assert_eq!(
+			*tokens_iter.next_or_err().unwrap().content(), 
+			TokenContent::Operator (Operator::Div));
+		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (9_f32));
+		assert_eq!(
+			*tokens_iter.next_or_err().unwrap().content(), 
+			TokenContent::Name (String::from("var1")));
+		assert_eq!(
+			*tokens_iter.next_or_err().unwrap().content(), 
+			TokenContent::Keyword ( Keyword::Var ));
+		assert_eq!(
+			tokens_iter.next_or_err().unwrap_err(), 
+			TokenErr::EndReached { pos: code.len() });
+	}
+
+	#[test]
+	pub fn caches_if_has_semicolon() {
+		let mut tokens_iter = TokensIter::new();
+		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8;  / \t\t9 \n var1 var".to_string());
+		
+		assert_eq!(tokens_iter.cached_queue_is_empty(), true);
+		
+		assert_eq!(tokens_iter.cache_until_semicolon().unwrap(), true);
+		
+		assert_eq!(tokens_iter.cached_queue_is_empty(), false);
+		
+		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (1_f32));
+		assert_eq!(
+			*tokens_iter.next_or_err().unwrap().content(), 
+			TokenContent::Operator (Operator::Plus));
+		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (23.4_f32));
+		assert_eq!(
+			*tokens_iter.next_or_err().unwrap().content(), 
+			TokenContent::Operator (Operator::Minus));
+		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (45.6_f32));
+		assert_eq!(
+			*tokens_iter.next_or_err().unwrap().content(), 
+			TokenContent::Operator (Operator::Mul));
+		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (7.8_f32));
+		assert_eq!(
+			*tokens_iter.next_or_err().unwrap().content(), 
+			TokenContent::StatementOp (StatementOp::Semicolon));
 	}
 }
