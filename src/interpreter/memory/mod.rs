@@ -1,7 +1,7 @@
-use super::var_data::{VarData, DataType, VarErr, VarValue};
+use super::var_data::{VarData, DataType, VarErr, Value};
 //use super::func_data::{FuncsDataList, FuncData, BoxedFuncBodyClosure, FuncArg, FuncErr};
 
-use super::arithmetic_expr::ArithmeticExpr;
+use super::expr::Expr;
 use super::InterpErr;
 //use super::func_data::FuncsDefList;
 
@@ -28,13 +28,13 @@ impl Memory {
 		}
 	}
 	
-	pub fn set_variable(&mut self, name: &str, value: VarValue) -> Result<(), VarErr> {
+	pub fn set_variable(&mut self, name: &str, value: Value) -> Result<(), VarErr> {
 		let var = self.find_var_mut(name)?;
 		var.set(value)?;
 		Ok(())
 	}
 	
-	pub fn get_variable<'mem>(&'mem self, name: &str) -> Result<&'mem VarValue, VarErr> {
+	pub fn get_variable<'mem>(&'mem self, name: &str) -> Result<&'mem Value, VarErr> {
 		let var = self.find_var(name)?;
 		match var.get_value() {
 			Some(value) => Ok(value),
@@ -42,7 +42,7 @@ impl Memory {
 		}
 	}
 	
-	pub fn call_func(&mut self, name: String, arg_exprs: Vec<ArithmeticExpr>) -> Result<(), InterpErr> {
+	pub fn call_func(&mut self, name: String, arg_exprs: Vec<Expr>) -> Result<(), InterpErr> {
 		todo!();
 		//self.user_defined_funcs.try_call(&name, arg_exprs)
 	}
@@ -84,20 +84,20 @@ mod tests {
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 
-			&VarData::new(String::from("a"), DataType::Float32).with_value(VarValue::Float32 (0.8_f32)).unwrap());
+			&VarData::new(String::from("a"), DataType::Float32).with_value(Value::Float32 (0.8_f32)).unwrap());
 		 
 		println!("run 3");
 		int.run("a = a + 0.5;").unwrap();
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 
-			&VarData::new(String::from("a"), DataType::Float32).with_value(VarValue::Float32 (1.3_f32)).unwrap());
+			&VarData::new(String::from("a"), DataType::Float32).with_value(Value::Float32 (1.3_f32)).unwrap());
 		
 		println!("run 4");
 		int.run("a = a * 2 + 1.4;").unwrap();
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 
-			&VarData::new(String::from("a"), DataType::Float32).with_value(VarValue::Float32 (4_f32)).unwrap());
+			&VarData::new(String::from("a"), DataType::Float32).with_value(Value::Float32 (4_f32)).unwrap());
 	}
 }

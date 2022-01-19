@@ -1,5 +1,5 @@
 mod memory;
-mod arithmetic_expr;
+mod expr;
 mod string_char;
 mod token;
 mod statement;
@@ -9,7 +9,7 @@ mod func_data;
 use statement::*;
 use memory::*;
 use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
-use var_data::{VarErr, VarValue, DataType};
+use var_data::{VarErr, Value, DataType};
 
 pub struct Interpreter {
 	memory: Memory,
@@ -66,7 +66,7 @@ impl Interpreter {
 							let func_def: &FuncDef = self.builtin_func_defs.try_find(&name)?;
 							func_def.check_args(types)?;
 							
-							let mut arg_vals = Vec::<VarValue>::with_capacity(arg_exprs.len());
+							let mut arg_vals = Vec::<Value>::with_capacity(arg_exprs.len());
 							for expr in arg_exprs {
 								arg_vals.push(expr.calc(&self.memory)?);
 							}
@@ -87,7 +87,7 @@ impl Interpreter {
 		Ok( InterpInnerSignal::CanContinue )
 	}
 	
-	fn call_builtin_func(&self, name: &str, args_values: Vec<VarValue>) -> Result<InterpInnerSignal, InterpErr> {
+	fn call_builtin_func(&self, name: &str, args_values: Vec<Value>) -> Result<InterpInnerSignal, InterpErr> {
 		match name {
 			"print" => {
 				println!("{:?}", args_values[0]);
@@ -110,7 +110,7 @@ pub enum InterpInnerSignal {
 #[derive(Debug, PartialEq, Eq)]
 pub enum InterpErr {
 	Token (TokenErr),
-	ArithmExpr (ArithmExprErr),
+	Expr (ExprErr),
 	Statement (StatementErr),
 	Var (VarErr),
 	Func (FuncErr),
@@ -120,7 +120,7 @@ impl std::fmt::Display for InterpErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {		
 		match self {
 			InterpErr::Token (err) => write!(f, "{}", err),
-			InterpErr::ArithmExpr (err) => write!(f, "{}", err),
+			InterpErr::Expr (err) => write!(f, "{}", err),
 			InterpErr::Statement (err) => write!(f, "{}", err),
 			InterpErr::Var (err) => write!(f, "{}", err),
 			InterpErr::Func (err) => write!(f, "{}", err),
@@ -150,10 +150,10 @@ impl From<&TokenErr> for InterpErr {
     }
 }
 
-use arithmetic_expr::ArithmExprErr;
-impl From<ArithmExprErr> for InterpErr {
-	fn from(err: ArithmExprErr) -> InterpErr {
-        InterpErr::ArithmExpr(err)
+use expr::ExprErr;
+impl From<ExprErr> for InterpErr {
+	fn from(err: ExprErr) -> InterpErr {
+        InterpErr::Expr(err)
 	}
 }
 

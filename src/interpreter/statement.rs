@@ -1,5 +1,5 @@
 use super::token::*;
-use super::arithmetic_expr::{ArithmeticExpr, ExprContextKind};
+use super::expr::{Expr, ExprContextKind};
 use super::{ InterpErr, var_data::DataType };
 
 pub struct StatementsIter {
@@ -62,7 +62,7 @@ impl StatementsIter {
 						} ) ),
 		};
 		
-		let value_expr = ArithmeticExpr::new(
+		let value_expr = Expr::new(
 			&mut self.tokens_iter, 
 			ExprContextKind::ValueToAssign)?;
 
@@ -77,7 +77,7 @@ impl StatementsIter {
 	}
 	
 	fn parse_variable_set(&mut self, var_name: String, _is_builtin: bool) -> Result<Statement, InterpErr> {		
-		let value_expr = ArithmeticExpr::new(
+		let value_expr = Expr::new(
 			&mut self.tokens_iter,
 			ExprContextKind::ValueToAssign)?;
 		
@@ -91,14 +91,14 @@ impl StatementsIter {
 	}
 
 	fn parse_func_call(&mut self, func_name: String, is_builtin: bool) -> Result<Statement, InterpErr> {
-		let mut arg_exprs = Vec::<ArithmeticExpr>::new();
+		let mut arg_exprs = Vec::<Expr>::new();
 		
 		loop {
 			if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_err()?.content() {
 				break;
 			}
 			
-			arg_exprs.push(ArithmeticExpr::new(
+			arg_exprs.push(Expr::new(
 				&mut self.tokens_iter,
 				ExprContextKind::FunctionArg)?);
 				
@@ -176,15 +176,15 @@ pub enum Statement {
 	FuncCall { 
 		kind: FuncKind,
 		name: String, 
-		arg_exprs: Vec<ArithmeticExpr> 
+		arg_exprs: Vec<Expr> 
 	},
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum WithVariable {
 	Declare { var_name: String, data_type: DataType },
-	DeclareSet { var_name: String, data_type: DataType, value_expr: ArithmeticExpr },
-	Set { var_name: String, value_expr: ArithmeticExpr },
+	DeclareSet { var_name: String, data_type: DataType, value_expr: Expr },
+	Set { var_name: String, value_expr: Expr },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -212,7 +212,7 @@ impl std::fmt::Display for StatementErr {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use super::super::var_data::VarValue;
+	use super::super::var_data::Value;
 	use super::super::memory::Memory;
 	
 	#[test]
@@ -249,7 +249,7 @@ mod tests {
 				} 
 			) 
 			if 
-				(value_expr.calc(&mem).unwrap() == VarValue::Float32(3_f32) &&
+				(value_expr.calc(&mem).unwrap() == Value::Float32(3_f32) &&
 				var_name == String::from("a"))
 				=> {},
 			_ => panic!("wrong statement: {:?}", st),
@@ -276,7 +276,7 @@ mod tests {
 				let mem = Memory::new();
 				
 				match arg_exprs[0].calc(&mem).unwrap() {
-					VarValue::Float32 (val) => if (val - (1.2_f32 + 3.45_f32)).abs() > std::f32::EPSILON * 2.0 {
+					Value::Float32 (val) => if (val - (1.2_f32 + 3.45_f32)).abs() > std::f32::EPSILON * 2.0 {
 						panic!("{} != {}", (1.2_f32 + 3.45_f32), val);
 					},
 					ans @ _ => panic!("Wrong answer {:?}", ans),
@@ -320,7 +320,7 @@ mod tests {
 				} 
 			) 
 			if 
-				(value_expr.calc(&mem).unwrap() == VarValue::Float32(3_f32) &&
+				(value_expr.calc(&mem).unwrap() == Value::Float32(3_f32) &&
 				var_name == String::from("a"))
 				=> {},
 			_ => panic!("wrong statement: {:?}", st),
@@ -342,7 +342,7 @@ mod tests {
 				} 
 			) 
 			if 
-				(value_expr.calc(&mem).unwrap() == VarValue::Float32(4_f32) &&
+				(value_expr.calc(&mem).unwrap() == Value::Float32(4_f32) &&
 				var_name == String::from("a"))
 				=> {},
 			_ => panic!("wrong statement: {:?}", st),
@@ -376,7 +376,7 @@ mod tests {
 				let right_ans = 2_f32 + 3_f32 * (4_f32 + 3_f32);
 				
 				match arg_exprs[0].calc(&mem).unwrap() {
-					VarValue::Float32 (val) => if (val - right_ans).abs() > std::f32::EPSILON * 2.0 {
+					Value::Float32 (val) => if (val - right_ans).abs() > std::f32::EPSILON * 2.0 {
 						panic!("{} != {}", right_ans, val);
 					},
 					ans @ _ => panic!("Wrong answer {:?}", ans),

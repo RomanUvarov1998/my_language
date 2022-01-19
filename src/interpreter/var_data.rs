@@ -1,7 +1,7 @@
 #[derive(Debug, Eq, PartialEq)]
 pub struct VarData {
 	name: String,
-	var_value: Option<VarValue>,
+	var_value: Option<Value>,
 	data_type: DataType,
 }
 impl VarData {
@@ -10,12 +10,12 @@ impl VarData {
 	}
 	
 	#[allow(unused)]
-	pub fn with_value(mut self, new_value: VarValue) -> Result<Self, VarErr>{
+	pub fn with_value(mut self, new_value: Value) -> Result<Self, VarErr>{
 		self.set(new_value)?;
 		Ok(self)
 	}
 	
-	pub fn set(&mut self, new_var_value: VarValue) -> Result<(), VarErr> {
+	pub fn set(&mut self, new_var_value: Value) -> Result<(), VarErr> {
 		if self.data_type == new_var_value.get_type() {
 			self.var_value = Some(new_var_value);
 			Ok(())
@@ -27,7 +27,7 @@ impl VarData {
 		}
 	}
 	
-	pub fn get_value(&self) -> Option<&VarValue> {
+	pub fn get_value(&self) -> Option<&Value> {
 		self.var_value.as_ref()
 	}
 	
@@ -51,30 +51,30 @@ impl DataType {
 }
 
 #[derive(Debug, Clone)]
-pub enum VarValue {
+pub enum Value {
 	Float32 (f32),
 	String (String),
 }
-impl Eq for VarValue {}
-impl PartialEq for VarValue {
+impl Eq for Value {}
+impl PartialEq for Value {
 	fn eq(&self, other: &Self) -> bool {
 		match self {
-			VarValue::Float32 (f1) => match other {
-				VarValue::Float32 (f2) => (f1 - f2).abs() <= std::f32::EPSILON,
+			Value::Float32 (f1) => match other {
+				Value::Float32 (f2) => (f1 - f2).abs() <= std::f32::EPSILON,
 				_ => false,
 			},
-			VarValue::String (s1) => match other {
-				VarValue::String (s2) => s1 == s2,
+			Value::String (s1) => match other {
+				Value::String (s2) => s1 == s2,
 				_ => false,
 			},
 		}
 	}
 }
-impl VarValue {
+impl Value {
 	pub fn get_type(&self) -> DataType {
 		match self {
-			VarValue::Float32 (_) => DataType::Float32,
-			VarValue::String (_) => DataType::String,		
+			Value::Float32 (_) => DataType::Float32,
+			Value::String (_) => DataType::String,		
 		}
 	}
 }
@@ -85,7 +85,7 @@ pub enum VarErr {
 	NotSet { name: String },
 	UnknownType { name: String },
 	AlreadyExists { name: String },
-	WrongType { new_var_value: VarValue, var_data_type: DataType },
+	WrongType { new_var_value: Value, var_data_type: DataType },
 }
 
 impl std::fmt::Display for VarErr {

@@ -1,17 +1,17 @@
 use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp};
 use super::InterpErr;
 use super::memory::Memory;
-use super::var_data::{VarValue, DataType};
+use super::var_data::{Value, DataType};
 
 type TokSym = (Token, Symbol);
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct ArithmeticExpr {
+pub struct Expr {
 	data_type: DataType,
 	expr_stack: Vec<TokSym>,
 }
 
-impl ArithmeticExpr {	
+impl Expr {	
 	pub fn new(tokens_iter: &mut TokensIter, context_kind: ExprContextKind) -> Result<Self, InterpErr> {
 		let context = ExprContext::new(context_kind);
 		let expr_stack = Self::create_stack(tokens_iter, context)?;
@@ -23,16 +23,16 @@ impl ArithmeticExpr {
 		self.data_type
 	}
 	
-	pub fn calc(&self, memory: &Memory) -> Result<VarValue, InterpErr> {
-		let mut calc_stack = Vec::<VarValue>::with_capacity(self.expr_stack.len());
+	pub fn calc(&self, memory: &Memory) -> Result<Value, InterpErr> {
+		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len());
 		let mut expr = self.expr_stack.clone();
 		expr.reverse();
 		
 		while let Some((tok, sym)) = expr.pop() {
 			match sym {
 				Symbol::Operand (opnd) => {
-					let value: VarValue = match opnd {
-						Operand::Number (val) => VarValue::Float32(val),
+					let value: Value = match opnd {
+						Operand::Number (val) => Value::Float32(val),
 						Operand::Name (name) => memory.get_variable(&name)?.clone(),
 						Operand::BuiltinName (_name) => todo!(),
 					};
@@ -42,8 +42,8 @@ impl ArithmeticExpr {
 				Symbol::LeftBracket => unreachable!(),
 				
 				Symbol::ArithmOperator (op) => {
-					let value: VarValue = match op.apply(&mut calc_stack) {
-						Err( err ) => return Err( InterpErr::from(ArithmExprErr::Operator { err, tok }) ),
+					let value: Value = match op.apply(&mut calc_stack) {
+						Err( err ) => return Err( InterpErr::from(ExprErr::Operator { err, tok }) ),
 						Ok(val) => val,
 					};
 					calc_stack.push(value);
@@ -51,7 +51,7 @@ impl ArithmeticExpr {
 			}
 		}
 		
-		let result: VarValue = calc_stack.pop().unwrap();
+		let result: Value = calc_stack.pop().unwrap();
 		assert_eq!(calc_stack.pop(), None);
 		
 		Ok(result)
@@ -68,7 +68,7 @@ impl ArithmeticExpr {
 			if context.check_expr_end(next_token_ref)? {		
 				if expr_stack.len() == 0 {
 					let found_token = tokens_iter.next_or_err()?;
-					return Err( InterpErr::from(ArithmExprErr::ExpectedExprButFound(found_token)) );
+					return Err( InterpErr::from(ExprErr::ExpectedExprButFound(found_token)) );
 				}
 				break;
 			}
@@ -78,7 +78,7 @@ impl ArithmeticExpr {
 			match token.content() {	
 				TokenContent::Number (num) => {
 					if prev_is_operand {
-						return Err( InterpErr::ArithmExpr( ArithmExprErr::UnexpectedToken (token) ) );
+						return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) );
 					}					
 					
 					let sym = Symbol::new_number(*num);
@@ -88,7 +88,7 @@ impl ArithmeticExpr {
 				},
 				TokenContent::Name (name) => {
 					if prev_is_operand {
-						return Err( InterpErr::ArithmExpr( ArithmExprErr::UnexpectedToken (token) ) );
+						return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) );
 					}					
 					
 					let sym = Symbol::new_name(name.clone());
@@ -98,7 +98,7 @@ impl ArithmeticExpr {
 				},
 				TokenContent::BuiltinName (name) => {
 					if prev_is_operand {
-						return Err( InterpErr::ArithmExpr( ArithmExprErr::UnexpectedToken (token) ) );
+						return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) );
 					}					
 					
 					let sym = Symbol::new_builtin_name(name.clone());
@@ -125,7 +125,7 @@ impl ArithmeticExpr {
 								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, token, tok_op)?;
 						},
 						Operator::Equals | Operator::Assign 
-							=> return Err( InterpErr::ArithmExpr( ArithmExprErr::UnexpectedToken (token) ) ),
+							=> return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) ),
 					};
 					
 					prev_is_operand = false;
@@ -142,7 +142,7 @@ impl ArithmeticExpr {
 				},
 				
 				TokenContent::Keyword (..) => {
-					return Err( InterpErr::ArithmExpr( ArithmExprErr::UnexpectedToken (token) ) );
+					return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) );
 				},
 				
 				TokenContent::StatementOp (..) => unreachable!(),
@@ -152,7 +152,7 @@ impl ArithmeticExpr {
 		while let Some(top_tok_sym) = tmp_stack.pop() {
 			match top_tok_sym.1 {
 				Symbol::Operand (..) => expr_stack.push(top_tok_sym),
-				Symbol::LeftBracket => return Err( InterpErr::ArithmExpr( ArithmExprErr::UnexpectedToken (top_tok_sym.0) ) ),
+				Symbol::LeftBracket => return Err( InterpErr::Expr( ExprErr::UnexpectedToken (top_tok_sym.0) ) ),
 				Symbol::ArithmOperator (..) => expr_stack.push(top_tok_sym),
 			}
 		}
@@ -178,7 +178,7 @@ impl ArithmeticExpr {
 					Some(top_ref) => 
 						match &top_ref.1 {
 							Symbol::Operand (..) => {  
-								return Err( InterpErr::ArithmExpr( ArithmExprErr::UnexpectedToken (
+								return Err( InterpErr::Expr( ExprErr::UnexpectedToken (
 									tmp_stack.pop().unwrap().0) ) )
 							},
 								
@@ -224,7 +224,7 @@ impl ArithmeticExpr {
 								Symbol::LeftBracket => break 'out,
 								Symbol::Operand (..) | Symbol::ArithmOperator (..) => expr_stack.push(tok_sym),
 							},
-						None => return Err( InterpErr::ArithmExpr( ArithmExprErr::UnpairedBracket (tok) ) ),
+						None => return Err( InterpErr::Expr( ExprErr::UnpairedBracket (tok) ) ),
 					};
 				};
 			},
@@ -268,11 +268,11 @@ impl ExprContext {
 						=> Ok( self.check_brackets(*br) ),
 					TokenContent::StatementOp (st_op) => match st_op {
 						StatementOp::Colon | StatementOp::Comma 
-							=> Err( InterpErr::ArithmExpr (ArithmExprErr::UnexpectedToken (tok.clone()) ) ),
+							=> Err( InterpErr::Expr (ExprErr::UnexpectedToken (tok.clone()) ) ),
 						StatementOp::Semicolon => Ok(true),
 					},
 					TokenContent::Keyword (..) 
-						=> Err( InterpErr::ArithmExpr (ArithmExprErr::UnexpectedToken (tok.clone()) ) ),
+						=> Err( InterpErr::Expr (ExprErr::UnexpectedToken (tok.clone()) ) ),
 				},
 			ExprContextKind::FunctionArg =>
 				match tok.content() {
@@ -285,12 +285,12 @@ impl ExprContext {
 						=> Ok( self.check_brackets(*br) ),
 					TokenContent::StatementOp (st_op) => match st_op {
 						StatementOp::Colon 
-							=> Err( InterpErr::ArithmExpr (ArithmExprErr::UnexpectedToken (tok.clone()) ) ),
+							=> Err( InterpErr::Expr (ExprErr::UnexpectedToken (tok.clone()) ) ),
 						StatementOp::Semicolon | StatementOp::Comma 
 							=> Ok(true),
 					},
 					TokenContent::Keyword (..) 
-						=> Err( InterpErr::ArithmExpr (ArithmExprErr::UnexpectedToken (tok.clone()) ) ),
+						=> Err( InterpErr::Expr (ExprErr::UnexpectedToken (tok.clone()) ) ),
 				},
 		}
 	}
@@ -441,8 +441,8 @@ impl ArithmOperator {
 	}
 
 	#[allow(unreachable_patterns)]
-	fn apply(&self, calc_stack: &mut Vec<VarValue>) -> Result<VarValue, OperatorErr> {		
-		let create_err = |values: &[&VarValue]| -> OperatorErr {
+	fn apply(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {		
+		let create_err = |values: &[&Value]| -> OperatorErr {
 			let types: Vec<DataType> = values
 				.iter()
 				.map(|val| val.get_type())
@@ -459,13 +459,13 @@ impl ArithmOperator {
 		use ArithmOperator::*;
 		match self {
 			BinPlus | BinMinus | Div | Mul | Pow => {
-				let rhs: VarValue = calc_stack
+				let rhs: Value = calc_stack
 					.pop()
 					.ok_or(OperatorErr::NotEnoughOperands { 
 						provided_cnt: 0,
 						required_cnt: 2, 
 					} )?;
-				let lhs: VarValue = calc_stack
+				let lhs: Value = calc_stack
 					.pop()
 					.ok_or(OperatorErr::NotEnoughOperands { 
 						provided_cnt: 1,
@@ -473,21 +473,21 @@ impl ArithmOperator {
 					} )?;
 					
 				let (val1, val2): (f32, f32) = match (lhs, rhs) { 
-					(VarValue::Float32 (val1), VarValue::Float32 (val2)) => (val1, val2),
+					(Value::Float32 (val1), Value::Float32 (val2)) => (val1, val2),
 					ops @ _ => return Err( create_err(&[&ops.0, &ops.1]) ),
 				};
 			
 				match self {
-					BinPlus => Ok( VarValue::Float32(val1 + val2) ),
-					BinMinus => Ok( VarValue::Float32(val1 - val2) ),
-					Div => Ok( VarValue::Float32(val1 / val2) ),
-					Mul => Ok( VarValue::Float32(val1 * val2) ),
-					Pow => Ok( VarValue::Float32(val1.powf(val2)) ),
+					BinPlus => Ok( Value::Float32(val1 + val2) ),
+					BinMinus => Ok( Value::Float32(val1 - val2) ),
+					Div => Ok( Value::Float32(val1 / val2) ),
+					Mul => Ok( Value::Float32(val1 * val2) ),
+					Pow => Ok( Value::Float32(val1.powf(val2)) ),
 					_ => unreachable!(),
 				}
 			},
 			UnPlus | UnMinus => {
-				let op: VarValue = calc_stack
+				let op: Value = calc_stack
 					.pop()
 					.ok_or(OperatorErr::NotEnoughOperands { 
 						provided_cnt: 0,
@@ -495,13 +495,13 @@ impl ArithmOperator {
 					} )?;
 
 				let val: f32 = match op { 
-					VarValue::Float32 (val) => val,
+					Value::Float32 (val) => val,
 					_ => return Err( create_err(&[&op]) ),
 				};
 
 				match self {
-					UnPlus => Ok( VarValue::Float32(val) ),
-					UnMinus => Ok( VarValue::Float32(-val) ),
+					UnPlus => Ok( Value::Float32(val) ),
+					UnMinus => Ok( Value::Float32(-val) ),
 					_ => unreachable!(),
 				}
 			},
@@ -520,10 +520,10 @@ pub enum OperatorErr {
 	},
 }
 
-//------------------------------- ArithmExprErr ----------------------------------
+//------------------------------- ExprErr ----------------------------------
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum ArithmExprErr {
+pub enum ExprErr {
 	UnexpectedToken (Token),
 	UnpairedBracket (Token),
 	ExpectedExprButFound (Token),
@@ -533,22 +533,22 @@ pub enum ArithmExprErr {
 	},
 }
 
-impl std::fmt::Display for ArithmExprErr {
+impl std::fmt::Display for ExprErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			ArithmExprErr::UnexpectedToken (token) => {
+			ExprErr::UnexpectedToken (token) => {
 				super::display_error_pos(f, token.pos_begin, token.pos_end)?;
 				write!(f, "Unexpected token {}", token)
 			},
-			ArithmExprErr::UnpairedBracket (token) => {
+			ExprErr::UnpairedBracket (token) => {
 				super::display_error_pos(f, token.pos_begin, token.pos_end)?;
 				write!(f, "Unpaired bracket {}", token)
 			},
-			ArithmExprErr::ExpectedExprButFound (token) => {
+			ExprErr::ExpectedExprButFound (token) => {
 				super::display_error_pos(f, token.pos_begin, token.pos_end)?;
 				write!(f, "Expected arithmetical expression, but found {}", token)
 			},
-			ArithmExprErr::Operator { err, tok } => match err {
+			ExprErr::Operator { err, tok } => match err {
 				OperatorErr::WrongType { descr } => {
 					super::display_error_pos(f, tok.pos_begin, tok.pos_end)?;
 					write!(f, "{}", descr)
@@ -752,7 +752,7 @@ mod tests {
 		tokens_iter.push_string(expr_str.to_string());
 		assert!(tokens_iter.cache_until_semicolon().unwrap());
 		
-		let expr_stack: Vec<(Token, Symbol)> = ArithmeticExpr::create_stack(
+		let expr_stack: Vec<(Token, Symbol)> = Expr::create_stack(
 			&mut tokens_iter, 
 			ExprContext::new(ExprContextKind::ValueToAssign)).unwrap();
 		
@@ -763,15 +763,15 @@ mod tests {
 			tokens_iter.push_string(expr_str.to_string());
 			assert!(tokens_iter.cache_until_semicolon().unwrap());
 		
-			let expr = ArithmeticExpr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
+			let expr = Expr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
 			
 			let memory = Memory::new();
 			
 			match expr.calc(&memory).unwrap() {
-				VarValue::Float32 (res) => if (result - res).abs() > std::f32::EPSILON * 3.0 {
+				Value::Float32 (res) => if (result - res).abs() > std::f32::EPSILON * 3.0 {
 					panic!("Wrong result '{}' != {:?} instead of {}", expr_str, res, result);
 				},
-				res @ _ => panic!("Wrong result type for code '{}', expected VarValue::Float32, got {:?}", expr_str, res),
+				res @ _ => panic!("Wrong result type for code '{}', expected Value::Float32, got {:?}", expr_str, res),
 			}
 			
 			println!("Ok: '{}'", expr_str);
