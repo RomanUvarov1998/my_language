@@ -279,7 +279,7 @@ mod tests {
 					VarValue::Float32 (val) => if (val - (1.2_f32 + 3.45_f32)).abs() > std::f32::EPSILON * 2.0 {
 						panic!("{} != {}", (1.2_f32 + 3.45_f32), val);
 					},
-					//ans @ _ => panic!("Wrong answer {:?}", ans),
+					ans @ _ => panic!("Wrong answer {:?}", ans),
 				}
 			},
 			st @ _ => panic!("Wrong pattern {:?}", st),
@@ -379,7 +379,7 @@ mod tests {
 					VarValue::Float32 (val) => if (val - right_ans).abs() > std::f32::EPSILON * 2.0 {
 						panic!("{} != {}", right_ans, val);
 					},
-					//ans @ _ => panic!("Wrong answer {:?}", ans),
+					ans @ _ => panic!("Wrong answer {:?}", ans),
 				}
 			},
 			st @ _ => panic!("Wrong pattern {:?}", st),

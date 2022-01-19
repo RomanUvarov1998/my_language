@@ -15,14 +15,15 @@ impl VarData {
 		Ok(self)
 	}
 	
-	pub fn set(&mut self, new_value: VarValue) -> Result<(), VarErr> {
-		match self.data_type {
-			DataType::Float32 => match new_value {
-				VarValue::Float32 (_) => {
-					self.var_value = Some(new_value);
-					Ok(())
-				},
-			}
+	pub fn set(&mut self, new_var_value: VarValue) -> Result<(), VarErr> {
+		if self.data_type == new_var_value.get_type() {
+			self.var_value = Some(new_var_value);
+			Ok(())
+		} else {
+			Err( VarErr::WrongType { 
+					new_var_value, 
+					var_data_type: self.data_type 
+				} )
 		}
 	}
 	
@@ -38,6 +39,7 @@ impl VarData {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum DataType {
 	Float32,
+	String,
 }
 impl DataType {
 	pub fn parse(name: &str) -> Result<Self, VarErr> {
@@ -51,6 +53,7 @@ impl DataType {
 #[derive(Debug, Clone)]
 pub enum VarValue {
 	Float32 (f32),
+	String (String),
 }
 impl Eq for VarValue {}
 impl PartialEq for VarValue {
@@ -58,6 +61,11 @@ impl PartialEq for VarValue {
 		match self {
 			VarValue::Float32 (f1) => match other {
 				VarValue::Float32 (f2) => (f1 - f2).abs() <= std::f32::EPSILON,
+				_ => false,
+			},
+			VarValue::String (s1) => match other {
+				VarValue::String (s2) => s1 == s2,
+				_ => false,
 			},
 		}
 	}
@@ -66,6 +74,7 @@ impl VarValue {
 	pub fn get_type(&self) -> DataType {
 		match self {
 			VarValue::Float32 (_) => DataType::Float32,
+			VarValue::String (_) => DataType::String,		
 		}
 	}
 }
@@ -76,8 +85,7 @@ pub enum VarErr {
 	NotSet { name: String },
 	UnknownType { name: String },
 	AlreadyExists { name: String },
-	#[allow(unused)]
-	WrongType { new_value: VarValue, data_type: DataType },
+	WrongType { new_var_value: VarValue, var_data_type: DataType },
 }
 
 impl std::fmt::Display for VarErr {
@@ -90,8 +98,8 @@ impl std::fmt::Display for VarErr {
 				write!(f, "Unknown type '{}'", &name),
 			VarErr::AlreadyExists { name } => 
 				write!(f, "Already exists '{}'", &name),
-			VarErr::WrongType { new_value, data_type } =>
-				write!(f, "Wrong value '{:?}' for type '{:?}'", new_value, data_type),
+			VarErr::WrongType { new_var_value, var_data_type } =>
+				write!(f, "Wrong value '{:?}' for type '{:?}'", new_var_value, var_data_type),
 		}
 	}
 }

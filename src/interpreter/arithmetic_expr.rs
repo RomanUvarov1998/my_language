@@ -771,7 +771,7 @@ mod tests {
 				VarValue::Float32 (res) => if (result - res).abs() > std::f32::EPSILON * 3.0 {
 					panic!("Wrong result '{}' != {:?} instead of {}", expr_str, res, result);
 				},
-				//res @ _ => panic!("Wrong result type for code '{}', expected VarValue::Float32, got {:?}", expr_str, res),
+				res @ _ => panic!("Wrong result type for code '{}', expected VarValue::Float32, got {:?}", expr_str, res),
 			}
 			
 			println!("Ok: '{}'", expr_str);
