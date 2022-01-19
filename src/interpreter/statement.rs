@@ -93,29 +93,28 @@ impl StatementsIter {
 	fn parse_func_call(&mut self, func_name: String, is_builtin: bool) -> Result<Statement, InterpErr> {
 		let mut arg_exprs = Vec::<Expr>::new();
 		
-		loop {
-			if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_err()?.content() {
-				self.tokens_iter.next_or_err().unwrap();
-				break;
-			}
-			
-			arg_exprs.push(Expr::new(
-				&mut self.tokens_iter,
-				ExprContextKind::FunctionArg)?);
-				
-			match self.tokens_iter.next_or_err()? {
-				Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
-				
-				Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
-				
-				found @ _ => 
-					return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
-						expected: vec![
-							TokenContent::StatementOp(StatementOp::Comma),
-							TokenContent::Bracket ( Bracket::Right ),
-						], 
-						found
-					} ) ),
+		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_err()?.content() {
+			self.tokens_iter.next_or_err().unwrap();
+		} else {
+			loop {			
+				arg_exprs.push(Expr::new(
+					&mut self.tokens_iter,
+					ExprContextKind::FunctionArg)?);
+					
+				match self.tokens_iter.next_or_err()? {
+					Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
+					
+					Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
+					
+					found @ _ => 
+						return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
+							expected: vec![
+								TokenContent::StatementOp(StatementOp::Comma),
+								TokenContent::Bracket ( Bracket::Right ),
+							], 
+							found
+						} ) ),
+				}
 			}
 		}
 		
