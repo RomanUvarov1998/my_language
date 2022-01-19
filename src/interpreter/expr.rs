@@ -156,9 +156,7 @@ impl Expr {
 				Symbol::ArithmOperator (..) => expr_stack.push(top_tok_sym),
 			}
 		}
-		
-		dbg!(&expr_stack);
-		
+				
 		Ok(expr_stack)
 	}
 	

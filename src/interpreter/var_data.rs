@@ -45,6 +45,7 @@ impl DataType {
 	pub fn parse(name: &str) -> Result<Self, VarErr> {
 		match name {
 			"f32" => Ok( DataType::Float32 ),
+			"str" => Ok( DataType::String ),
 			_ => Err( VarErr::UnknownType { name: name.to_string() } ),
 		}
 	}

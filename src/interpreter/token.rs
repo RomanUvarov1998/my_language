@@ -47,6 +47,10 @@ impl TokensIter {
 		self.cached_queue.is_empty()
 	}
 	
+	pub fn clear_cached_queue(&mut self) {
+		self.cached_queue.clear();
+	}
+	
 	pub fn peek_or_err(&mut self) -> Result<&Token, TokenErr> {
 		if self.peeked_token.is_none() {
 			self.peeked_token = Some(self.next_or_err()?);

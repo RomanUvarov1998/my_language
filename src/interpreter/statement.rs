@@ -95,6 +95,7 @@ impl StatementsIter {
 		
 		loop {
 			if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_err()?.content() {
+				self.tokens_iter.next_or_err().unwrap();
 				break;
 			}
 			
@@ -163,6 +164,10 @@ impl Iterator for StatementsIter {
 					found
 				} ) ),
 		};
+		
+		if let Err(_) = statement_result {
+			self.tokens_iter.clear_cached_queue();
+		}
 		
 		Some(statement_result)
 	}	
@@ -291,6 +296,30 @@ mod tests {
 		);
 	}
 
+	#[test]
+	fn can_parse_builtin_parameterless_funcs_call() {
+		let mut st_iter = StatementsIter::new();
+		st_iter.push_string("@print();".to_string());
+		
+		match st_iter.next().unwrap().unwrap() {
+			Statement::FuncCall {
+				kind: FuncKind::Builtin,
+				name, 
+				arg_exprs
+			} => {
+				assert_eq!("print", &name);
+				
+				assert_eq!(arg_exprs.len(), 0);
+			},
+			st @ _ => panic!("Wrong pattern {:?}", st),
+		};
+		
+		assert_eq!(
+			st_iter.next(),
+			None
+		);
+	}
+	
 	#[test]
 	pub fn can_make_statement_in_multiple_steps() {
 		let mut statements_iter = StatementsIter::new();
