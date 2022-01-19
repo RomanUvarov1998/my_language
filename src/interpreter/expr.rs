@@ -553,7 +553,11 @@ impl std::fmt::Display for ExprErr {
 				},
 				OperatorErr::NotEnoughOperands { provided_cnt, required_cnt } => {
 					super::display_error_pos(f, tok.pos_begin, tok.pos_end)?;
-					write!(f, "Expected {} operand(-s) for operator for operator {:?}, but found {}", provided_cnt, tok, required_cnt)
+					if let &TokenContent::Operator (op) = tok.content() {
+						write!(f, "Expected {} operand(-s) for operator {}, but found {}", required_cnt, tok, provided_cnt)
+					} else {
+						panic!("wrong token! {:?}", tok);
+					}
 				}
 			},
 		}

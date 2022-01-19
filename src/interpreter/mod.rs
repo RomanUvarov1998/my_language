@@ -10,6 +10,7 @@ use statement::*;
 use memory::*;
 use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
 use var_data::{VarErr, Value, DataType};
+use string_char::CharPos;
 
 pub struct Interpreter {
 	memory: Memory,
@@ -128,11 +129,11 @@ impl std::fmt::Display for InterpErr {
 	}
 }
 
-fn display_error_pos(f: &mut std::fmt::Formatter<'_>, pos_begin: usize, pos_end: usize) -> std::fmt::Result {
-	for _ in 0..pos_begin {
+fn display_error_pos(f: &mut std::fmt::Formatter<'_>, pos_begin: CharPos, pos_end: CharPos) -> std::fmt::Result {
+	for _ in 0..pos_begin.col() {
 		write!(f, "_")?;
 	}
-	for _ in pos_begin..=pos_end {
+	for _ in pos_begin.col()..=pos_end.col() {
 		write!(f, "^")?;
 	}
 	writeln!(f, "")

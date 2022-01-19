@@ -1,11 +1,13 @@
 use std::collections::VecDeque;
 
+//------------------------------ CharsIter ----------------------------
+
 #[derive(Debug)]
 pub struct CharsIter {
 	strings_queue: VecDeque<String>,
 	chars_queue: VecDeque<CharKind>,
-	peeked_char: Option<(CharKind, usize)>,
-	pos: usize,
+	peeked_char: Option<(CharKind, CharPos)>,
+	pos: CharPos,
 }
 
 const RADIX: u32 = 10_u32;
@@ -16,7 +18,7 @@ impl CharsIter {
 			strings_queue: VecDeque::<String>::new(),
 			chars_queue: VecDeque::<CharKind>::new(),
 			peeked_char: None,
-			pos: 0_usize,
+			pos: CharPos::new(),
 		}
 	}
 		
@@ -24,20 +26,20 @@ impl CharsIter {
 		self.strings_queue.push_back(string);
 	}
 	
-	pub fn peek(&mut self) -> Option<(CharKind, usize)> {
+	pub fn peek(&mut self) -> Option<(CharKind, CharPos)> {
 		if let None = self.peeked_char {
 			self.peeked_char = self.next();
 		}
 		self.peeked_char
 	}
 	
-	pub fn last_pos(&self) -> usize {
+	pub fn last_pos(&self) -> CharPos {
 		self.pos
 	}
 }
 
 impl Iterator for CharsIter {		
-	type Item = (CharKind, usize);
+	type Item = (CharKind, CharPos);
 	
 	fn next(&mut self) -> Option<Self::Item> {
 		if self.peeked_char.is_some() {
@@ -52,11 +54,52 @@ impl Iterator for CharsIter {
 			}
 		}
 			
-		let res = (self.chars_queue.pop_front()?, self.pos);
-		self.pos += 1;
+		let ch_kind = self.chars_queue.pop_front()?;
+		let res = (ch_kind, self.pos);
+		
+		self.pos.do_step(ch_kind);
+		
 		Some(res)
 	}
 }
+
+//------------------------------ CharPos ----------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CharPos {
+	line: usize,
+	col: usize,
+}
+
+impl CharPos {
+	fn new() -> Self {
+		Self {
+			line: 0,
+			col: 0,
+		}
+	}
+	
+	pub fn line(&self) -> usize { self.line }
+	pub fn col(&self) -> usize { self.col }
+	
+	fn do_step(&mut self, ch: CharKind) {
+		match ch {
+			CharKind::NewLine => {
+				self.col = 0;
+				self.line += 1;
+			},
+			_ => {
+				self.col += 1;
+			},
+		}
+	}
+	
+	fn next_line(&mut self) {
+		self.line += 1;
+	}
+}
+
+//------------------------------ CharKind ----------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CharKind {
@@ -74,6 +117,7 @@ pub enum CharKind {
 	Letter (char),
 	Punctuation (Punctuation),
 	Whitespace,
+	NewLine,
 	Control,
 	Invalid (char),
 }
@@ -91,7 +135,8 @@ impl From<char> for CharKind {
 			'(' => CharKind::LeftBracket,
 			')' => CharKind::RightBracket,
 			'=' => CharKind::Eq,
-			' ' | '\n' | '\t' => CharKind::Whitespace,
+			' ' | '\t' => CharKind::Whitespace,
+			'\n' => CharKind::NewLine,
 			':' => CharKind::Punctuation (Punctuation::Colon),
 			';' => CharKind::Punctuation (Punctuation::Semicolon),
 			',' => CharKind::Punctuation (Punctuation::Comma),
@@ -131,6 +176,7 @@ impl std::fmt::Display for CharKind {
 			CharKind::Eq => write!(f, "="),
 			CharKind::Letter (ch) => write!(f, "{}", ch),
 			CharKind::Whitespace => write!(f, "Whitespace"),
+			CharKind::NewLine => write!(f, "NewLine"),
 			CharKind::Control => write!(f, "Control"),
 			CharKind::Punctuation (p) => match p {
 				Punctuation::Colon => write!(f, ":"),

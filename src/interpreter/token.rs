@@ -1,4 +1,4 @@
-use super::string_char::*;
+use super::string_char::{ CharsIter, CharPos, CharKind, Punctuation };
 use std::collections::VecDeque;
 
 //---------------------------- TokensIter --------------------------------
@@ -96,11 +96,11 @@ impl TokensIter {
 		}
 	}
 	
-	fn parse_number(&mut self, pos_begin: usize, first_digit: u32, already_encountered_dot : bool) -> Result<Token, TokenErr> {
+	fn parse_number(&mut self, pos_begin: CharPos, first_digit: u32, already_encountered_dot : bool) -> Result<Token, TokenErr> {
 		let mut value: f32 = first_digit as f32;
 		let mut has_dot: bool = already_encountered_dot;
 		let mut frac_multiplier = 0.1_f32;
-		let mut pos_end: usize = pos_begin;
+		let mut pos_end: CharPos = pos_begin;
 		loop {
 			match self.iter.peek() {
 				Some( ( ch, pos ) ) => {
@@ -133,7 +133,7 @@ impl TokensIter {
 		}
 	}
 
-	fn parse_name_or_keyword(&mut self, pos_begin: usize, first_char: char) -> Result<Token, TokenErr> {
+	fn parse_name_or_keyword(&mut self, pos_begin: CharPos, first_char: char) -> Result<Token, TokenErr> {
 		let is_builtin: bool;
 		let mut name = if first_char == '@' {
 			is_builtin = true;
@@ -143,7 +143,7 @@ impl TokensIter {
 			String::from(first_char)
 		};
 		
-		let mut pos_end: usize = pos_begin;
+		let mut pos_end: CharPos = pos_begin;
 		
 		loop {
 			match self.iter.peek() {
@@ -177,8 +177,8 @@ impl TokensIter {
 		Ok( token )
 	}
 
-	fn parse_assignment_or_equality(&mut self, pos_begin: usize) -> Result<Token, TokenErr> {
-		let mut pos_end: usize = pos_begin;
+	fn parse_assignment_or_equality(&mut self, pos_begin: CharPos) -> Result<Token, TokenErr> {
+		let mut pos_end: CharPos = pos_begin;
 		match self.iter.peek() {
 			Some( ( ch, pos ) ) => {
 				pos_end = pos;
@@ -226,7 +226,7 @@ impl TokensIter {
 				CharKind::Eq => self.parse_assignment_or_equality(pos),
 				CharKind::Letter (first_char) => self.parse_name_or_keyword(pos, first_char),
 				CharKind::Dog => self.parse_name_or_keyword(pos, '@'),
-				CharKind::Whitespace | CharKind::Control => continue,
+				CharKind::Whitespace | CharKind::Control | CharKind::NewLine => continue,
 				CharKind::Punctuation (p) => match p {
 					Punctuation::Colon => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Colon)) ),
 					Punctuation::Semicolon => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Semicolon)) ),
@@ -262,13 +262,13 @@ impl Iterator for TokensIter {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
-	pub pos_begin: usize,
-	pub pos_end: usize,
+	pub pos_begin: CharPos,
+	pub pos_end: CharPos,
 	pub content: TokenContent,
 }
 
 impl Token {
-	fn new(pos_begin: usize, pos_end: usize, content: TokenContent) -> Self {
+	fn new(pos_begin: CharPos, pos_end: CharPos, content: TokenContent) -> Self {
 		Self { pos_begin, pos_end, content }
 	}
 	
@@ -396,9 +396,9 @@ pub enum Keyword {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenErr {
-	Construct { ch: CharKind, pos_begin: usize, pos_end: usize },
+	Construct { ch: CharKind, pos_begin: CharPos, pos_end: CharPos },
 	ExpectedButFound { expected: Vec<TokenContent>, found: Token },
-	EndReached { pos: usize },
+	EndReached { pos: CharPos },
 }
 
 impl std::fmt::Display for TokenErr {
