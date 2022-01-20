@@ -132,13 +132,13 @@ impl Expr {
 							| Operator::Div 
 							| Operator::Pow 
 							| Operator::Greater 
-							| Operator::GreaterEquals
+							| Operator::GreaterEqual
 							| Operator::Less
-							| Operator::LessEquals
+							| Operator::LessEqual
 							=> {
 								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, token, tok_op)?;
 						},
-						Operator::Equals | Operator::Assign 
+						Operator::Equal | Operator::Assign 
 							=> return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) ),
 					};
 					
@@ -393,6 +393,12 @@ enum ExprOperator {
 	Pow,
 	UnPlus,
 	UnMinus,
+	// Equal,
+	// NotEqual,
+	// Greater,
+	// GreaterEqual,
+	//Less,
+	//LessEqual,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -432,12 +438,12 @@ impl ExprOperator {
 			Operator::Mul => ExprOperator::Mul,
 			Operator::Div => ExprOperator::Div,
 			Operator::Pow => ExprOperator::Pow,
-			Operator::Equals 
+			Operator::Equal 
 				| Operator::Assign 
 				| Operator::Greater 
-				| Operator::GreaterEquals
+				| Operator::GreaterEqual
 				| Operator::Less 
-				| Operator::LessEquals 
+				| Operator::LessEqual 
 				=> unreachable!(),
 		}
 	}
@@ -448,13 +454,13 @@ impl ExprOperator {
 			Operator::Minus => ExprOperator::UnMinus,
 			Operator::Mul 
 				| Operator::Div 
-				| Operator::Equals 
+				| Operator::Equal 
 				| Operator::Assign 
 				| Operator::Pow 
 				| Operator::Greater 
-				| Operator::GreaterEquals
+				| Operator::GreaterEqual
 				| Operator::Less 
-				| Operator::LessEquals 
+				| Operator::LessEqual 
 				=> unreachable!(),
 		}
 	}

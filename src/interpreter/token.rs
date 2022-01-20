@@ -226,7 +226,7 @@ impl TokensIter {
 				match parsed_char.kind() {
 					CharKind::Eq => {
 						self.iter.next(); 
-						Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Equals)) )
+						Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Equal)) )
 					},
 					_ => Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Assign)) ),
 				}
@@ -244,7 +244,7 @@ impl TokensIter {
 						Ok( Token::new(
 							first_char.pos(), 
 							second_char.pos(), 
-							TokenContent::Operator (Operator::GreaterEquals)) )
+							TokenContent::Operator (Operator::GreaterEqual)) )
 					},
 					_ => Ok( Token::new(
 						first_char.pos(), 
@@ -263,7 +263,7 @@ impl TokensIter {
 						Ok( Token::new(
 							first_char.pos(), 
 							second_char.pos(), 
-							TokenContent::Operator (Operator::LessEquals)) )
+							TokenContent::Operator (Operator::LessEqual)) )
 					},
 					_ => Ok( Token::new(
 						first_char.pos(), 
@@ -395,12 +395,12 @@ impl std::fmt::Display for TokenContent {
 				Operator::Mul => write!(f, "'{}'", "*"),
 				Operator::Div => write!(f, "'{}'", "/"),
 				Operator::Pow => write!(f, "'{}'", "^"),
-				Operator::Equals => write!(f, "'{}'", "=="),
+				Operator::Equal => write!(f, "'{}'", "=="),
 				Operator::Assign => write!(f, "'{}'", "="),
 				Operator::Greater => write!(f, "'{}'", ">"),
-				Operator::GreaterEquals => write!(f, "'{}'", ">="),
+				Operator::GreaterEqual => write!(f, "'{}'", ">="),
 				Operator::Less => write!(f, "'{}'", "<"),
-				Operator::LessEquals => write!(f, "'{}'", "<="),
+				Operator::LessEqual => write!(f, "'{}'", "<="),
 			},
 			TokenContent::Bracket (br) => match br {
 				Bracket::Right => write!(f, "'{}'", ")"),
@@ -467,12 +467,12 @@ pub enum Operator {
 	Mul,
 	Pow,
 	Div,
-	Equals,
+	Equal,
 	Assign,
 	Greater,
-	GreaterEquals,
+	GreaterEqual,
 	Less,
-	LessEquals,
+	LessEqual,
 }
 
 //---------------------------- Extra... --------------------------------
@@ -552,7 +552,7 @@ mod tests {
 		test_token_content_detection("-", TokenContent::Operator (Operator::Minus));
 		test_token_content_detection("*", TokenContent::Operator (Operator::Mul));
 		test_token_content_detection("/", TokenContent::Operator (Operator::Div));
-		test_token_content_detection("==", TokenContent::Operator (Operator::Equals));
+		test_token_content_detection("==", TokenContent::Operator (Operator::Equal));
 		test_token_content_detection("(", TokenContent::Bracket (Bracket::Left));
 		test_token_content_detection(")", TokenContent::Bracket (Bracket::Right));
 		test_token_content_detection("=", TokenContent::Operator (Operator::Assign));
@@ -564,9 +564,9 @@ mod tests {
 		test_token_content_detection("@print", TokenContent::BuiltinName (String::from("print")));
 		test_token_content_detection("\"vasya\"", TokenContent::StringLiteral (String::from("vasya")));
 		test_token_content_detection(">", TokenContent::Operator (Operator::Greater));
-		test_token_content_detection(">=", TokenContent::Operator (Operator::GreaterEquals));
+		test_token_content_detection(">=", TokenContent::Operator (Operator::GreaterEqual));
 		test_token_content_detection("<", TokenContent::Operator (Operator::Less));
-		test_token_content_detection("<=", TokenContent::Operator (Operator::LessEquals));
+		test_token_content_detection("<=", TokenContent::Operator (Operator::LessEqual));
 	}
 
 	#[test]
@@ -586,9 +586,9 @@ mod tests {
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Name (String::from("var1var")));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEquals));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEqual));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Less));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEquals));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEqual));
 		assert_eq!(tokens_iter.parse_next_token(), None);
 	}
 
@@ -610,9 +610,9 @@ mod tests {
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEquals));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEqual));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Less));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEquals));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEqual));
 		assert_eq!(tokens_iter.parse_next_token(), None);
 	}
 
