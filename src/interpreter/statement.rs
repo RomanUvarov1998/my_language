@@ -184,6 +184,12 @@ pub enum Statement {
 	},
 }
 
+impl Statement {
+	pub fn check_type() {
+		
+	}
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum WithVariable {
 	Declare { var_name: String, data_type: DataType },

@@ -39,12 +39,17 @@ impl Memory {
 		Ok(())
 	}
 	
-	pub fn get_variable<'mem>(&'mem self, name: &str) -> Result<&'mem Value, VarErr> {
+	pub fn get_variable_value<'mem>(&'mem self, name: &str) -> Result<&'mem Value, VarErr> {
 		let var = self.find_var(name)?;
 		match var.get_value() {
 			Some(value) => Ok(value),
 			None => Err( VarErr::NotSet { name: name.to_string() } ),
 		}
+	}
+	
+	pub fn get_variable_type(&self, name: &str) -> Result<DataType, VarErr> {
+		let var = self.find_var(name)?;
+		Ok(var.get_type())
 	}
 	
 	pub fn call_func(&mut self, name: String, arg_exprs: Vec<Expr>) -> Result<(), InterpErr> {

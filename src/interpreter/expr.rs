@@ -28,7 +28,7 @@ impl Expr {
 				Symbol::Operand (opnd) => {
 					let value: Value = match opnd {
 						Operand::Value (val) => val,
-						Operand::Name (name) => memory.get_variable(&name)?.clone(),
+						Operand::Name (name) => memory.get_variable_value(&name)?.clone(),
 						Operand::BuiltinName (_name) => todo!(),
 					};
 					calc_stack.push(value);
@@ -62,7 +62,7 @@ impl Expr {
 				(.., Symbol::Operand (ref opnd)) => {
 					let opnd_dt: DataType = match opnd {
 						Operand::Value (val) => val.get_type(),
-						Operand::Name (name) => memory.get_variable(&name)?.get_type(),
+						Operand::Name (name) => memory.get_variable_type(&name)?,
 						Operand::BuiltinName (_name) => todo!(),
 					};
 					type_calc_stack.push(opnd_dt);
