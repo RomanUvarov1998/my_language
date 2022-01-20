@@ -78,6 +78,35 @@ impl ParsedChar {
 	pub fn pos(&self) -> CharPos { self.pos }
 }
 
+impl std::fmt::Display for ParsedChar {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self.kind() {
+			CharKind::Digit (_value) => write!(f, "{}", self.ch()),
+			CharKind::Dot => write!(f, "."),
+			CharKind::Dog => write!(f, "@"),
+			CharKind::Plus => write!(f, "+"),
+			CharKind::Minus => write!(f, "-"),
+			CharKind::Asterisk => write!(f, "*"),
+			CharKind::Circumflex => write!(f, "^"),
+			CharKind::DoubleQuote => write!(f, "\""),
+			CharKind::LeftSlash => write!(f, "/"),
+			CharKind::LeftBracket => write!(f, "("),
+			CharKind::RightBracket => write!(f, ")"),
+			CharKind::Eq => write!(f, "="),
+			CharKind::Letter => write!(f, "{}", self.ch()),
+			CharKind::Whitespace => write!(f, "Whitespace"),
+			CharKind::NewLine => write!(f, "NewLine"),
+			CharKind::Control => write!(f, "Control"),
+			CharKind::Punctuation (p) => match p {
+				Punctuation::Colon => write!(f, ":"),
+				Punctuation::Semicolon => write!(f, ";"),
+				Punctuation::Comma => write!(f, ","),
+			},
+			CharKind::Invalid => write!(f, "{}", self.ch()),
+		}
+	}
+}
+
 //------------------------------ CharPos ----------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,7 +144,7 @@ impl CharPos {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CharKind {
-	Digit (u32, char),
+	Digit (u32),
 	Dog,
 	Dot,
 	Plus,
@@ -127,12 +156,12 @@ pub enum CharKind {
 	LeftBracket,
 	RightBracket,
 	Eq,
-	Letter (char),
+	Letter,
 	Punctuation (Punctuation),
 	Whitespace,
 	NewLine,
 	Control,
-	Invalid (char),
+	Invalid,
 }
 
 impl From<char> for CharKind {
@@ -155,13 +184,13 @@ impl From<char> for CharKind {
 			';' => CharKind::Punctuation (Punctuation::Semicolon),
 			',' => CharKind::Punctuation (Punctuation::Comma),
 			_ => if ch.is_alphabetic() {
-				CharKind::Letter (ch)
+				CharKind::Letter
 			} else if let Some(value) = ch.to_digit(RADIX) {
-				CharKind::Digit(value, ch)
+				CharKind::Digit(value)
 			} else if ch.is_ascii_control() {
 				CharKind::Control
 			} else {
-				CharKind::Invalid (ch)
+				CharKind::Invalid
 			}
 		}
 	}
@@ -172,35 +201,6 @@ pub enum Punctuation {
 	Colon,
 	Semicolon,
 	Comma
-}
-
-impl std::fmt::Display for CharKind {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self {
-			CharKind::Digit (_value, ch) => write!(f, "{}", ch),
-			CharKind::Dot => write!(f, "."),
-			CharKind::Dog => write!(f, "@"),
-			CharKind::Plus => write!(f, "+"),
-			CharKind::Minus => write!(f, "-"),
-			CharKind::Asterisk => write!(f, "*"),
-			CharKind::Circumflex => write!(f, "^"),
-			CharKind::DoubleQuote => write!(f, "\""),
-			CharKind::LeftSlash => write!(f, "/"),
-			CharKind::LeftBracket => write!(f, "("),
-			CharKind::RightBracket => write!(f, ")"),
-			CharKind::Eq => write!(f, "="),
-			CharKind::Letter (ch) => write!(f, "{}", ch),
-			CharKind::Whitespace => write!(f, "Whitespace"),
-			CharKind::NewLine => write!(f, "NewLine"),
-			CharKind::Control => write!(f, "Control"),
-			CharKind::Punctuation (p) => match p {
-				Punctuation::Colon => write!(f, ":"),
-				Punctuation::Semicolon => write!(f, ";"),
-				Punctuation::Comma => write!(f, ","),
-			},
-			CharKind::Invalid (ch) => write!(f, "{}", ch),
-		}
-	}
 }
 
 #[cfg(test)]
@@ -220,9 +220,9 @@ mod tests {
 			"abc".to_string(),
 		]));
 		
-		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'a', kind: CharKind::Letter('a'), pos: CharPos {line: 0_usize, col: 0_usize } }));
-		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'b', kind: CharKind::Letter('b'), pos: CharPos {line: 0_usize, col: 1_usize } }));
-		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'c', kind: CharKind::Letter('c'), pos: CharPos {line: 0_usize, col: 2_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'a', kind: CharKind::Letter, pos: CharPos {line: 0_usize, col: 0_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'b', kind: CharKind::Letter, pos: CharPos {line: 0_usize, col: 1_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'c', kind: CharKind::Letter, pos: CharPos {line: 0_usize, col: 2_usize } }));
 		assert_eq!(ch_it.next(), None);
 		assert_eq!(ch_it.strings_queue, VecDeque::new());
 		
@@ -234,12 +234,12 @@ mod tests {
 			"ghi".to_string(),
 		]));
 		
-		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'd', kind: CharKind::Letter('d'), pos: CharPos {line: 0_usize, col: 3_usize } }));
-		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'e', kind: CharKind::Letter('e'), pos: CharPos {line: 0_usize, col: 4_usize } }));
-		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'f', kind: CharKind::Letter('f'), pos: CharPos {line: 0_usize, col: 5_usize } }));
-		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'g', kind: CharKind::Letter('g'), pos: CharPos {line: 0_usize, col: 6_usize } }));
-		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'h', kind: CharKind::Letter('h'), pos: CharPos {line: 0_usize, col: 7_usize } }));
-		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'i', kind: CharKind::Letter('i'), pos: CharPos {line: 0_usize, col: 8_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'd', kind: CharKind::Letter, pos: CharPos {line: 0_usize, col: 3_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'e', kind: CharKind::Letter, pos: CharPos {line: 0_usize, col: 4_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'f', kind: CharKind::Letter, pos: CharPos {line: 0_usize, col: 5_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'g', kind: CharKind::Letter, pos: CharPos {line: 0_usize, col: 6_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'h', kind: CharKind::Letter, pos: CharPos {line: 0_usize, col: 7_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'i', kind: CharKind::Letter, pos: CharPos {line: 0_usize, col: 8_usize } }));
 		assert_eq!(ch_it.next(), None);		
 		assert_eq!(ch_it.strings_queue, VecDeque::new());
 		

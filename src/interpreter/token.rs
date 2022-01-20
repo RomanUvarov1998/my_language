@@ -105,7 +105,7 @@ impl TokensIter {
 			match self.iter.peek() {
 				Some(parsed_char) => {
 					match parsed_char.kind() {
-						CharKind::Digit (val, _) => {
+						CharKind::Digit (val) => {
 							if has_dot {
 								value += val as f32 * frac_multiplier;
 								frac_multiplier *= 0.1_f32;
@@ -123,7 +123,7 @@ impl TokensIter {
 								break Err(TokenErr::Construct (parsed_char));
 							}
 						},
-						CharKind::Letter (..) => break Err(TokenErr::Construct (parsed_char)),
+						CharKind::Letter => break Err(TokenErr::Construct (parsed_char)),
 						_ => break Ok( Token::new(pos_begin, pos_end, TokenContent::Number (value) )),
 					};
 					pos_end = parsed_char.pos();
@@ -139,7 +139,7 @@ impl TokensIter {
 		loop {
 			match self.iter.peek() {
 				Some(parsed_char) => match parsed_char.kind() {
-					CharKind::Digit (_, _) |
+					CharKind::Digit (_) |
 					CharKind::Dog |
 					CharKind::Dot |
 					CharKind::Plus |
@@ -150,10 +150,10 @@ impl TokensIter {
 					CharKind::LeftBracket |
 					CharKind::RightBracket |
 					CharKind::Eq |
-					CharKind::Letter (_) |
+					CharKind::Letter |
 					CharKind::Punctuation (_) |
 					CharKind::Whitespace |
-					CharKind::Invalid (_) => {
+					CharKind::Invalid => {
 						self.iter.next().unwrap();
 						string_content.push(parsed_char.ch());
 					},
@@ -188,12 +188,12 @@ impl TokensIter {
 			match self.iter.peek() {
 				Some(parsed_char) => {
 					match parsed_char.kind() {
-						CharKind::Digit (_, ch) => {
-							name.push(ch);
+						CharKind::Digit (_) => {
+							name.push(parsed_char.ch());
 							self.iter.next(); 
 						},
-						CharKind::Letter (ch) => {
-							name.push(ch);
+						CharKind::Letter => {
+							name.push(parsed_char.ch());
 							self.iter.next(); 
 						},
 						_ => break,
@@ -247,10 +247,10 @@ impl TokensIter {
 	fn parse_next_token(&mut self) -> Option<Result<Token, TokenErr>> {		
 		for ch in self.iter.by_ref() {			
 			let token_result = match ch.kind() {
-				CharKind::Digit (first_digit, _) => self.parse_number(ch.pos(), first_digit, false),
+				CharKind::Digit (first_digit) => self.parse_number(ch.pos(), first_digit, false),
 				CharKind::Dot => match self.iter.peek() {
 					Some(ch2) => match ch2.kind() {
-						CharKind::Digit (_, _) => self.parse_number(ch2.pos(), 0_u32, true),
+						CharKind::Digit (_) => self.parse_number(ch2.pos(), 0_u32, true),
 						_ => Err( TokenErr::Construct (ch2) ),
 					},
 					None => Err( TokenErr::Construct (ch) ),
@@ -264,15 +264,15 @@ impl TokensIter {
 				CharKind::LeftBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Left )) ),
 				CharKind::RightBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Right )) ),
 				CharKind::Eq => self.parse_assignment_or_equality(ch.pos()),
-				CharKind::Letter (first_char) => self.parse_name_or_keyword(ch.pos(), first_char),
-				CharKind::Dog => self.parse_name_or_keyword(ch.pos(), '@'),
+				CharKind::Letter => self.parse_name_or_keyword(ch.pos(), ch.ch()),
+				CharKind::Dog => self.parse_name_or_keyword(ch.pos(), ch.ch()),
 				CharKind::Whitespace | CharKind::Control | CharKind::NewLine => continue,
 				CharKind::Punctuation (p) => match p {
 					Punctuation::Colon => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::StatementOp (StatementOp::Colon)) ),
 					Punctuation::Semicolon => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::StatementOp (StatementOp::Semicolon)) ),
 					Punctuation::Comma => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::StatementOp (StatementOp::Comma)) ),
 				},
-				CharKind::Invalid (..) => Err(TokenErr::Construct (ch) ),
+				CharKind::Invalid => Err(TokenErr::Construct (ch) ),
 			};
 			
 			return Some(token_result);
