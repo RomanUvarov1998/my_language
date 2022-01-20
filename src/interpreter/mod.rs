@@ -212,7 +212,7 @@ mod tests {
 		let mut int = Interpreter::new();
 		
 		match int.run("var a: f32 = \"hello\";") {
-			Err(InterpErr::Var (VarErr::WrongType { new_var_value, var_data_type }) ) 
+			Err(InterpErr::Var (VarErr::WrongValue { new_var_value, var_data_type }) ) 
 				if 
 					new_var_value == Value::String (String::from("hello")) &&
 					var_data_type == DataType::Float32
@@ -221,7 +221,7 @@ mod tests {
 		}
 		
 		match int.run("var a: str = 4;") {
-			Err(InterpErr::Var (VarErr::WrongType { new_var_value, var_data_type }) ) 
+			Err(InterpErr::Var (VarErr::WrongValue { new_var_value, var_data_type }) ) 
 				if 
 					new_var_value == Value::Float32 (4_f32) &&
 					var_data_type == DataType::String

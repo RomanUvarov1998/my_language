@@ -20,7 +20,7 @@ impl VarData {
 			self.var_value = Some(new_var_value);
 			Ok(())
 		} else {
-			Err( VarErr::WrongType { 
+			Err( VarErr::WrongValue { 
 					new_var_value, 
 					var_data_type: self.data_type 
 				} )
@@ -98,8 +98,12 @@ pub enum VarErr {
 	NotSet { name: String },
 	UnknownType { name: String },
 	AlreadyExists { name: String },
-	WrongType { 
+	WrongValue { 
 		new_var_value: Value, 
+		var_data_type: DataType,
+	},
+	WrongType { 
+		value_data_type: DataType, 
 		var_data_type: DataType,
 	},
 }
@@ -114,8 +118,10 @@ impl std::fmt::Display for VarErr {
 				write!(f, "Unknown type '{}'", &name),
 			VarErr::AlreadyExists { name } => 
 				write!(f, "Already exists '{}'", &name),
-			VarErr::WrongType { new_var_value, var_data_type } =>
+			VarErr::WrongValue { new_var_value, var_data_type } =>
 				write!(f, "Wrong value '{:?}' for type '{:?}'", new_var_value, var_data_type),
+			VarErr::WrongType { value_data_type, var_data_type } =>
+				write!(f, "Incompatible types: '{:?}' and '{:?}'", value_data_type, var_data_type),
 		}
 	}
 }

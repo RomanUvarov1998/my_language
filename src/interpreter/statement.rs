@@ -1,6 +1,8 @@
 use super::token::*;
 use super::expr::{Expr, ExprContextKind};
-use super::{ InterpErr, var_data::DataType };
+use super::{InterpErr};
+use super::var_data::{DataType, VarErr};
+use super::memory::Memory;
 
 pub struct StatementsIter {
 	tokens_iter: TokensIter,
@@ -185,8 +187,37 @@ pub enum Statement {
 }
 
 impl Statement {
-	pub fn check_type() {
-		
+	pub fn precalc_types(&self, types_memory: &mut Memory) -> Result<(), InterpErr> {
+		match self {
+			Statement::WithVariable (st) => match st {
+				WithVariable::Declare { var_name, data_type } => 
+					types_memory.add_variable(var_name.clone(), *data_type,  None)?,
+				WithVariable::DeclareSet { var_name, data_type, value_expr } => {
+					types_memory.add_variable(var_name.clone(), *data_type, None)?;
+					let expr_data_type: DataType = value_expr.calc_data_type(types_memory)?;
+					if *data_type != expr_data_type {
+						return Err(InterpErr::from(VarErr::WrongType { 
+							value_data_type: expr_data_type, 
+							var_data_type: *data_type,
+						}));
+					}
+				},
+				WithVariable::Set { var_name, value_expr } => {
+					let var_data_type: DataType = types_memory.get_variable_type(var_name)?;
+					let expr_data_type: DataType = value_expr.calc_data_type(types_memory)?;
+					if var_data_type != expr_data_type {
+						return Err(InterpErr::from(VarErr::WrongType { 
+							value_data_type: expr_data_type, 
+							var_data_type,
+						}));
+					}
+				},				
+			},
+			Statement::FuncCall { .. /*kind, name, arg_exprs*/ } => {
+				todo!();
+			}
+		}
+		Ok(())
 	}
 }
 
