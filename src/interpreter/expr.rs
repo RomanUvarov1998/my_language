@@ -41,7 +41,7 @@ impl Expr {
 				
 				Symbol::LeftBracket => unreachable!(),
 				
-				Symbol::ArithmOperator (op) => {
+				Symbol::ExprOperator (op) => {
 					let value: Value = match op.apply(&mut calc_stack) {
 						Err( err ) => return Err( InterpErr::from(ExprErr::Operator { err, tok }) ),
 						Ok(val) => val,
@@ -167,7 +167,7 @@ impl Expr {
 			match top_tok_sym.1 {
 				Symbol::Operand (..) => expr_stack.push(top_tok_sym),
 				Symbol::LeftBracket => return Err( InterpErr::Expr( ExprErr::UnexpectedToken (top_tok_sym.0) ) ),
-				Symbol::ArithmOperator (..) => expr_stack.push(top_tok_sym),
+				Symbol::ExprOperator (..) => expr_stack.push(top_tok_sym),
 			}
 		}
 				
@@ -180,7 +180,7 @@ impl Expr {
 		tok: Token, op: Operator
 		) -> Result<(), InterpErr> 
 	{
-		let next = ArithmOperator::new_bin(op);
+		let next = ExprOperator::new_bin(op);
 		
 		use std::cmp::Ordering;
 		
@@ -196,7 +196,7 @@ impl Expr {
 								
 							Symbol::LeftBracket => break,
 							
-							Symbol::ArithmOperator ( top_ref ) => {
+							Symbol::ExprOperator ( top_ref ) => {
 								match next.rank().cmp(&top_ref.rank()) {
 									Ordering::Less => tmp_stack.pop().unwrap(),
 									Ordering::Equal => match (top_ref.assot(), next.assot()) {
@@ -214,7 +214,7 @@ impl Expr {
 			expr_stack.push(top_tok_sym);
 		}
 			
-		tmp_stack.push((tok, Symbol::ArithmOperator (next) ));
+		tmp_stack.push((tok, Symbol::ExprOperator (next) ));
 		
 		Ok(())
 	}
@@ -234,7 +234,7 @@ impl Expr {
 					match tmp_stack.pop() {
 						Some( tok_sym ) => match tok_sym.1 {
 								Symbol::LeftBracket => break 'out,
-								Symbol::Operand (..) | Symbol::ArithmOperator (..) => expr_stack.push(tok_sym),
+								Symbol::Operand (..) | Symbol::ExprOperator (..) => expr_stack.push(tok_sym),
 							},
 						None => return Err( InterpErr::Expr( ExprErr::UnpairedBracket (tok) ) ),
 					};
@@ -333,7 +333,7 @@ impl ExprContext {
 enum Symbol {
 	Operand (Operand),
 	LeftBracket,
-	ArithmOperator (ArithmOperator),
+	ExprOperator (ExprOperator),
 }
 
 impl Symbol {
@@ -353,7 +353,7 @@ impl Symbol {
 		Symbol::LeftBracket
 	}
 	fn new_un_pref_op(op: Operator) -> Self {
-		Symbol::ArithmOperator( ArithmOperator::new_un_pref(op) )
+		Symbol::ExprOperator( ExprOperator::new_un_pref(op) )
 	}
 }
 
@@ -385,7 +385,7 @@ impl PartialEq for Operand {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
-enum ArithmOperator {
+enum ExprOperator {
 	BinPlus = 0_usize,
 	BinMinus,
 	Div,
@@ -424,14 +424,14 @@ static OP_ATTRS: [OpInfo; 7] = [
 	OpInfo { arity: OpArity::Unary, rank: 2, assot: OpAssot::Left },		//UnMinus
 ];
 
-impl ArithmOperator {
+impl ExprOperator {
 	fn new_bin(op: Operator) -> Self {
 		match op {
-			Operator::Plus => ArithmOperator::BinPlus,
-			Operator::Minus => ArithmOperator::BinMinus,
-			Operator::Mul => ArithmOperator::Mul,
-			Operator::Div => ArithmOperator::Div,
-			Operator::Pow => ArithmOperator::Pow,
+			Operator::Plus => ExprOperator::BinPlus,
+			Operator::Minus => ExprOperator::BinMinus,
+			Operator::Mul => ExprOperator::Mul,
+			Operator::Div => ExprOperator::Div,
+			Operator::Pow => ExprOperator::Pow,
 			Operator::Equals 
 				| Operator::Assign 
 				| Operator::Greater 
@@ -444,8 +444,8 @@ impl ArithmOperator {
 	
 	fn new_un_pref(op: Operator) -> Self {
 		match op {
-			Operator::Plus => ArithmOperator::UnPlus,
-			Operator::Minus => ArithmOperator::UnMinus,
+			Operator::Plus => ExprOperator::UnPlus,
+			Operator::Minus => ExprOperator::UnMinus,
 			Operator::Mul 
 				| Operator::Div 
 				| Operator::Equals 
@@ -468,7 +468,7 @@ impl ArithmOperator {
 	}
 
 	fn apply(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {	
-		use ArithmOperator::*;
+		use ExprOperator::*;
 		match self {
 			BinPlus => self.apply_bin_plus(calc_stack),
 			BinMinus => self.apply_bin_minus(calc_stack),
@@ -647,25 +647,25 @@ mod tests {
 	#[test]
 	fn lookup_array_initialization() {
 		assert_eq!(
-			OP_ATTRS[ArithmOperator::BinPlus as usize], 
+			OP_ATTRS[ExprOperator::BinPlus as usize], 
 			OpInfo { arity: OpArity::Binary, rank: 0, assot: OpAssot::Left });
 		assert_eq!(
-			OP_ATTRS[ArithmOperator::BinMinus as usize], 
+			OP_ATTRS[ExprOperator::BinMinus as usize], 
 			OpInfo { arity: OpArity::Binary, rank: 0, assot: OpAssot::Left });
 		assert_eq!(
-			OP_ATTRS[ArithmOperator::Div as usize], 
+			OP_ATTRS[ExprOperator::Div as usize], 
 			OpInfo { arity: OpArity::Binary, rank: 1, assot: OpAssot::Left });
 		assert_eq!(
-			OP_ATTRS[ArithmOperator::Mul as usize], 
+			OP_ATTRS[ExprOperator::Mul as usize], 
 			OpInfo { arity: OpArity::Binary, rank: 1, assot: OpAssot::Left });
 		assert_eq!(
-			OP_ATTRS[ArithmOperator::Pow as usize], 
+			OP_ATTRS[ExprOperator::Pow as usize], 
 			OpInfo { arity: OpArity::Binary, rank: 3, assot: OpAssot::Right });
 		assert_eq!(
-			OP_ATTRS[ArithmOperator::UnPlus as usize], 
+			OP_ATTRS[ExprOperator::UnPlus as usize], 
 			OpInfo { arity: OpArity::Unary, rank: 2, assot: OpAssot::Left });
 		assert_eq!(
-			OP_ATTRS[ArithmOperator::UnMinus as usize], 
+			OP_ATTRS[ExprOperator::UnMinus as usize], 
 			OpInfo { arity: OpArity::Unary, rank: 2, assot: OpAssot::Left });
 	}
 	
@@ -679,7 +679,7 @@ mod tests {
 		test_expr_and_its_stack_eq("3.125 + 5.4;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (5.4_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 		],
 		3.125_f32 + 5.4_f32);
 		
@@ -687,45 +687,45 @@ mod tests {
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (5.4_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (2.46_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Mul),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::Mul),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 		],
 		3.125_f32 + 5.4_f32 * 2.46_f32);
 		
 		test_expr_and_its_stack_eq("3.125 + 0 + 5.25 * 2.25 - 3.25 / 2 * 4.25;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (0_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 			Symbol::Operand (Operand::Value (Value::Float32 (5.25_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (2.25_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Mul),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::Mul),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 			Symbol::Operand (Operand::Value (Value::Float32 (3.25_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Div),
+			Symbol::ExprOperator (ExprOperator::Div),
 			Symbol::Operand (Operand::Value (Value::Float32 (4.25_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Mul),
-			Symbol::ArithmOperator (ArithmOperator::BinMinus),
+			Symbol::ExprOperator (ExprOperator::Mul),
+			Symbol::ExprOperator (ExprOperator::BinMinus),
 		],
 		3.125_f32 + 0.0_f32 + 5.25_f32 * 2.25_f32 - 3.25_f32 / 2.0_f32 * 4.25_f32);
 		
 		test_expr_and_its_stack_eq("3.125 + -5.25 * 2.25;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (5.25_f32))),
-			Symbol::ArithmOperator (ArithmOperator::UnMinus),
+			Symbol::ExprOperator (ExprOperator::UnMinus),
 			Symbol::Operand (Operand::Value (Value::Float32 (2.25_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Mul),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::Mul),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 		],
 		3.125_f32 + -5.25_f32 * 2.25_f32);
 		
 		test_expr_and_its_stack_eq("2.5 * ---5.5;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (2.5_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (5.5_f32))),
-			Symbol::ArithmOperator (ArithmOperator::UnMinus),
-			Symbol::ArithmOperator (ArithmOperator::UnMinus),
-			Symbol::ArithmOperator (ArithmOperator::UnMinus),
-			Symbol::ArithmOperator (ArithmOperator::Mul),
+			Symbol::ExprOperator (ExprOperator::UnMinus),
+			Symbol::ExprOperator (ExprOperator::UnMinus),
+			Symbol::ExprOperator (ExprOperator::UnMinus),
+			Symbol::ExprOperator (ExprOperator::Mul),
 		],
 		2.5_f32 * ---5.5_f32);
 		
@@ -733,8 +733,8 @@ mod tests {
 			Symbol::Operand (Operand::Value (Value::Float32 (1.125_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (2.125_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
-			Symbol::ArithmOperator (ArithmOperator::Mul),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::Mul),
 		],
 		1.125_f32 * (3.125_f32 + 2.125_f32));
 		
@@ -744,16 +744,16 @@ mod tests {
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (4_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
-			Symbol::ArithmOperator (ArithmOperator::Mul),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::Mul),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 			Symbol::Operand (Operand::Value (Value::Float32 (5_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 			Symbol::Operand (Operand::Value (Value::Float32 (10_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Div),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::Div),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 			Symbol::Operand (Operand::Value (Value::Float32 (30_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinMinus),
+			Symbol::ExprOperator (ExprOperator::BinMinus),
 		],
 		33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32);
 		
@@ -761,14 +761,14 @@ mod tests {
 			Symbol::Operand (Operand::Value (Value::Float32 (8_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (2.125_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (5.125_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Mul),
-			Symbol::ArithmOperator (ArithmOperator::BinMinus),
+			Symbol::ExprOperator (ExprOperator::Mul),
+			Symbol::ExprOperator (ExprOperator::BinMinus),
 			Symbol::Operand (Operand::Value (Value::Float32 (4.125_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
-			Symbol::ArithmOperator (ArithmOperator::UnMinus),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::UnMinus),
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			Symbol::ArithmOperator (ArithmOperator::UnMinus),
-			Symbol::ArithmOperator (ArithmOperator::Div),
+			Symbol::ExprOperator (ExprOperator::UnMinus),
+			Symbol::ExprOperator (ExprOperator::Div),
 		],
 		-(8_f32 - 2.125_f32 * 5.125_f32 + 4.125_f32) / -3.125_f32);
 		
@@ -778,33 +778,33 @@ mod tests {
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (4_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
-			Symbol::ArithmOperator (ArithmOperator::Mul),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::Mul),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 			Symbol::Operand (Operand::Value (Value::Float32 (5_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 			Symbol::Operand (Operand::Value (Value::Float32 (10_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Div),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::Div),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 			Symbol::Operand (Operand::Value (Value::Float32 (30_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinMinus),
+			Symbol::ExprOperator (ExprOperator::BinMinus),
 		],
 		33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32);
 		
 		test_expr_and_its_stack_eq("2^2;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Pow),
+			Symbol::ExprOperator (ExprOperator::Pow),
 		],
 		2_f32.powf(2_f32));
 		
 		test_expr_and_its_stack_eq("-2^2+4;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Pow),
-			Symbol::ArithmOperator (ArithmOperator::UnMinus),
+			Symbol::ExprOperator (ExprOperator::Pow),
+			Symbol::ExprOperator (ExprOperator::UnMinus),
 			Symbol::Operand (Operand::Value (Value::Float32 (4_f32))),
-			Symbol::ArithmOperator (ArithmOperator::BinPlus),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
 		],
 		-2_f32.powf(2_f32) + 4_f32);
 		
@@ -812,8 +812,8 @@ mod tests {
 			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (1_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::ArithmOperator (ArithmOperator::Pow),
-			Symbol::ArithmOperator (ArithmOperator::Pow),
+			Symbol::ExprOperator (ExprOperator::Pow),
+			Symbol::ExprOperator (ExprOperator::Pow),
 		],
 		3_f32.powf(1_f32.powf(2_f32)));
 	}
