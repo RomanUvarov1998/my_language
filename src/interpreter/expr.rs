@@ -79,7 +79,7 @@ impl Expr {
 				TokenContent::Number (num) => {
 					if prev_is_operand {
 						return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) );
-					}					
+					}
 					
 					let sym = Symbol::new_number(*num);
 					expr_stack.push( (token, sym) );
@@ -89,7 +89,7 @@ impl Expr {
 				TokenContent::Name (name) => {
 					if prev_is_operand {
 						return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) );
-					}					
+					}
 					
 					let sym = Symbol::new_name(name.clone());
 					expr_stack.push((token, sym));
@@ -99,12 +99,22 @@ impl Expr {
 				TokenContent::BuiltinName (name) => {
 					if prev_is_operand {
 						return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) );
-					}					
+					}
 					
 					let sym = Symbol::new_builtin_name(name.clone());
 					expr_stack.push((token, sym));
 					
 					prev_is_operand = true;
+				},
+				TokenContent::StringLiteral (s) => {
+					if prev_is_operand {
+						return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) );
+					}
+					
+					let sym = Symbol::new_string_literal(s.clone());
+					expr_stack.push((token, sym));
+					
+					prev_is_operand = true;					
 				},
 				
 				TokenContent::Operator (op) => {
@@ -260,7 +270,8 @@ impl ExprContext {
 					TokenContent::Number (..) | 
 						TokenContent::Operator (..) | 
 						TokenContent::Name (..) |
-						TokenContent::BuiltinName (..)
+						TokenContent::BuiltinName (..) |
+						TokenContent::StringLiteral (..)
 						=> Ok(false),
 					TokenContent::Bracket (br) 
 						=> Ok( self.check_brackets(*br) ),
@@ -277,7 +288,8 @@ impl ExprContext {
 					TokenContent::Number (..) | 
 						TokenContent::Operator (..) | 
 						TokenContent::Name (..) |
-						TokenContent::BuiltinName (..)
+						TokenContent::BuiltinName (..) |
+						TokenContent::StringLiteral (..)
 						=> Ok(false),
 					TokenContent::Bracket (br) 
 						=> Ok( self.check_brackets(*br) ),
@@ -329,6 +341,9 @@ impl Symbol {
 	}
 	fn new_builtin_name(name: String) -> Self {
 		Symbol::Operand( Operand::BuiltinName (name) )
+	}
+	fn new_string_literal(content: String) -> Self {
+		Symbol::Operand( Operand::Value (Value::String(content)) )
 	}
 	fn new_left_bracket() -> Self {
 		Symbol::LeftBracket
@@ -438,71 +453,119 @@ impl ArithmOperator {
 		OP_ATTRS[*self as usize].assot
 	}
 
-	#[allow(unreachable_patterns)]
-	fn apply(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {		
-		let create_err = |values: &[&Value]| -> OperatorErr {
-			let types: Vec<DataType> = values
-				.iter()
-				.map(|val| val.get_type())
-				.collect();
-			
-			OperatorErr::WrongType { 
-				descr: String::from(format!(
-					"Operator {:?} cannot be applied to type(-s) {:?}", 
-					self, 
-					&types[..]))
-			}
-		};
-		
+	fn apply(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {	
 		use ArithmOperator::*;
 		match self {
-			BinPlus | BinMinus | Div | Mul | Pow => {
-				let rhs: Value = calc_stack
-					.pop()
-					.ok_or(OperatorErr::NotEnoughOperands { 
-						provided_cnt: 0,
-						required_cnt: 2, 
-					} )?;
-				let lhs: Value = calc_stack
-					.pop()
-					.ok_or(OperatorErr::NotEnoughOperands { 
-						provided_cnt: 1,
-						required_cnt: 2, 
-					} )?;
-					
-				let (val1, val2): (f32, f32) = match (lhs, rhs) { 
-					(Value::Float32 (val1), Value::Float32 (val2)) => (val1, val2),
-					ops @ _ => return Err( create_err(&[&ops.0, &ops.1]) ),
-				};
-			
-				match self {
-					BinPlus => Ok( Value::Float32(val1 + val2) ),
-					BinMinus => Ok( Value::Float32(val1 - val2) ),
-					Div => Ok( Value::Float32(val1 / val2) ),
-					Mul => Ok( Value::Float32(val1 * val2) ),
-					Pow => Ok( Value::Float32(val1.powf(val2)) ),
-					_ => unreachable!(),
-				}
+			BinPlus => self.apply_bin_plus(calc_stack),
+			BinMinus => self.apply_bin_minus(calc_stack),
+			Div => self.apply_bin_div(calc_stack),
+			Mul => self.apply_bin_mul(calc_stack),
+			Pow => self.apply_bin_pow(calc_stack),
+			UnPlus => self.apply_unary_plus(calc_stack),
+			UnMinus => self.apply_unary_minus(calc_stack),
+		}
+	}
+	
+	fn apply_bin_plus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 + val2)),
+			(Value::String (val1), Value::String (val2)) => {
+				let mut res: String = val1.clone();
+				res.push_str(&val2);
+				Ok(Value::String(res))
 			},
-			UnPlus | UnMinus => {
-				let op: Value = calc_stack
-					.pop()
-					.ok_or(OperatorErr::NotEnoughOperands { 
-						provided_cnt: 0,
-						required_cnt: 1, 
-					} )?;
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn apply_bin_minus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 - val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn apply_bin_mul(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 * val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn apply_bin_div(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 / val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn apply_bin_pow(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1.powf(val2))),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn take_2_operands(calc_stack: &mut Vec<Value>) -> Result<(Value, Value), OperatorErr> {
+		let rhs: Value = calc_stack
+			.pop()
+			.ok_or(OperatorErr::NotEnoughOperands { 
+				provided_cnt: 0,
+				required_cnt: 2, 
+			} )?;
+		let lhs: Value = calc_stack
+			.pop()
+			.ok_or(OperatorErr::NotEnoughOperands { 
+				provided_cnt: 1,
+				required_cnt: 2, 
+			} )?;
+		Ok((lhs, rhs))
+	}
+	
+	
+	fn apply_unary_plus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let op = Self::take_1_operand(calc_stack)?;
+		match op {
+			Value::Float32 (val1) => Ok(Value::Float32(val1)),
+			_ => return Err( self.create_err(&[&op]) ),
+		}
+	}
+	
+	fn apply_unary_minus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let op = Self::take_1_operand(calc_stack)?;
+		match op {
+			Value::Float32 (val1) => Ok(Value::Float32(-val1)),
+			_ => return Err( self.create_err(&[&op]) ),
+		}
+	}
+	
+	fn take_1_operand(calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let op: Value = calc_stack
+			.pop()
+			.ok_or(OperatorErr::NotEnoughOperands { 
+				provided_cnt: 0,
+				required_cnt: 1, 
+			} )?;
+		Ok(op)
+	}
 
-				let val: f32 = match op { 
-					Value::Float32 (val) => val,
-					_ => return Err( create_err(&[&op]) ),
-				};
 
-				match self {
-					UnPlus => Ok( Value::Float32(val) ),
-					UnMinus => Ok( Value::Float32(-val) ),
-					_ => unreachable!(),
-				}
-			},
+	fn create_err(&self, values: &[&Value]) -> OperatorErr {
+		let types: Vec<DataType> = values
+			.iter()
+			.map(|val| val.get_type())
+			.collect();
+		
+		OperatorErr::WrongType { 
+			descr: String::from(format!(
+				"Operator {:?} cannot be applied to type(-s) {:?}", 
+				self, 
+				&types[..]))
 		}
 	}
 }

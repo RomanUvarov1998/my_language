@@ -5,8 +5,8 @@ use std::collections::VecDeque;
 #[derive(Debug)]
 pub struct CharsIter {
 	strings_queue: VecDeque<String>,
-	chars_queue: VecDeque<CharKind>,
-	peeked_char: Option<(CharKind, CharPos)>,
+	chars_queue: VecDeque<ParsedChar>,
+	peeked_char: Option<ParsedChar>,
 	pos: CharPos,
 }
 
@@ -16,7 +16,7 @@ impl CharsIter {
 	pub fn new() -> Self {
 		Self {
 			strings_queue: VecDeque::<String>::new(),
-			chars_queue: VecDeque::<CharKind>::new(),
+			chars_queue: VecDeque::<ParsedChar>::new(),
 			peeked_char: None,
 			pos: CharPos::new(),
 		}
@@ -26,7 +26,7 @@ impl CharsIter {
 		self.strings_queue.push_back(string);
 	}
 	
-	pub fn peek(&mut self) -> Option<(CharKind, CharPos)> {
+	pub fn peek(&mut self) -> Option<ParsedChar> {
 		if let None = self.peeked_char {
 			self.peeked_char = self.next();
 		}
@@ -39,7 +39,7 @@ impl CharsIter {
 }
 
 impl Iterator for CharsIter {		
-	type Item = (CharKind, CharPos);
+	type Item = ParsedChar;
 	
 	fn next(&mut self) -> Option<Self::Item> {
 		if self.peeked_char.is_some() {
@@ -50,17 +50,32 @@ impl Iterator for CharsIter {
 			let cur_string = self.strings_queue.pop_front().unwrap();
 			
 			for ch in cur_string.chars() {
-				self.chars_queue.push_back(CharKind::from(ch));
+				let ch_kind = CharKind::from(ch);
+				self.chars_queue.push_back(ParsedChar::new(ch, ch_kind, self.pos));
+				self.pos.advance(ch_kind);
 			}
 		}
 			
-		let ch_kind = self.chars_queue.pop_front()?;
-		let res = (ch_kind, self.pos);
-		
-		self.pos.do_step(ch_kind);
-		
-		Some(res)
+		self.chars_queue.pop_front()
 	}
+}
+
+//------------------------------ ParsedChar ----------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParsedChar {
+	ch: char,
+	kind: CharKind,
+	pos: CharPos,
+}
+
+impl ParsedChar {
+	pub fn new(ch: char, kind: CharKind, pos: CharPos) -> Self {
+		Self { ch, kind, pos }
+	}
+	pub fn ch(&self) -> char { self.ch }
+	pub fn kind(&self) -> CharKind { self.kind }
+	pub fn pos(&self) -> CharPos { self.pos }
 }
 
 //------------------------------ CharPos ----------------------------
@@ -79,11 +94,12 @@ impl CharPos {
 		}
 	}
 	
+	#[allow(dead_code)]
 	pub fn line(&self) -> usize { self.line }
 	pub fn col(&self) -> usize { self.col }
 	
-	fn do_step(&mut self, ch: CharKind) {
-		match ch {
+	fn advance(&mut self, ch_kind: CharKind) {
+		match ch_kind {
 			CharKind::NewLine => {
 				self.col = 0;
 				self.line += 1;
@@ -92,10 +108,6 @@ impl CharPos {
 				self.col += 1;
 			},
 		}
-	}
-	
-	fn next_line(&mut self) {
-		self.line += 1;
 	}
 }
 
@@ -110,6 +122,7 @@ pub enum CharKind {
 	Minus,
 	Asterisk,
 	Circumflex,
+	DoubleQuote,
 	LeftSlash,
 	LeftBracket,
 	RightBracket,
@@ -131,6 +144,7 @@ impl From<char> for CharKind {
 			'-' => CharKind::Minus,
 			'*' => CharKind::Asterisk,
 			'^' => CharKind::Circumflex,
+			'\"' => CharKind::DoubleQuote,
 			'/' => CharKind::LeftSlash,
 			'(' => CharKind::LeftBracket,
 			')' => CharKind::RightBracket,
@@ -170,6 +184,7 @@ impl std::fmt::Display for CharKind {
 			CharKind::Minus => write!(f, "-"),
 			CharKind::Asterisk => write!(f, "*"),
 			CharKind::Circumflex => write!(f, "^"),
+			CharKind::DoubleQuote => write!(f, "\""),
 			CharKind::LeftSlash => write!(f, "/"),
 			CharKind::LeftBracket => write!(f, "("),
 			CharKind::RightBracket => write!(f, ")"),
@@ -190,7 +205,7 @@ impl std::fmt::Display for CharKind {
 
 #[cfg(test)]
 mod tests {	
-	use super::{CharsIter, CharKind, CharPos};
+	use super::{CharsIter, CharKind, CharPos, ParsedChar};
 	use std::collections::VecDeque;
 
 	#[test]
@@ -205,11 +220,9 @@ mod tests {
 			"abc".to_string(),
 		]));
 		
-		let mut pos = CharPos::new();
-		
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('a'), pos))); pos.do_step(CharKind::Dot);
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('b'), pos))); pos.do_step(CharKind::Dot);
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('c'), pos))); pos.do_step(CharKind::Dot);
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'a', kind: CharKind::Letter('a'), pos: CharPos {line: 0_usize, col: 0_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'b', kind: CharKind::Letter('b'), pos: CharPos {line: 0_usize, col: 1_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'c', kind: CharKind::Letter('c'), pos: CharPos {line: 0_usize, col: 2_usize } }));
 		assert_eq!(ch_it.next(), None);
 		assert_eq!(ch_it.strings_queue, VecDeque::new());
 		
@@ -221,12 +234,12 @@ mod tests {
 			"ghi".to_string(),
 		]));
 		
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('d'), pos))); pos.do_step(CharKind::Dot);
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('e'), pos))); pos.do_step(CharKind::Dot);
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('f'), pos))); pos.do_step(CharKind::Dot);
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('g'), pos))); pos.do_step(CharKind::Dot);
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('h'), pos))); pos.do_step(CharKind::Dot);
-		assert_eq!(ch_it.next(), Some((CharKind::Letter('i'), pos))); pos.do_step(CharKind::Dot);
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'd', kind: CharKind::Letter('d'), pos: CharPos {line: 0_usize, col: 3_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'e', kind: CharKind::Letter('e'), pos: CharPos {line: 0_usize, col: 4_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'f', kind: CharKind::Letter('f'), pos: CharPos {line: 0_usize, col: 5_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'g', kind: CharKind::Letter('g'), pos: CharPos {line: 0_usize, col: 6_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'h', kind: CharKind::Letter('h'), pos: CharPos {line: 0_usize, col: 7_usize } }));
+		assert_eq!(ch_it.next(), Some( ParsedChar { ch: 'i', kind: CharKind::Letter('i'), pos: CharPos {line: 0_usize, col: 8_usize } }));
 		assert_eq!(ch_it.next(), None);		
 		assert_eq!(ch_it.strings_queue, VecDeque::new());
 		

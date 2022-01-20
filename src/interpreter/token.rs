@@ -1,4 +1,4 @@
-use super::string_char::{ CharsIter, CharPos, CharKind, Punctuation };
+use super::string_char::{ CharsIter, CharPos, CharKind, Punctuation, ParsedChar };
 use std::collections::VecDeque;
 
 //---------------------------- TokensIter --------------------------------
@@ -103,8 +103,8 @@ impl TokensIter {
 		let mut pos_end: CharPos = pos_begin;
 		loop {
 			match self.iter.peek() {
-				Some( ( ch, pos ) ) => {
-					match ch {
+				Some(parsed_char) => {
+					match parsed_char.kind() {
 						CharKind::Digit (val, _) => {
 							if has_dot {
 								value += val as f32 * frac_multiplier;
@@ -120,15 +120,54 @@ impl TokensIter {
 							if !has_dot {
 								has_dot = true;
 							} else {
-								break Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos });
+								break Err(TokenErr::Construct (parsed_char));
 							}
 						},
-						CharKind::Letter (..) => break Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos }),
+						CharKind::Letter (..) => break Err(TokenErr::Construct (parsed_char)),
 						_ => break Ok( Token::new(pos_begin, pos_end, TokenContent::Number (value) )),
 					};
-					pos_end = pos;
+					pos_end = parsed_char.pos();
 				},
 				None => break Ok( Token::new(pos_begin, pos_end, TokenContent::Number (value) )),
+			}
+		}
+	}
+
+	fn parse_string_literal(&mut self, pos_begin: CharPos) -> Result<Token, TokenErr> {
+		let mut string_content = String::new();
+		
+		loop {
+			match self.iter.peek() {
+				Some(parsed_char) => match parsed_char.kind() {
+					CharKind::Digit (_, _) |
+					CharKind::Dog |
+					CharKind::Dot |
+					CharKind::Plus |
+					CharKind::Minus |
+					CharKind::Asterisk |
+					CharKind::Circumflex |
+					CharKind::LeftSlash |
+					CharKind::LeftBracket |
+					CharKind::RightBracket |
+					CharKind::Eq |
+					CharKind::Letter (_) |
+					CharKind::Punctuation (_) |
+					CharKind::Whitespace |
+					CharKind::Invalid (_) => {
+						self.iter.next().unwrap();
+						string_content.push(parsed_char.ch());
+					},
+					
+					CharKind::Control => continue,
+					
+					CharKind::DoubleQuote => {
+						self.iter.next().unwrap();
+						return Ok( Token::new(pos_begin, parsed_char.pos(), TokenContent::StringLiteral (string_content)) );
+					},
+					
+					CharKind::NewLine => return Err( TokenErr::Construct (parsed_char) ),
+				},
+				None => return Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 			}
 		}
 	}
@@ -147,8 +186,8 @@ impl TokensIter {
 		
 		loop {
 			match self.iter.peek() {
-				Some( ( ch, pos ) ) => {
-					match ch {
+				Some(parsed_char) => {
+					match parsed_char.kind() {
 						CharKind::Digit (_, ch) => {
 							name.push(ch);
 							self.iter.next(); 
@@ -159,7 +198,7 @@ impl TokensIter {
 						},
 						_ => break,
 					};
-					pos_end = pos;
+					pos_end = parsed_char.pos();
 				},
 				None => break,
 			}
@@ -180,9 +219,9 @@ impl TokensIter {
 	fn parse_assignment_or_equality(&mut self, pos_begin: CharPos) -> Result<Token, TokenErr> {
 		let mut pos_end: CharPos = pos_begin;
 		match self.iter.peek() {
-			Some( ( ch, pos ) ) => {
-				pos_end = pos;
-				match ch {
+			Some(parsed_char) => {
+				pos_end = parsed_char.pos();
+				match parsed_char.kind() {
 					CharKind::Eq => {
 						self.iter.next(); 
 						Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Equals)) )
@@ -206,33 +245,34 @@ impl TokensIter {
 	}
 
 	fn parse_next_token(&mut self) -> Option<Result<Token, TokenErr>> {		
-		for ( ch, pos ) in self.iter.by_ref() {			
-			let token_result = match ch {
-				CharKind::Digit (first_digit, _) => self.parse_number(pos, first_digit, false),
+		for ch in self.iter.by_ref() {			
+			let token_result = match ch.kind() {
+				CharKind::Digit (first_digit, _) => self.parse_number(ch.pos(), first_digit, false),
 				CharKind::Dot => match self.iter.peek() {
-					Some( ( ch, pos ) ) => match ch {
-						CharKind::Digit (_, _) => self.parse_number(pos, 0_u32, true),
-						_ => Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos } ),
+					Some(ch2) => match ch2.kind() {
+						CharKind::Digit (_, _) => self.parse_number(ch2.pos(), 0_u32, true),
+						_ => Err( TokenErr::Construct (ch2) ),
 					},
-					None => Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos }),
+					None => Err( TokenErr::Construct (ch) ),
 				},
-				CharKind::Plus => Ok( Token::new(pos, pos, TokenContent::Operator ( Operator::Plus )) ),
-				CharKind::Minus => Ok( Token::new(pos, pos, TokenContent::Operator ( Operator::Minus )) ),
-				CharKind::Asterisk => Ok( Token::new(pos, pos, TokenContent::Operator ( Operator::Mul )) ),
-				CharKind::Circumflex => Ok( Token::new(pos, pos, TokenContent::Operator ( Operator::Pow )) ),
-				CharKind::LeftSlash => Ok( Token::new(pos, pos, TokenContent::Operator ( Operator::Div )) ),
-				CharKind::LeftBracket => Ok( Token::new(pos, pos, TokenContent::Bracket ( Bracket::Left )) ),
-				CharKind::RightBracket => Ok( Token::new(pos, pos, TokenContent::Bracket ( Bracket::Right )) ),
-				CharKind::Eq => self.parse_assignment_or_equality(pos),
-				CharKind::Letter (first_char) => self.parse_name_or_keyword(pos, first_char),
-				CharKind::Dog => self.parse_name_or_keyword(pos, '@'),
+				CharKind::Plus => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Plus )) ),
+				CharKind::Minus => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Minus )) ),
+				CharKind::Asterisk => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Mul )) ),
+				CharKind::Circumflex => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Pow )) ),
+				CharKind::DoubleQuote => self.parse_string_literal(ch.pos()),
+				CharKind::LeftSlash => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Div )) ),
+				CharKind::LeftBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Left )) ),
+				CharKind::RightBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Right )) ),
+				CharKind::Eq => self.parse_assignment_or_equality(ch.pos()),
+				CharKind::Letter (first_char) => self.parse_name_or_keyword(ch.pos(), first_char),
+				CharKind::Dog => self.parse_name_or_keyword(ch.pos(), '@'),
 				CharKind::Whitespace | CharKind::Control | CharKind::NewLine => continue,
 				CharKind::Punctuation (p) => match p {
-					Punctuation::Colon => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Colon)) ),
-					Punctuation::Semicolon => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Semicolon)) ),
-					Punctuation::Comma => Ok( Token::new(pos, pos, TokenContent::StatementOp (StatementOp::Comma)) ),
+					Punctuation::Colon => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::StatementOp (StatementOp::Colon)) ),
+					Punctuation::Semicolon => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::StatementOp (StatementOp::Semicolon)) ),
+					Punctuation::Comma => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::StatementOp (StatementOp::Comma)) ),
 				},
-				CharKind::Invalid (..) => Err(TokenErr::Construct { ch, pos_begin: pos , pos_end: pos } ),
+				CharKind::Invalid (..) => Err(TokenErr::Construct (ch) ),
 			};
 			
 			return Some(token_result);
@@ -288,10 +328,11 @@ impl std::fmt::Display for Token {
 #[derive(Debug, Clone)]
 pub enum TokenContent {
 	Number (f32),
+	StringLiteral (String),
+	Name (String),
 	BuiltinName (String),
 	Operator (Operator),
 	Bracket (Bracket),
-	Name (String),
 	StatementOp (StatementOp),
 	Keyword (Keyword),
 }
@@ -300,6 +341,7 @@ impl std::fmt::Display for TokenContent {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			TokenContent::Number (val) => write!(f, "'{}'", val),
+			TokenContent::StringLiteral (val) => write!(f, "\"{}\"", val),
 			TokenContent::Operator (op) => match op {
 				Operator::Plus => write!(f, "'{}'", "+"),
 				Operator::Minus => write!(f, "'{}'", "-"),
@@ -332,6 +374,10 @@ impl PartialEq for TokenContent {
 		match self {
 			TokenContent::Number (f1) => match other {
 				TokenContent::Number (f2) => (f1 - f2).abs() <= std::f32::EPSILON,
+				_ => false,
+			},
+			TokenContent::StringLiteral (s1) => match other {
+				TokenContent::StringLiteral (s2) => s1 == s2,
 				_ => false,
 			},
 			TokenContent::Operator (op1) => match other {
@@ -396,7 +442,7 @@ pub enum Keyword {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenErr {
-	Construct { ch: CharKind, pos_begin: CharPos, pos_end: CharPos },
+	Construct (ParsedChar),
 	ExpectedButFound { expected: Vec<TokenContent>, found: Token },
 	EndReached { pos: CharPos },
 }
@@ -404,9 +450,9 @@ pub enum TokenErr {
 impl std::fmt::Display for TokenErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			TokenErr::Construct { ch, pos_begin, pos_end } => {
-				super::display_error_pos(f, *pos_begin, *pos_end)?;
-				write!(f, "Unexpected character '{}'", ch)
+			TokenErr::Construct (parsed_char) => {
+				super::display_error_pos(f, parsed_char.pos(), parsed_char.pos())?;
+				write!(f, "Unexpected character '{}'", parsed_char.ch())
 			},
 			TokenErr::ExpectedButFound { expected, found } => {
 				super::display_error_pos(f, found.pos_begin, found.pos_end)?;
@@ -461,12 +507,13 @@ mod tests {
 		test_token_content_detection(",", TokenContent::StatementOp (StatementOp::Comma));
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
 		test_token_content_detection("@print", TokenContent::BuiltinName (String::from("print")));
+		test_token_content_detection("\"vasya\"", TokenContent::StringLiteral (String::from("vasya")));
 	}
 
 	#[test]
-	pub fn can_parse_simple_expr() {
+	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\"".to_string());
 		
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -478,13 +525,14 @@ mod tests {
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (9_f32));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Name (String::from("var1var")));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
 		assert_eq!(tokens_iter.parse_next_token(), None);
 	}
 
 	#[test]
-	pub fn can_parse_simple_expr_with_whitespaces() {
+	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var".to_string());
+		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var \"vasya\"".to_string());
 		
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -497,6 +545,7 @@ mod tests {
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (9_f32));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Name (String::from("var1")));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
 		assert_eq!(tokens_iter.parse_next_token(), None);
 	}
 
