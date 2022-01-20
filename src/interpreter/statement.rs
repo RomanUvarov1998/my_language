@@ -222,8 +222,8 @@ mod tests {
 	#[test]
 	pub fn can_make_variable_declare_statement() {
 		let mut statements_iter = StatementsIter::new();
-		statements_iter.push_string("var a: f32;".to_string());
 		
+		statements_iter.push_string("var a: f32;".to_string());		
 		let st = statements_iter.next().unwrap().unwrap();
 		assert_eq!(st, Statement::WithVariable ( 
 				WithVariable::Declare {
@@ -231,18 +231,38 @@ mod tests {
 					data_type: DataType::Float32, 
 				} 
 			) 
-		);
+		);		
+		assert!(statements_iter.next().is_none());
 		
+		statements_iter.push_string("var a: str;".to_string());
+		let st = statements_iter.next().unwrap().unwrap();
+		assert_eq!(st, Statement::WithVariable ( 
+				WithVariable::Declare {
+					var_name: String::from("a"), 
+					data_type: DataType::String, 
+				} 
+			) 
+		);		
+		assert!(statements_iter.next().is_none());
+		
+		statements_iter.push_string("var a: bool;".to_string());
+		let st = statements_iter.next().unwrap().unwrap();
+		assert_eq!(st, Statement::WithVariable ( 
+				WithVariable::Declare {
+					var_name: String::from("a"), 
+					data_type: DataType::Bool, 
+				} 
+			) 
+		);		
 		assert!(statements_iter.next().is_none());
 	}
 	
 	#[test]
 	pub fn can_make_variable_declare_set_statement() {
 		let mut statements_iter = StatementsIter::new();
-		statements_iter.push_string("var a: f32 = 3;".to_string());
-		
 		let mem = Memory::new();
 		
+		statements_iter.push_string("var a: f32 = 3;".to_string());
 		let st = statements_iter.next().unwrap().unwrap();
 		match st {
 			Statement::WithVariable ( 
@@ -257,8 +277,43 @@ mod tests {
 				var_name == String::from("a"))
 				=> {},
 			_ => panic!("wrong statement: {:?}", st),
-		};
+		};		
+		assert!(statements_iter.next().is_none());
 		
+		statements_iter.push_string("var a: str = \"hello\";".to_string());
+		let st = statements_iter.next().unwrap().unwrap();
+		match st {
+			Statement::WithVariable ( 
+				WithVariable::DeclareSet {
+					var_name, 
+					data_type: DataType::String, 
+					value_expr
+				} 
+			) 
+			if 
+				(value_expr.calc(&mem).unwrap() == Value::String(String::from("hello")) &&
+				var_name == String::from("a"))
+				=> {},
+			_ => panic!("wrong statement: {:?}", st),
+		};		
+		assert!(statements_iter.next().is_none());
+		
+		statements_iter.push_string("var a: bool = True;".to_string());
+		let st = statements_iter.next().unwrap().unwrap();
+		match st {
+			Statement::WithVariable ( 
+				WithVariable::DeclareSet {
+					var_name, 
+					data_type: DataType::Bool, 
+					value_expr
+				} 
+			) 
+			if 
+				(value_expr.calc(&mem).unwrap() == Value::Bool(true) &&
+				var_name == String::from("a"))
+				=> {},
+			_ => panic!("wrong statement: {:?}", st),
+		};		
 		assert!(statements_iter.next().is_none());
 	}
 	

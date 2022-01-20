@@ -1,4 +1,4 @@
-use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp};
+use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp, Keyword};
 use super::InterpErr;
 use super::memory::Memory;
 use super::var_data::{Value, DataType};
@@ -22,7 +22,7 @@ impl Expr {
 	pub fn get_data_type(&self) -> DataType {
 		self.data_type
 	}
-	
+		
 	pub fn calc(&self, memory: &Memory) -> Result<Value, InterpErr> {
 		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len());
 		let mut expr = self.expr_stack.clone();
@@ -135,11 +135,16 @@ impl Expr {
 							| Operator::GreaterEqual
 							| Operator::Less
 							| Operator::LessEqual
+							| Operator::Not
+							| Operator::Equal
+							| Operator::NotEqual
+							| Operator::LogicalAnd
+							| Operator::LogicalOr
+							| Operator::LogicalXor
 							=> {
 								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, token, tok_op)?;
 						},
-						Operator::Equal | Operator::Assign 
-							=> return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) ),
+						Operator::Assign => return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) ),
 					};
 					
 					prev_is_operand = false;
@@ -155,8 +160,13 @@ impl Expr {
 					};
 				},
 				
-				TokenContent::Keyword (..) => {
-					return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) );
+				TokenContent::Keyword (kw) => match kw {
+					Keyword::Var => return Err( InterpErr::Expr( ExprErr::UnexpectedToken (token) ) ),
+					Keyword::True | Keyword::False => {
+						let sym = Symbol::new_bool_literal(*kw);
+						expr_stack.push((token, sym));
+						prev_is_operand = true;
+					},
 				},
 				
 				TokenContent::StatementOp (..) => unreachable!(),
@@ -191,7 +201,7 @@ impl Expr {
 						match &top_ref.1 {
 							Symbol::Operand (..) => {  
 								return Err( InterpErr::Expr( ExprErr::UnexpectedToken (
-									tmp_stack.pop().unwrap().0) ) )
+									tmp_stack.pop().unwrap().0) ) );
 							},
 								
 							Symbol::LeftBracket => break,
@@ -244,6 +254,29 @@ impl Expr {
 		
 		Ok(())
 	}
+
+	fn calc_expr_data_type(&self) -> Result<DataType, OperatorErr> {
+		todo!();
+		
+		// assert!(self.expr_stack.len() > 0);
+		// let mut type_calc_stack = Vec::<DataType>::with_capacity(self.expr_stack.len());
+		
+		// let mut ind: usize = 0_isize;
+		// while ind < self.expr_stack.len() {
+			// match &self.expr_stack[ind] {
+				// &Symbol::Operand (opnd) => {
+					// let opnd_dt: DataType = match opnd {
+						// Operand::Value (val) => val.get_type(),
+						// Operand::Name (name) => memory.get_variable(&name)?.get_type(),
+						// Operand::BuiltinName (_name) => todo!(),
+					// };
+					// type_calc_stack.push(opnd_dt);
+				// },
+				// &Symbol::LeftBracket => unreachable!(),
+				// &Symbol::ExprOperator (op) => todo!(), //op.check_operands_data_type(&mut type_calc_stack),
+			// }
+		// }
+	}
 }
 
 //------------------------------- ExprContext ----------------------------------
@@ -284,8 +317,10 @@ impl ExprContext {
 							=> Err( InterpErr::Expr (ExprErr::UnexpectedToken (tok.clone()) ) ),
 						StatementOp::Semicolon => Ok(true),
 					},
-					TokenContent::Keyword (..) 
-						=> Err( InterpErr::Expr (ExprErr::UnexpectedToken (tok.clone()) ) ),
+					TokenContent::Keyword (kw) => match kw {
+						Keyword::Var => Err( InterpErr::Expr (ExprErr::UnexpectedToken (tok.clone()) ) ),
+						Keyword::True | Keyword::False => Ok(false),
+					},
 				},
 			ExprContextKind::FunctionArg =>
 				match tok.content() {
@@ -349,6 +384,13 @@ impl Symbol {
 	fn new_string_literal(content: String) -> Self {
 		Symbol::Operand( Operand::Value (Value::String(content)) )
 	}
+	fn new_bool_literal(kw: Keyword) -> Self {
+		match kw {
+			Keyword::True => Symbol::Operand (Operand::Value (Value::Bool (true))),
+			Keyword::False => Symbol::Operand (Operand::Value (Value::Bool (false))),
+			_ => panic!("Unexpected input: {:?}", kw),
+		}
+	}
 	fn new_left_bracket() -> Self {
 		Symbol::LeftBracket
 	}
@@ -386,19 +428,29 @@ impl PartialEq for Operand {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
 enum ExprOperator {
-	BinPlus = 0_usize,
+	LogicalOr = 0_usize,
+	LogicalAnd,
+	LogicalXor,
+	
+	Equal,
+	NotEqual,
+	
+	Less,
+	LessEqual,
+	Greater,
+	GreaterEqual,
+	
+	BinPlus,
 	BinMinus,
+	
 	Div,
 	Mul,
-	Pow,
+	
 	UnPlus,
 	UnMinus,
-	// Equal,
-	// NotEqual,
-	// Greater,
-	// GreaterEqual,
-	//Less,
-	//LessEqual,
+	Not,
+	
+	Pow,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -420,14 +472,30 @@ enum OpAssot {
 	Right,
 }
 
-static OP_ATTRS: [OpInfo; 7] = [
-	OpInfo { arity: OpArity::Binary, rank: 0, assot: OpAssot::Left },		//BinPlus
-	OpInfo { arity: OpArity::Binary, rank: 0, assot: OpAssot::Left }, 	//BinMinus
-	OpInfo { arity: OpArity::Binary, rank: 1, assot: OpAssot::Left }, 	//Div
-	OpInfo { arity: OpArity::Binary, rank: 1, assot: OpAssot::Left }, 	//Mul
-	OpInfo { arity: OpArity::Binary, rank: 3, assot: OpAssot::Right }, 	//Pow
-	OpInfo { arity: OpArity::Unary, rank: 2, assot: OpAssot::Left },		//UnPlus
-	OpInfo { arity: OpArity::Unary, rank: 2, assot: OpAssot::Left },		//UnMinus
+static OP_ATTRS: [OpInfo; 17] = [
+	OpInfo { arity: OpArity::Binary, rank: 0, assot: OpAssot::Left },		//LogicalOr
+	OpInfo { arity: OpArity::Binary, rank: 1, assot: OpAssot::Left },		//LogicalAnd
+	OpInfo { arity: OpArity::Binary, rank: 2, assot: OpAssot::Left },		//LogicalXor
+	
+	OpInfo { arity: OpArity::Binary, rank: 3, assot: OpAssot::Left },		//Equal
+	OpInfo { arity: OpArity::Binary, rank: 3, assot: OpAssot::Left },		//NotEqual
+	
+	OpInfo { arity: OpArity::Binary, rank: 4, assot: OpAssot::Left },		//Less
+	OpInfo { arity: OpArity::Binary, rank: 4, assot: OpAssot::Left },		//LessEqual
+	OpInfo { arity: OpArity::Binary, rank: 4, assot: OpAssot::Left },		//Greater
+	OpInfo { arity: OpArity::Binary, rank: 4, assot: OpAssot::Left },		//GreaterEqual
+	
+	OpInfo { arity: OpArity::Binary, rank: 5, assot: OpAssot::Left },		//BinPlus
+	OpInfo { arity: OpArity::Binary, rank: 5, assot: OpAssot::Left }, 	//BinMinus
+	
+	OpInfo { arity: OpArity::Binary, rank: 6, assot: OpAssot::Left }, 	//Div
+	OpInfo { arity: OpArity::Binary, rank: 6, assot: OpAssot::Left }, 	//Mul
+	
+	OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left },		//UnPlus
+	OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left },		//UnMinus
+	OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left },		//Not
+	
+	OpInfo { arity: OpArity::Binary, rank: 8, assot: OpAssot::Right }, 	//Pow
 ];
 
 impl ExprOperator {
@@ -438,13 +506,16 @@ impl ExprOperator {
 			Operator::Mul => ExprOperator::Mul,
 			Operator::Div => ExprOperator::Div,
 			Operator::Pow => ExprOperator::Pow,
-			Operator::Equal 
-				| Operator::Assign 
-				| Operator::Greater 
-				| Operator::GreaterEqual
-				| Operator::Less 
-				| Operator::LessEqual 
-				=> unreachable!(),
+			Operator::Equal => ExprOperator::Equal,
+			Operator::Greater => ExprOperator::Greater,
+			Operator::GreaterEqual => ExprOperator::GreaterEqual,
+			Operator::Less => ExprOperator::Less,
+			Operator::LessEqual => ExprOperator::LessEqual,
+			Operator::NotEqual => ExprOperator::NotEqual,
+			Operator::LogicalAnd => ExprOperator::LogicalAnd,
+			Operator::LogicalOr => ExprOperator::LogicalOr,
+			Operator::LogicalXor => ExprOperator::LogicalXor,
+			Operator::Assign | Operator::Not => unreachable!(),
 		}
 	}
 	
@@ -461,6 +532,11 @@ impl ExprOperator {
 				| Operator::GreaterEqual
 				| Operator::Less 
 				| Operator::LessEqual 
+				| Operator::NotEqual
+				| Operator::Not
+				| Operator::LogicalAnd
+				| Operator::LogicalOr
+				| Operator::LogicalXor
 				=> unreachable!(),
 		}
 	}
@@ -483,6 +559,16 @@ impl ExprOperator {
 			Pow => self.apply_bin_pow(calc_stack),
 			UnPlus => self.apply_unary_plus(calc_stack),
 			UnMinus => self.apply_unary_minus(calc_stack),
+			Equal => self.apply_equal(calc_stack),
+			NotEqual => self.apply_not_equal(calc_stack),
+			Not => self.apply_not(calc_stack),
+			Greater => self.apply_greater(calc_stack),
+			GreaterEqual => self.apply_greater_equal(calc_stack),
+			Less => self.apply_less(calc_stack),
+			LessEqual => self.apply_less_equal(calc_stack),
+			LogicalAnd => self.apply_logical_and(calc_stack),
+			LogicalOr => self.apply_logical_or(calc_stack),
+			LogicalXor => self.apply_logical_xor(calc_stack),
 		}
 	}
 	
@@ -531,6 +617,86 @@ impl ExprOperator {
 		}
 	}
 	
+	fn apply_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 == val2)),
+			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 == val2)),
+			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 == val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn apply_not_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 != val2)),
+			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 != val2)),
+			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 != val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn apply_greater(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 > val2)),
+			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 > val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn apply_greater_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 >= val2)),
+			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 >= val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn apply_less(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 < val2)),
+			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 < val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn apply_less_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 <= val2)),
+			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 <= val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn apply_logical_and(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 && val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn apply_logical_or(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 || val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn apply_logical_xor(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 ^ val2)),
+			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
 	fn take_2_operands(calc_stack: &mut Vec<Value>) -> Result<(Value, Value), OperatorErr> {
 		let rhs: Value = calc_stack
 			.pop()
@@ -544,6 +710,7 @@ impl ExprOperator {
 				provided_cnt: 1,
 				required_cnt: 2, 
 			} )?;
+		print!(" to {:?} and {:?}", lhs, rhs);
 		Ok((lhs, rhs))
 	}
 	
@@ -564,6 +731,14 @@ impl ExprOperator {
 		}
 	}
 	
+	fn apply_not(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let op = Self::take_1_operand(calc_stack)?;
+		match op {
+			Value::Bool (val1) => Ok(Value::Bool(!val1)),
+			_ => return Err( self.create_err(&[&op]) ),
+		}
+	}
+	
 	fn take_1_operand(calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
 		let op: Value = calc_stack
 			.pop()
@@ -571,9 +746,16 @@ impl ExprOperator {
 				provided_cnt: 0,
 				required_cnt: 1, 
 			} )?;
+		print!(" to {:?}", op);
 		Ok(op)
 	}
 
+	fn check_operands_data_type(self, calc_stack: &mut Vec<Value>) -> Result<(), OperatorErr> {
+		todo!();
+		//match self {
+			
+		//}
+	}
 
 	fn create_err(&self, values: &[&Value]) -> OperatorErr {
 		let types: Vec<DataType> = values
@@ -653,41 +835,77 @@ mod tests {
 	#[test]
 	fn lookup_array_initialization() {
 		assert_eq!(
-			OP_ATTRS[ExprOperator::BinPlus as usize], 
+			OP_ATTRS[ExprOperator::LogicalOr as usize], 
 			OpInfo { arity: OpArity::Binary, rank: 0, assot: OpAssot::Left });
+		assert_eq!(
+			OP_ATTRS[ExprOperator::LogicalAnd as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 1, assot: OpAssot::Left });
+		assert_eq!(
+			OP_ATTRS[ExprOperator::LogicalXor as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 2, assot: OpAssot::Left });
+			
+		assert_eq!(
+			OP_ATTRS[ExprOperator::Equal as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 3, assot: OpAssot::Left });
+		assert_eq!(
+			OP_ATTRS[ExprOperator::NotEqual as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 3, assot: OpAssot::Left });
+			
+		assert_eq!(
+			OP_ATTRS[ExprOperator::Less as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 4, assot: OpAssot::Left });
+		assert_eq!(
+			OP_ATTRS[ExprOperator::LessEqual as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 4, assot: OpAssot::Left });
+		assert_eq!(
+			OP_ATTRS[ExprOperator::Greater as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 4, assot: OpAssot::Left });
+		assert_eq!(
+			OP_ATTRS[ExprOperator::GreaterEqual as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 4, assot: OpAssot::Left });
+			
+		assert_eq!(
+			OP_ATTRS[ExprOperator::BinPlus as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 5, assot: OpAssot::Left });
 		assert_eq!(
 			OP_ATTRS[ExprOperator::BinMinus as usize], 
-			OpInfo { arity: OpArity::Binary, rank: 0, assot: OpAssot::Left });
+			OpInfo { arity: OpArity::Binary, rank: 5, assot: OpAssot::Left });
+			
 		assert_eq!(
 			OP_ATTRS[ExprOperator::Div as usize], 
-			OpInfo { arity: OpArity::Binary, rank: 1, assot: OpAssot::Left });
+			OpInfo { arity: OpArity::Binary, rank: 6, assot: OpAssot::Left });
 		assert_eq!(
 			OP_ATTRS[ExprOperator::Mul as usize], 
-			OpInfo { arity: OpArity::Binary, rank: 1, assot: OpAssot::Left });
-		assert_eq!(
-			OP_ATTRS[ExprOperator::Pow as usize], 
-			OpInfo { arity: OpArity::Binary, rank: 3, assot: OpAssot::Right });
+			OpInfo { arity: OpArity::Binary, rank: 6, assot: OpAssot::Left });
+			
 		assert_eq!(
 			OP_ATTRS[ExprOperator::UnPlus as usize], 
-			OpInfo { arity: OpArity::Unary, rank: 2, assot: OpAssot::Left });
+			OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left });
 		assert_eq!(
 			OP_ATTRS[ExprOperator::UnMinus as usize], 
-			OpInfo { arity: OpArity::Unary, rank: 2, assot: OpAssot::Left });
+			OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left });
+		assert_eq!(
+			OP_ATTRS[ExprOperator::Not as usize], 
+			OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left });
+			
+		assert_eq!(
+			OP_ATTRS[ExprOperator::Pow as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 8, assot: OpAssot::Right });
 	}
 	
 	#[test]
-	fn check_stack_creation_and_calc() {
+	fn check_stack_creation_and_arithmetic_calc() {
 		test_expr_and_its_stack_eq("3.125;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 		],
-		3.125_f32);
+		Value::Float32(3.125_f32));
 		
 		test_expr_and_its_stack_eq("3.125 + 5.4;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (5.4_f32))),
 			Symbol::ExprOperator (ExprOperator::BinPlus),
 		],
-		3.125_f32 + 5.4_f32);
+		Value::Float32(3.125_f32 + 5.4_f32));
 		
 		test_expr_and_its_stack_eq("3.125 + 5.4 * 2.46;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
@@ -696,7 +914,7 @@ mod tests {
 			Symbol::ExprOperator (ExprOperator::Mul),
 			Symbol::ExprOperator (ExprOperator::BinPlus),
 		],
-		3.125_f32 + 5.4_f32 * 2.46_f32);
+		Value::Float32(3.125_f32 + 5.4_f32 * 2.46_f32));
 		
 		test_expr_and_its_stack_eq("3.125 + 0 + 5.25 * 2.25 - 3.25 / 2 * 4.25;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
@@ -713,7 +931,7 @@ mod tests {
 			Symbol::ExprOperator (ExprOperator::Mul),
 			Symbol::ExprOperator (ExprOperator::BinMinus),
 		],
-		3.125_f32 + 0.0_f32 + 5.25_f32 * 2.25_f32 - 3.25_f32 / 2.0_f32 * 4.25_f32);
+		Value::Float32(3.125_f32 + 0.0_f32 + 5.25_f32 * 2.25_f32 - 3.25_f32 / 2.0_f32 * 4.25_f32));
 		
 		test_expr_and_its_stack_eq("3.125 + -5.25 * 2.25;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
@@ -723,7 +941,7 @@ mod tests {
 			Symbol::ExprOperator (ExprOperator::Mul),
 			Symbol::ExprOperator (ExprOperator::BinPlus),
 		],
-		3.125_f32 + -5.25_f32 * 2.25_f32);
+		Value::Float32(3.125_f32 + -5.25_f32 * 2.25_f32));
 		
 		test_expr_and_its_stack_eq("2.5 * ---5.5;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (2.5_f32))),
@@ -733,7 +951,7 @@ mod tests {
 			Symbol::ExprOperator (ExprOperator::UnMinus),
 			Symbol::ExprOperator (ExprOperator::Mul),
 		],
-		2.5_f32 * ---5.5_f32);
+		Value::Float32(2.5_f32 * ---5.5_f32));
 		
 		test_expr_and_its_stack_eq("1.125 * (3.125 + 2.125);", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (1.125_f32))),
@@ -742,7 +960,7 @@ mod tests {
 			Symbol::ExprOperator (ExprOperator::BinPlus),
 			Symbol::ExprOperator (ExprOperator::Mul),
 		],
-		1.125_f32 * (3.125_f32 + 2.125_f32));
+		Value::Float32(1.125_f32 * (3.125_f32 + 2.125_f32)));
 		
 		test_expr_and_its_stack_eq("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (33_f32))),
@@ -761,7 +979,7 @@ mod tests {
 			Symbol::Operand (Operand::Value (Value::Float32 (30_f32))),
 			Symbol::ExprOperator (ExprOperator::BinMinus),
 		],
-		33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32);
+		Value::Float32(33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32));
 		
 		test_expr_and_its_stack_eq("-(8 - 2.125 * 5.125 + 4.125) / -3.125;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (8_f32))),
@@ -776,7 +994,7 @@ mod tests {
 			Symbol::ExprOperator (ExprOperator::UnMinus),
 			Symbol::ExprOperator (ExprOperator::Div),
 		],
-		-(8_f32 - 2.125_f32 * 5.125_f32 + 4.125_f32) / -3.125_f32);
+		Value::Float32(-(8_f32 - 2.125_f32 * 5.125_f32 + 4.125_f32) / -3.125_f32));
 		
 		test_expr_and_its_stack_eq("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (33_f32))),
@@ -795,14 +1013,14 @@ mod tests {
 			Symbol::Operand (Operand::Value (Value::Float32 (30_f32))),
 			Symbol::ExprOperator (ExprOperator::BinMinus),
 		],
-		33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32);
+		Value::Float32(33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32));
 		
 		test_expr_and_its_stack_eq("2^2;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
 			Symbol::ExprOperator (ExprOperator::Pow),
 		],
-		2_f32.powf(2_f32));
+		Value::Float32(2_f32.powf(2_f32)));
 		
 		test_expr_and_its_stack_eq("-2^2+4;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
@@ -812,7 +1030,7 @@ mod tests {
 			Symbol::Operand (Operand::Value (Value::Float32 (4_f32))),
 			Symbol::ExprOperator (ExprOperator::BinPlus),
 		],
-		-2_f32.powf(2_f32) + 4_f32);
+		Value::Float32(-2_f32.powf(2_f32) + 4_f32));
 		
 		test_expr_and_its_stack_eq("3^1^2;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
@@ -821,13 +1039,109 @@ mod tests {
 			Symbol::ExprOperator (ExprOperator::Pow),
 			Symbol::ExprOperator (ExprOperator::Pow),
 		],
-		3_f32.powf(1_f32.powf(2_f32)));
+		Value::Float32(3_f32.powf(1_f32.powf(2_f32))));
+	}
+	
+	#[test]
+	fn check_stack_creation_and_bool_calc() {
+		test_expr_and_its_stack_eq("False;", vec![
+			Symbol::Operand (Operand::Value (Value::Bool (false))),
+		],
+		Value::Bool(false));
+		
+		test_expr_and_its_stack_eq("True;", vec![
+			Symbol::Operand (Operand::Value (Value::Bool (true))),
+		],
+		Value::Bool(true));
+		
+		test_expr_and_its_stack_eq("True == True;", vec![
+			Symbol::Operand (Operand::Value (Value::Bool (true))),
+			Symbol::Operand (Operand::Value (Value::Bool (true))),
+			Symbol::ExprOperator (ExprOperator::Equal),
+		],
+		Value::Bool(true));
+		
+		test_expr_and_its_stack_eq("False == False;", vec![
+			Symbol::Operand (Operand::Value (Value::Bool (false))),
+			Symbol::Operand (Operand::Value (Value::Bool (false))),
+			Symbol::ExprOperator (ExprOperator::Equal),
+		],
+		Value::Bool(true));
+		
+		test_expr_and_its_stack_eq("True != False;", vec![
+			Symbol::Operand (Operand::Value (Value::Bool (true))),
+			Symbol::Operand (Operand::Value (Value::Bool (false))),
+			Symbol::ExprOperator (ExprOperator::NotEqual),
+		],
+		Value::Bool(true));
+		
+		test_expr_and_its_stack_eq("True land False;", vec![
+			Symbol::Operand (Operand::Value (Value::Bool (true))),
+			Symbol::Operand (Operand::Value (Value::Bool (false))),
+			Symbol::ExprOperator (ExprOperator::LogicalAnd),
+		],
+		Value::Bool(false));
+		
+		test_expr_and_its_stack_eq("True lor False;", vec![
+			Symbol::Operand (Operand::Value (Value::Bool (true))),
+			Symbol::Operand (Operand::Value (Value::Bool (false))),
+			Symbol::ExprOperator (ExprOperator::LogicalOr),
+		],
+		Value::Bool(true));
+		
+		test_expr_and_its_stack_eq("True lxor False;", vec![
+			Symbol::Operand (Operand::Value (Value::Bool (true))),
+			Symbol::Operand (Operand::Value (Value::Bool (false))),
+			Symbol::ExprOperator (ExprOperator::LogicalXor),
+		],
+		Value::Bool(true));
+		
+		test_expr_and_its_stack_eq("2 > 3;", vec![
+			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
+			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
+			Symbol::ExprOperator (ExprOperator::Greater),
+		],
+		Value::Bool(false));
+		
+		test_expr_and_its_stack_eq("2 >= 3;", vec![
+			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
+			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
+			Symbol::ExprOperator (ExprOperator::GreaterEqual),
+		],
+		Value::Bool(false));
+		
+		test_expr_and_its_stack_eq("2 < 3;", vec![
+			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
+			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
+			Symbol::ExprOperator (ExprOperator::Less),
+		],
+		Value::Bool(true));
+		
+		test_expr_and_its_stack_eq("2 <= 3;", vec![
+			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
+			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
+			Symbol::ExprOperator (ExprOperator::LessEqual),
+		],
+		Value::Bool(true));
+		
+		test_expr_and_its_stack_eq("1 + 1 ^ 10 <= 27 / 9;", vec![
+			Symbol::Operand (Operand::Value (Value::Float32 (1_f32))),
+			Symbol::Operand (Operand::Value (Value::Float32 (1_f32))),
+			Symbol::Operand (Operand::Value (Value::Float32 (10_f32))),
+			Symbol::ExprOperator (ExprOperator::Pow),
+			Symbol::ExprOperator (ExprOperator::BinPlus),
+			Symbol::Operand (Operand::Value (Value::Float32 (27_f32))),
+			Symbol::Operand (Operand::Value (Value::Float32 (9_f32))),
+			Symbol::ExprOperator (ExprOperator::Div),
+			Symbol::ExprOperator (ExprOperator::LessEqual),
+		],
+		Value::Bool(true));
 	}
 	
 	fn test_expr_and_its_stack_eq(
 		expr_str: &str, 
 		correct_expr_stack: Vec<Symbol>,
-		result: f32
+		result: Value
 	) {
 		let mut tokens_iter = TokensIter::new();	
 		tokens_iter.push_string(expr_str.to_string());
@@ -848,14 +1162,11 @@ mod tests {
 			
 			let memory = Memory::new();
 			
-			match expr.calc(&memory).unwrap() {
-				Value::Float32 (res) => if (result - res).abs() > std::f32::EPSILON * 3.0 {
-					panic!("Wrong result '{}' != {:?} instead of {}", expr_str, res, result);
-				},
-				res @ _ => panic!("Wrong result type for code '{}', expected Value::Float32, got {:?}", expr_str, res),
-			}
+			let ans = expr.calc(&memory).unwrap();
 			
-			println!("Ok: '{}'", expr_str);
+			if ans != result {
+				panic!("Wrong result for code '{}': {:?} != {:?}", expr_str, ans, result);
+			}
 			
 			return; 
 		}

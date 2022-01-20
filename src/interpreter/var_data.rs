@@ -40,13 +40,14 @@ impl VarData {
 pub enum DataType {
 	Float32,
 	String,
-	//Bool,
+	Bool,
 }
 impl DataType {
 	pub fn parse(name: &str) -> Result<Self, VarErr> {
 		match name {
 			"f32" => Ok( DataType::Float32 ),
 			"str" => Ok( DataType::String ),
+			"bool" => Ok( DataType::String ),
 			_ => Err( VarErr::UnknownType { name: name.to_string() } ),
 		}
 	}
@@ -56,7 +57,7 @@ impl DataType {
 pub enum Value {
 	Float32 (f32),
 	String (String),
-	//Bool (bool),
+	Bool (bool),
 }
 impl Eq for Value {}
 impl PartialEq for Value {
@@ -70,6 +71,10 @@ impl PartialEq for Value {
 				Value::String (s2) => s1 == s2,
 				_ => false,
 			},
+			Value::Bool (b1) => match other {
+				Value::Bool (b2) => b1 == b2,
+				_ => false,
+			},
 		}
 	}
 }
@@ -78,6 +83,7 @@ impl Value {
 		match self {
 			Value::Float32 (_) => DataType::Float32,
 			Value::String (_) => DataType::String,		
+			Value::Bool (_) => DataType::Bool,		
 		}
 	}
 }

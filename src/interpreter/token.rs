@@ -96,11 +96,18 @@ impl TokensIter {
 		}
 	}
 	
-	fn parse_number(&mut self, pos_begin: CharPos, first_digit: u32, already_encountered_dot : bool) -> Result<Token, TokenErr> {
-		let mut value: f32 = first_digit as f32;
-		let mut has_dot: bool = already_encountered_dot;
+	fn parse_number(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
+		let mut has_dot = false;
+		let mut value: f32 = match first_char.kind() {
+			CharKind::Digit (first_digit) => first_digit as f32,
+			CharKind::Dot => {
+				has_dot = true;
+				0_f32
+			},
+			_ => panic!("Wrong input: {:?}", first_char),
+		};
 		let mut frac_multiplier = 0.1_f32;
-		let mut pos_end: CharPos = pos_begin;
+		let mut pos_end: CharPos = first_char.pos();
 		loop {
 			match self.iter.peek() {
 				Some(parsed_char) => {
@@ -124,11 +131,11 @@ impl TokensIter {
 							}
 						},
 						CharKind::Letter => break Err(TokenErr::Construct (parsed_char)),
-						_ => break Ok( Token::new(pos_begin, pos_end, TokenContent::Number (value) )),
+						_ => break Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) )),
 					};
 					pos_end = parsed_char.pos();
 				},
-				None => break Ok( Token::new(pos_begin, pos_end, TokenContent::Number (value) )),
+				None => break Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) )),
 			}
 		}
 	}
@@ -147,6 +154,7 @@ impl TokensIter {
 					CharKind::Greater |
 					CharKind::Less |
 					CharKind::Asterisk |
+					CharKind::Exclamation |
 					CharKind::Circumflex |
 					CharKind::LeftSlash |
 					CharKind::LeftBracket |
@@ -174,17 +182,17 @@ impl TokensIter {
 		}
 	}
 
-	fn parse_name_or_keyword(&mut self, pos_begin: CharPos, first_char: char) -> Result<Token, TokenErr> {
+	fn parse_name_or_keyword_or_operator(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
 		let is_builtin: bool;
-		let mut name = if first_char == '@' {
+		let mut name = if first_char.kind() == CharKind::Dog {
 			is_builtin = true;
 			String::new()
 		} else {
 			is_builtin = false;
-			String::from(first_char)
+			String::from(first_char.ch())
 		};
 		
-		let mut pos_end: CharPos = pos_begin;
+		let mut pos_end: CharPos = first_char.pos();
 		
 		loop {
 			match self.iter.peek() {
@@ -207,36 +215,41 @@ impl TokensIter {
 		}
 		
 		let token = match name.as_str() {
-			"var" => Token::new(pos_begin, pos_end, TokenContent::Keyword ( Keyword::Var )),
+			"var" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::Var )),
+			"True" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::True )),
+			"False" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::False )),
+			"land" => Token::new(first_char.pos(), pos_end, TokenContent::Operator ( Operator::LogicalAnd )),
+			"lor" => Token::new(first_char.pos(), pos_end, TokenContent::Operator ( Operator::LogicalOr )),
+			"lxor" => Token::new(first_char.pos(), pos_end, TokenContent::Operator ( Operator::LogicalXor )),
 			_ => if is_builtin {
-					Token::new(pos_begin, pos_end, TokenContent::BuiltinName (name))
+					Token::new(first_char.pos(), pos_end, TokenContent::BuiltinName (name))
 				} else {
-					Token::new(pos_begin, pos_end, TokenContent::Name (name))
+					Token::new(first_char.pos(), pos_end, TokenContent::Name (name))
 				},
 		};
 		
 		Ok( token )
 	}
 
-	fn parse_assignment_or_equality(&mut self, pos_begin: CharPos) -> Result<Token, TokenErr> {
-		let mut pos_end: CharPos = pos_begin;
-		match self.iter.peek() {
-			Some(parsed_char) => {
-				pos_end = parsed_char.pos();
-				match parsed_char.kind() {
-					CharKind::Eq => {
-						self.iter.next(); 
-						Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Equal)) )
-					},
-					_ => Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Assign)) ),
-				}
-			},
-			None => Ok( Token::new(pos_begin, pos_end, TokenContent::Operator (Operator::Assign)) ),
-		}
-	}
-
-	fn parse_cmp_operator(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
+	fn parse_operator(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
 		match first_char.kind() {
+			CharKind::Plus => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Plus )) ),
+			CharKind::Minus => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Minus )) ),
+			CharKind::LeftSlash => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Div )) ),
+			CharKind::Asterisk => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Mul )) ),
+			CharKind::Circumflex => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Pow )) ),
+			
+			CharKind::Exclamation => match self.iter.peek() {
+				Some(second_char) => match second_char.kind() {
+					CharKind::Eq => {
+						let second_char: ParsedChar = self.iter.next().unwrap();
+						Ok( Token::new(first_char.pos(), second_char.pos(), TokenContent::Operator ( Operator::NotEqual )) )
+					},
+					_ => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Not )) ),
+				},
+				None => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Not )) ),
+			},
+			
 			CharKind::Greater => match self.iter.peek() {
 				Some(second_char) => match second_char.kind() {
 					CharKind::Eq => {
@@ -256,6 +269,7 @@ impl TokensIter {
 					first_char.pos(), 
 					TokenContent::Operator (Operator::Greater)) ),
 			},
+			
 			CharKind::Less => match self.iter.peek() {
 				Some(second_char) => match second_char.kind() {
 					CharKind::Eq => {
@@ -275,7 +289,21 @@ impl TokensIter {
 					first_char.pos(), 
 					TokenContent::Operator (Operator::Less)) ),
 			},
-			_ => panic!("Wrong input char: {:?}", first_char),
+			
+			CharKind::Eq => match self.iter.peek() {
+				Some(parsed_char) => {					
+					match parsed_char.kind() {
+						CharKind::Eq => {
+							self.iter.next().unwrap(); 
+							Ok( Token::new(first_char.pos(), parsed_char.pos(), TokenContent::Operator (Operator::Equal)) )
+						},
+						_ => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator (Operator::Assign)) ),
+					}
+				},
+				None => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator (Operator::Assign)) ),
+			}
+			
+			_ => panic!("Unexpected input: {:?}", first_char),
 		}
 	}
 
@@ -293,32 +321,37 @@ impl TokensIter {
 	fn parse_next_token(&mut self) -> Option<Result<Token, TokenErr>> {		
 		for ch in self.iter.by_ref() {			
 			let token_result = match ch.kind() {
-				CharKind::Digit (first_digit) => self.parse_number(ch.pos(), first_digit, false),
-				CharKind::Dot => match self.iter.peek() {
-					Some(ch2) => match ch2.kind() {
-						CharKind::Digit (_) => self.parse_number(ch2.pos(), 0_u32, true),
-						_ => Err( TokenErr::Construct (ch2) ),
-					},
-					None => Err( TokenErr::Construct (ch) ),
-				},
-				CharKind::Plus => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Plus )) ),
-				CharKind::Minus => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Minus )) ),
-				CharKind::Greater | CharKind::Less => self.parse_cmp_operator(ch),
-				CharKind::Asterisk => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Mul )) ),
-				CharKind::Circumflex => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Pow )) ),
+				CharKind::Digit (_) | CharKind::Dot => self.parse_number(ch),
+				
+				CharKind::Plus | CharKind::Minus 
+					| CharKind::Greater | CharKind::Less
+					| CharKind::Asterisk
+					| CharKind::Circumflex 
+					| CharKind::LeftSlash
+					| CharKind::Eq
+					| CharKind::Exclamation
+						=> self.parse_operator(ch),
+						
 				CharKind::DoubleQuote => self.parse_string_literal(ch.pos()),
-				CharKind::LeftSlash => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Div )) ),
+				
 				CharKind::LeftBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Left )) ),
 				CharKind::RightBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Right )) ),
-				CharKind::Eq => self.parse_assignment_or_equality(ch.pos()),
-				CharKind::Letter => self.parse_name_or_keyword(ch.pos(), ch.ch()),
-				CharKind::Dog => self.parse_name_or_keyword(ch.pos(), ch.ch()),
-				CharKind::Whitespace | CharKind::Control | CharKind::NewLine => continue,
+				
+				CharKind::Letter 
+					| CharKind::Dog 
+						=> self.parse_name_or_keyword_or_operator(ch),
+				
+				CharKind::Whitespace 
+					| CharKind::Control 
+					| CharKind::NewLine 
+						=> continue,
+				
 				CharKind::Punctuation (p) => match p {
 					Punctuation::Colon => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::StatementOp (StatementOp::Colon)) ),
 					Punctuation::Semicolon => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::StatementOp (StatementOp::Semicolon)) ),
 					Punctuation::Comma => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::StatementOp (StatementOp::Comma)) ),
 				},
+				
 				CharKind::Invalid => Err(TokenErr::Construct (ch) ),
 			};
 			
@@ -397,10 +430,15 @@ impl std::fmt::Display for TokenContent {
 				Operator::Pow => write!(f, "'{}'", "^"),
 				Operator::Equal => write!(f, "'{}'", "=="),
 				Operator::Assign => write!(f, "'{}'", "="),
+				Operator::NotEqual => write!(f, "'{}'", "!="),
+				Operator::Not => write!(f, "'{}'", "!"),
 				Operator::Greater => write!(f, "'{}'", ">"),
 				Operator::GreaterEqual => write!(f, "'{}'", ">="),
 				Operator::Less => write!(f, "'{}'", "<"),
 				Operator::LessEqual => write!(f, "'{}'", "<="),
+				Operator::LogicalAnd => write!(f, "'{}'", "LogicalAnd"),
+				Operator::LogicalOr => write!(f, "'{}'", "LogicalOr"),
+				Operator::LogicalXor => write!(f, "'{}'", "LogicalXor"),
 			},
 			TokenContent::Bracket (br) => match br {
 				Bracket::Right => write!(f, "'{}'", ")"),
@@ -415,6 +453,8 @@ impl std::fmt::Display for TokenContent {
 			},
 			TokenContent::Keyword (kw) => match kw {
 				Keyword::Var => write!(f, "'{}'", "var"),
+				Keyword::True => write!(f, "'{}'", "True"),
+				Keyword::False => write!(f, "'{}'", "False"),
 			},
 		}
 	}
@@ -469,10 +509,15 @@ pub enum Operator {
 	Div,
 	Equal,
 	Assign,
+	Not,
+	NotEqual,
 	Greater,
 	GreaterEqual,
 	Less,
 	LessEqual,
+	LogicalAnd,
+	LogicalOr,
+	LogicalXor,
 }
 
 //---------------------------- Extra... --------------------------------
@@ -493,6 +538,8 @@ pub enum StatementOp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Keyword {
 	Var,
+	True,
+	False,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -567,12 +614,14 @@ mod tests {
 		test_token_content_detection(">=", TokenContent::Operator (Operator::GreaterEqual));
 		test_token_content_detection("<", TokenContent::Operator (Operator::Less));
 		test_token_content_detection("<=", TokenContent::Operator (Operator::LessEqual));
+		test_token_content_detection("!=", TokenContent::Operator (Operator::NotEqual));
+		test_token_content_detection("!", TokenContent::Operator (Operator::Not));
 	}
 
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<=".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!".to_string());
 		
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -589,13 +638,16 @@ mod tests {
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEqual));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Less));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEqual));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Equal));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::NotEqual));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Not));
 		assert_eq!(tokens_iter.parse_next_token(), None);
 	}
 
 	#[test]
 	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var \"vasya\" > >= < <=  ".to_string());
+		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var \"vasya\" > >= < <=  == !=  !  ".to_string());
 		
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -613,6 +665,9 @@ mod tests {
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEqual));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Less));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEqual));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Equal));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::NotEqual));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Not));
 		assert_eq!(tokens_iter.parse_next_token(), None);
 	}
 
