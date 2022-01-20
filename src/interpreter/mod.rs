@@ -65,7 +65,7 @@ impl Interpreter {
 				Statement::FuncCall { kind, name, arg_exprs } => {
 					let types: Vec<DataType> = arg_exprs
 						.iter()
-						.map(|expr| expr.get_data_type())
+						.map(|expr| expr.calc_data_type(&self.memory).unwrap())
 						.collect();
 					
 					match kind {

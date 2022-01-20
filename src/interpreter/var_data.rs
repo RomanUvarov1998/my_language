@@ -47,7 +47,7 @@ impl DataType {
 		match name {
 			"f32" => Ok( DataType::Float32 ),
 			"str" => Ok( DataType::String ),
-			"bool" => Ok( DataType::String ),
+			"bool" => Ok( DataType::Bool ),
 			_ => Err( VarErr::UnknownType { name: name.to_string() } ),
 		}
 	}

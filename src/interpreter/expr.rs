@@ -7,7 +7,6 @@ type TokSym = (Token, Symbol);
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Expr {
-	data_type: DataType,
 	expr_stack: Vec<TokSym>,
 }
 
@@ -16,11 +15,7 @@ impl Expr {
 		let context = ExprContext::new(context_kind);
 		let expr_stack = Self::create_stack(tokens_iter, context)?;
 		
-		Ok( Self { data_type: DataType::Float32, expr_stack } )
-	}
-	
-	pub fn get_data_type(&self) -> DataType {
-		self.data_type
+		Ok( Self { expr_stack } )
 	}
 		
 	pub fn calc(&self, memory: &Memory) -> Result<Value, InterpErr> {
@@ -55,6 +50,35 @@ impl Expr {
 		assert_eq!(calc_stack.pop(), None);
 		
 		Ok(result)
+	}
+	
+	pub fn calc_data_type(&self, memory: &Memory) -> Result<DataType, InterpErr> {		
+		assert!(self.expr_stack.len() > 0);
+		let mut type_calc_stack = Vec::<DataType>::with_capacity(self.expr_stack.len());
+		
+		let mut ind: usize = 0_usize;
+		while ind < self.expr_stack.len() {
+			match &self.expr_stack[ind] {
+				(.., Symbol::Operand (ref opnd)) => {
+					let opnd_dt: DataType = match opnd {
+						Operand::Value (val) => val.get_type(),
+						Operand::Name (name) => memory.get_variable(&name)?.get_type(),
+						Operand::BuiltinName (_name) => todo!(),
+					};
+					type_calc_stack.push(opnd_dt);
+				},
+				(.., Symbol::LeftBracket) => unreachable!(),
+				(tok, Symbol::ExprOperator (op)) => {
+					match op.get_result_data_type(&mut type_calc_stack) {
+						Err(err) => return Err( InterpErr::from(ExprErr::Operator { err, tok: tok.clone() }) ),
+						Ok(dt) => type_calc_stack.push(dt),
+					}
+				}, 
+			}
+			ind += 1;
+		}
+		
+		Ok(DataType::Float32)
 	}
 
 	fn create_stack(tokens_iter: &mut TokensIter, mut context: ExprContext) -> Result<Vec<TokSym>, InterpErr> {
@@ -253,29 +277,6 @@ impl Expr {
 		};
 		
 		Ok(())
-	}
-
-	fn calc_expr_data_type(&self) -> Result<DataType, OperatorErr> {
-		todo!();
-		
-		// assert!(self.expr_stack.len() > 0);
-		// let mut type_calc_stack = Vec::<DataType>::with_capacity(self.expr_stack.len());
-		
-		// let mut ind: usize = 0_isize;
-		// while ind < self.expr_stack.len() {
-			// match &self.expr_stack[ind] {
-				// &Symbol::Operand (opnd) => {
-					// let opnd_dt: DataType = match opnd {
-						// Operand::Value (val) => val.get_type(),
-						// Operand::Name (name) => memory.get_variable(&name)?.get_type(),
-						// Operand::BuiltinName (_name) => todo!(),
-					// };
-					// type_calc_stack.push(opnd_dt);
-				// },
-				// &Symbol::LeftBracket => unreachable!(),
-				// &Symbol::ExprOperator (op) => todo!(), //op.check_operands_data_type(&mut type_calc_stack),
-			// }
-		// }
 	}
 }
 
@@ -572,6 +573,29 @@ impl ExprOperator {
 		}
 	}
 	
+	fn get_result_data_type(self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		use ExprOperator::*;
+		match self {
+			BinPlus => self.get_bin_plus_result_type(calc_stack),
+			BinMinus => self.get_bin_minus_result_type(calc_stack),
+			Div => self.get_bin_div_result_type(calc_stack),
+			Mul => self.get_bin_mul_result_type(calc_stack),
+			Pow => self.get_bin_pow_result_type(calc_stack),
+			UnPlus => self.get_unary_plus_result_type(calc_stack),
+			UnMinus => self.get_unary_minus_result_type(calc_stack),
+			Equal => self.get_equal_result_type(calc_stack),
+			NotEqual => self.get_not_equal_result_type(calc_stack),
+			Not => self.get_not_result_type(calc_stack),
+			Greater => self.get_greater_result_type(calc_stack),
+			GreaterEqual => self.get_greater_equal_result_type(calc_stack),
+			Less => self.get_less_result_type(calc_stack),
+			LessEqual => self.get_less_equal_result_type(calc_stack),
+			LogicalAnd => self.get_logical_and_result_type(calc_stack),
+			LogicalOr => self.get_logical_or_result_type(calc_stack),
+			LogicalXor => self.get_logical_xor_result_type(calc_stack),
+		}
+	}
+	
 	fn apply_bin_plus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
@@ -581,7 +605,7 @@ impl ExprOperator {
 				res.push_str(&val2);
 				Ok(Value::String(res))
 			},
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 	
@@ -589,7 +613,7 @@ impl ExprOperator {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 - val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 	
@@ -597,7 +621,7 @@ impl ExprOperator {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 * val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 	
@@ -605,7 +629,7 @@ impl ExprOperator {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 / val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 	
@@ -613,7 +637,7 @@ impl ExprOperator {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1.powf(val2))),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 	
@@ -623,7 +647,7 @@ impl ExprOperator {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 == val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 == val2)),
 			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 == val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 
@@ -633,7 +657,7 @@ impl ExprOperator {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 != val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 != val2)),
 			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 != val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 
@@ -642,7 +666,7 @@ impl ExprOperator {
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 > val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 > val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 
@@ -651,7 +675,7 @@ impl ExprOperator {
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 >= val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 >= val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 
@@ -660,7 +684,7 @@ impl ExprOperator {
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 < val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 < val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 
@@ -669,7 +693,7 @@ impl ExprOperator {
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 <= val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 <= val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 
@@ -677,7 +701,7 @@ impl ExprOperator {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 && val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 
@@ -685,7 +709,7 @@ impl ExprOperator {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 || val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 
@@ -693,24 +717,23 @@ impl ExprOperator {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 ^ val2)),
-			ops @ _ => return Err( self.create_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 	
-	fn take_2_operands(calc_stack: &mut Vec<Value>) -> Result<(Value, Value), OperatorErr> {
-		let rhs: Value = calc_stack
+	fn take_2_operands<T>(calc_stack: &mut Vec<T>) -> Result<(T, T), OperatorErr> {
+		let rhs: T = calc_stack
 			.pop()
 			.ok_or(OperatorErr::NotEnoughOperands { 
 				provided_cnt: 0,
 				required_cnt: 2, 
 			} )?;
-		let lhs: Value = calc_stack
+		let lhs: T = calc_stack
 			.pop()
 			.ok_or(OperatorErr::NotEnoughOperands { 
 				provided_cnt: 1,
 				required_cnt: 2, 
 			} )?;
-		print!(" to {:?} and {:?}", lhs, rhs);
 		Ok((lhs, rhs))
 	}
 	
@@ -719,7 +742,7 @@ impl ExprOperator {
 		let op = Self::take_1_operand(calc_stack)?;
 		match op {
 			Value::Float32 (val1) => Ok(Value::Float32(val1)),
-			_ => return Err( self.create_err(&[&op]) ),
+			_ => return Err( self.create_value_type_err(&[&op]) ),
 		}
 	}
 	
@@ -727,7 +750,7 @@ impl ExprOperator {
 		let op = Self::take_1_operand(calc_stack)?;
 		match op {
 			Value::Float32 (val1) => Ok(Value::Float32(-val1)),
-			_ => return Err( self.create_err(&[&op]) ),
+			_ => return Err( self.create_value_type_err(&[&op]) ),
 		}
 	}
 	
@@ -735,29 +758,21 @@ impl ExprOperator {
 		let op = Self::take_1_operand(calc_stack)?;
 		match op {
 			Value::Bool (val1) => Ok(Value::Bool(!val1)),
-			_ => return Err( self.create_err(&[&op]) ),
+			_ => return Err( self.create_value_type_err(&[&op]) ),
 		}
 	}
 	
-	fn take_1_operand(calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let op: Value = calc_stack
+	fn take_1_operand<T>(calc_stack: &mut Vec<T>) -> Result<T, OperatorErr> {
+		let op: T = calc_stack
 			.pop()
 			.ok_or(OperatorErr::NotEnoughOperands { 
 				provided_cnt: 0,
 				required_cnt: 1, 
 			} )?;
-		print!(" to {:?}", op);
 		Ok(op)
 	}
-
-	fn check_operands_data_type(self, calc_stack: &mut Vec<Value>) -> Result<(), OperatorErr> {
-		todo!();
-		//match self {
-			
-		//}
-	}
-
-	fn create_err(&self, values: &[&Value]) -> OperatorErr {
+	
+	fn create_value_type_err(&self, values: &[&Value]) -> OperatorErr {
 		let types: Vec<DataType> = values
 			.iter()
 			.map(|val| val.get_type())
@@ -768,6 +783,162 @@ impl ExprOperator {
 				"Operator {:?} cannot be applied to type(-s) {:?}", 
 				self, 
 				&types[..]))
+		}
+	}
+	
+	//---------------- Result data type -----------------------
+	
+	fn get_bin_plus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Float32),
+			(DataType::String, DataType::String) => Ok(DataType::String),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn get_bin_minus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Float32),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn get_bin_mul_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Float32),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn get_bin_div_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Float32),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn get_bin_pow_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Float32),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn get_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
+			(DataType::String, DataType::String) => Ok(DataType::Bool),
+			(DataType::Bool, DataType::Bool) => Ok(DataType::Bool),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn get_not_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
+			(DataType::String, DataType::String) => Ok(DataType::Bool),
+			(DataType::Bool, DataType::Bool) => Ok(DataType::Bool),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn get_greater_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
+			(DataType::String, DataType::String) => Ok(DataType::Bool),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn get_greater_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
+			(DataType::String, DataType::String) => Ok(DataType::Bool),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn get_less_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
+			(DataType::String, DataType::String) => Ok(DataType::Bool),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn get_less_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
+			(DataType::String, DataType::String) => Ok(DataType::Bool),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn get_logical_and_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Bool, DataType::Bool) => Ok(DataType::Bool),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn get_logical_or_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Bool, DataType::Bool) => Ok(DataType::Bool),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+
+	fn get_logical_xor_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		match (lhs, rhs) {
+			(DataType::Bool, DataType::Bool) => Ok(DataType::Bool),
+			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+		}
+	}
+	
+	fn get_unary_plus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let op = Self::take_1_operand(calc_stack)?;
+		match op {
+			DataType::Float32 => Ok(DataType::Float32),
+			_ => return Err( self.create_type_err(&[&op]) ),
+		}
+	}
+	
+	fn get_unary_minus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let op = Self::take_1_operand(calc_stack)?;
+		match op {
+			DataType::Float32 => Ok(DataType::Float32),
+			_ => return Err( self.create_type_err(&[&op]) ),
+		}
+	}
+	
+	fn get_not_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+		let op = Self::take_1_operand(calc_stack)?;
+		match op {
+			DataType::Bool => Ok(DataType::Bool),
+			_ => return Err( self.create_type_err(&[&op]) ),
+		}
+	}
+	
+	fn create_type_err(&self, values: &[&DataType]) -> OperatorErr {		
+		OperatorErr::WrongType { 
+			descr: String::from(format!(
+				"Operator {:?} cannot be applied to type(-s) {:?}", 
+				self, 
+				values))
 		}
 	}
 }
