@@ -48,14 +48,18 @@ impl Interpreter {
 			match statement_result? {
 				Statement::WithVariable (st) => match st {
 					WithVariable::Declare { var_name, data_type } => 
-						self.memory.add_variable(var_name, data_type)?,
-					WithVariable::DeclareSet { var_name, data_type, value_expr } => {
-						self.memory.add_variable(var_name.clone(), data_type)?;
-						self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?;
-					},
+						self.memory.add_variable(var_name, data_type, None)?,
+						
+					WithVariable::DeclareSet { var_name, data_type, value_expr } =>
+						self.memory.add_variable(
+							var_name, 
+							data_type,
+							Some(value_expr.calc(&self.memory)?))?,
+					
 					WithVariable::Set { var_name, value_expr } => 
 						self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?,
 				},
+				
 				Statement::FuncCall { kind, name, arg_exprs } => {
 					let types: Vec<DataType> = arg_exprs
 						.iter()
@@ -174,4 +178,9 @@ impl From<FuncErr> for InterpErr {
 	fn from(err: FuncErr) -> InterpErr {
         InterpErr::Func(err)
     }
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
 }

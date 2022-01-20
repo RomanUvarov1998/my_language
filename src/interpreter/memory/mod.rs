@@ -19,13 +19,18 @@ impl Memory {
 		}
 	}
 	
-	pub fn add_variable(&mut self, name: String, data_type: DataType) -> Result<(), VarErr> {
+	pub fn add_variable(&mut self, name: String, data_type: DataType, initial_value: Option<Value>) -> Result<(), VarErr> {
 		if let Ok(..) = self.find_var(&name) {
-			Err( VarErr::AlreadyExists { name: name.to_string() } )
-		} else {
-			self.vars.push(VarData::new(name, data_type));
-			Ok(())
+			return Err( VarErr::AlreadyExists { name } );
 		}
+		
+		if let Some(value) = initial_value {
+			self.vars.push(VarData::new_with_value(name, data_type, value)?);
+		} else {
+			self.vars.push(VarData::new_uninit(name, data_type));
+		}
+		
+		Ok(())
 	}
 	
 	pub fn set_variable(&mut self, name: &str, value: Value) -> Result<(), VarErr> {
@@ -77,27 +82,27 @@ mod tests {
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 
-			&VarData::new(String::from("a"), DataType::Float32));
+			&VarData::new_uninit(String::from("a"), DataType::Float32));
 		
 		println!("run 2");
 		int.run("a = 0.3 + 0.5;").unwrap();
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 
-			&VarData::new(String::from("a"), DataType::Float32).with_value(Value::Float32 (0.8_f32)).unwrap());
+			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (0.8_f32)).unwrap());
 		 
 		println!("run 3");
 		int.run("a = a + 0.5;").unwrap();
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 
-			&VarData::new(String::from("a"), DataType::Float32).with_value(Value::Float32 (1.3_f32)).unwrap());
+			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (1.3_f32)).unwrap());
 		
 		println!("run 4");
 		int.run("a = a * 2 + 1.4;").unwrap();
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 
-			&VarData::new(String::from("a"), DataType::Float32).with_value(Value::Float32 (4_f32)).unwrap());
+			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (4_f32)).unwrap());
 	}
 }

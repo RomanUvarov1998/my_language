@@ -5,14 +5,14 @@ pub struct VarData {
 	data_type: DataType,
 }
 impl VarData {
-	pub fn new(name: String, data_type: DataType) -> Self {
+	pub fn new_uninit(name: String, data_type: DataType) -> Self {
 		VarData { name, var_value: None, data_type }
 	}
 	
-	#[allow(unused)]
-	pub fn with_value(mut self, new_value: Value) -> Result<Self, VarErr>{
-		self.set(new_value)?;
-		Ok(self)
+	pub fn new_with_value(name: String, data_type: DataType, new_value: Value) -> Result<Self, VarErr>{
+		let mut vd: VarData = VarData::new_uninit(name, data_type);
+		vd.set(new_value)?;
+		Ok(vd)
 	}
 	
 	pub fn set(&mut self, new_var_value: Value) -> Result<(), VarErr> {
@@ -86,7 +86,10 @@ pub enum VarErr {
 	NotSet { name: String },
 	UnknownType { name: String },
 	AlreadyExists { name: String },
-	WrongType { new_var_value: Value, var_data_type: DataType },
+	WrongType { 
+		new_var_value: Value, 
+		var_data_type: DataType,
+	},
 }
 
 impl std::fmt::Display for VarErr {
