@@ -40,6 +40,7 @@ impl VarData {
 pub enum DataType {
 	Float32,
 	String,
+	//Bool,
 }
 impl DataType {
 	pub fn parse(name: &str) -> Result<Self, VarErr> {
@@ -55,6 +56,7 @@ impl DataType {
 pub enum Value {
 	Float32 (f32),
 	String (String),
+	//Bool (bool),
 }
 impl Eq for Value {}
 impl PartialEq for Value {

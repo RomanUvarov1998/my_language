@@ -131,6 +131,10 @@ impl Expr {
 						Operator::Mul 
 							| Operator::Div 
 							| Operator::Pow 
+							| Operator::Greater 
+							| Operator::GreaterEquals
+							| Operator::Less
+							| Operator::LessEquals
 							=> {
 								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, token, tok_op)?;
 						},
@@ -428,7 +432,13 @@ impl ArithmOperator {
 			Operator::Mul => ArithmOperator::Mul,
 			Operator::Div => ArithmOperator::Div,
 			Operator::Pow => ArithmOperator::Pow,
-			Operator::Equals | Operator::Assign => unreachable!(),
+			Operator::Equals 
+				| Operator::Assign 
+				| Operator::Greater 
+				| Operator::GreaterEquals
+				| Operator::Less 
+				| Operator::LessEquals 
+				=> unreachable!(),
 		}
 	}
 	
@@ -441,6 +451,10 @@ impl ArithmOperator {
 				| Operator::Equals 
 				| Operator::Assign 
 				| Operator::Pow 
+				| Operator::Greater 
+				| Operator::GreaterEquals
+				| Operator::Less 
+				| Operator::LessEquals 
 				=> unreachable!(),
 		}
 	}

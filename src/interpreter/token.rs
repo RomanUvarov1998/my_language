@@ -144,6 +144,8 @@ impl TokensIter {
 					CharKind::Dot |
 					CharKind::Plus |
 					CharKind::Minus |
+					CharKind::Greater |
+					CharKind::Less |
 					CharKind::Asterisk |
 					CharKind::Circumflex |
 					CharKind::LeftSlash |
@@ -233,6 +235,50 @@ impl TokensIter {
 		}
 	}
 
+	fn parse_cmp_operator(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
+		match first_char.kind() {
+			CharKind::Greater => match self.iter.peek() {
+				Some(second_char) => match second_char.kind() {
+					CharKind::Eq => {
+						self.iter.next().unwrap();
+						Ok( Token::new(
+							first_char.pos(), 
+							second_char.pos(), 
+							TokenContent::Operator (Operator::GreaterEquals)) )
+					},
+					_ => Ok( Token::new(
+						first_char.pos(), 
+						second_char.pos(), 
+						TokenContent::Operator (Operator::Greater)) ),
+				},
+				None => Ok( Token::new(
+					first_char.pos(), 
+					first_char.pos(), 
+					TokenContent::Operator (Operator::Greater)) ),
+			},
+			CharKind::Less => match self.iter.peek() {
+				Some(second_char) => match second_char.kind() {
+					CharKind::Eq => {
+						self.iter.next().unwrap();
+						Ok( Token::new(
+							first_char.pos(), 
+							second_char.pos(), 
+							TokenContent::Operator (Operator::LessEquals)) )
+					},
+					_ => Ok( Token::new(
+						first_char.pos(), 
+						second_char.pos(), 
+						TokenContent::Operator (Operator::Less)) ),
+				},
+				None => Ok( Token::new(
+					first_char.pos(), 
+					first_char.pos(), 
+					TokenContent::Operator (Operator::Less)) ),
+			},
+			_ => panic!("Wrong input char: {:?}", first_char),
+		}
+	}
+
 	fn expect(actual_token: Token, expected_tc: TokenContent) -> Result<(), TokenErr> {
 		if *actual_token.content() == expected_tc {
 			Ok(())
@@ -257,6 +303,7 @@ impl TokensIter {
 				},
 				CharKind::Plus => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Plus )) ),
 				CharKind::Minus => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Minus )) ),
+				CharKind::Greater | CharKind::Less => self.parse_cmp_operator(ch),
 				CharKind::Asterisk => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Mul )) ),
 				CharKind::Circumflex => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Operator ( Operator::Pow )) ),
 				CharKind::DoubleQuote => self.parse_string_literal(ch.pos()),
@@ -350,6 +397,10 @@ impl std::fmt::Display for TokenContent {
 				Operator::Pow => write!(f, "'{}'", "^"),
 				Operator::Equals => write!(f, "'{}'", "=="),
 				Operator::Assign => write!(f, "'{}'", "="),
+				Operator::Greater => write!(f, "'{}'", ">"),
+				Operator::GreaterEquals => write!(f, "'{}'", ">="),
+				Operator::Less => write!(f, "'{}'", "<"),
+				Operator::LessEquals => write!(f, "'{}'", "<="),
 			},
 			TokenContent::Bracket (br) => match br {
 				Bracket::Right => write!(f, "'{}'", ")"),
@@ -418,6 +469,10 @@ pub enum Operator {
 	Div,
 	Equals,
 	Assign,
+	Greater,
+	GreaterEquals,
+	Less,
+	LessEquals,
 }
 
 //---------------------------- Extra... --------------------------------
@@ -476,7 +531,7 @@ mod tests {
 	use super::*;
 	
 	#[test]
-	pub fn can_parse_tokens() {
+	pub fn can_parse_single_tokens() {
 		let test_token_content_detection = |code: &str, tc: TokenContent| {
 			let mut tokens_iter = TokensIter::new();
 			tokens_iter.push_string(code.to_string());
@@ -508,12 +563,16 @@ mod tests {
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
 		test_token_content_detection("@print", TokenContent::BuiltinName (String::from("print")));
 		test_token_content_detection("\"vasya\"", TokenContent::StringLiteral (String::from("vasya")));
+		test_token_content_detection(">", TokenContent::Operator (Operator::Greater));
+		test_token_content_detection(">=", TokenContent::Operator (Operator::GreaterEquals));
+		test_token_content_detection("<", TokenContent::Operator (Operator::Less));
+		test_token_content_detection("<=", TokenContent::Operator (Operator::LessEquals));
 	}
 
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\"".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<=".to_string());
 		
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -526,13 +585,17 @@ mod tests {
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (9_f32));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Name (String::from("var1var")));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEquals));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Less));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEquals));
 		assert_eq!(tokens_iter.parse_next_token(), None);
 	}
 
 	#[test]
 	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var \"vasya\"".to_string());
+		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var \"vasya\" > >= < <=  ".to_string());
 		
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -546,6 +609,10 @@ mod tests {
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Name (String::from("var1")));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
 		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEquals));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Less));
+		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEquals));
 		assert_eq!(tokens_iter.parse_next_token(), None);
 	}
 
