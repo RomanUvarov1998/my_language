@@ -12,6 +12,8 @@ use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
 use var_data::{VarErr, Value, DataType};
 use string_char::CharPos;
 
+//------------------------ Interpreter --------------------
+
 pub struct Interpreter {
 	memory: Memory,
 	builtin_func_defs: FuncsDefList,
@@ -106,11 +108,15 @@ impl Interpreter {
 	}
 }
 
+//------------------------ InterpInnerSignal --------------------
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum InterpInnerSignal {
 	CanContinue,
 	Exit,
 }
+
+//------------------------ InterpErr --------------------
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum InterpErr {
@@ -180,7 +186,47 @@ impl From<FuncErr> for InterpErr {
     }
 }
 
+//------------------------ Tests --------------------
+
 #[cfg(test)]
 mod tests {
 	use super::*;
+	
+	#[test]
+	fn check_err_if_redeclare_variable() {
+		let mut int = Interpreter::new();
+		
+		match int.run("var a: f32 = 3;") {
+			Ok(InterpInnerSignal::CanContinue) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+		
+		match int.run("var a: f32 = 4;") {
+			Err(InterpErr::Var (VarErr::AlreadyExists { name }) ) if name == String::from("a") => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
+	
+	#[test]
+	fn check_err_if_set_var_to_data_of_wrong_type() {
+		let mut int = Interpreter::new();
+		
+		match int.run("var a: f32 = \"hello\";") {
+			Err(InterpErr::Var (VarErr::WrongType { new_var_value, var_data_type }) ) 
+				if 
+					new_var_value == Value::String (String::from("hello")) &&
+					var_data_type == DataType::Float32
+				=> {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+		
+		match int.run("var a: str = 4;") {
+			Err(InterpErr::Var (VarErr::WrongType { new_var_value, var_data_type }) ) 
+				if 
+					new_var_value == Value::Float32 (4_f32) &&
+					var_data_type == DataType::String
+				=> {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
 }
