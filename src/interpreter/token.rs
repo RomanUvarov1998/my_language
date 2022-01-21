@@ -578,12 +578,15 @@ mod tests {
 		test_token_content_detection("<=", TokenContent::Operator (Operator::LessEqual));
 		test_token_content_detection("!=", TokenContent::Operator (Operator::NotEqual));
 		test_token_content_detection("!", TokenContent::Operator (Operator::Not));
+		test_token_content_detection("land", TokenContent::Operator (Operator::LogicalAnd));
+		test_token_content_detection("lor", TokenContent::Operator (Operator::LogicalOr));
+		test_token_content_detection("lxor", TokenContent::Operator (Operator::LogicalXor));
 	}
 
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!land lor lxor".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -603,13 +606,16 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Equal));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::NotEqual));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Not));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalAnd));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalOr));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalXor));
 		assert_eq!(tokens_iter.next(), None);
 	}
 
 	#[test]
 	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var \"vasya\" > >= < <=  == !=  !  ".to_string());
+		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -630,6 +636,9 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Equal));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::NotEqual));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Not));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalAnd));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalOr));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalXor));
 		assert_eq!(tokens_iter.next(), None);
 	}
 }

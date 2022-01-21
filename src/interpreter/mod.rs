@@ -336,4 +336,38 @@ mod tests {
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 	}
+
+	#[test]
+	pub fn can_run_declare_than_set_variable() {
+		println!("start"); 
+		let mut int = Interpreter::new();
+		
+		println!("run 1");
+		int.check_and_run("var a: f32;").unwrap();
+		
+		assert_eq!(
+			int.memory.find_var("a").unwrap(), 
+			&VarData::new_uninit(String::from("a"), DataType::Float32));
+		
+		println!("run 2");
+		int.check_and_run("a = 0.3 + 0.5;").unwrap();
+		
+		assert_eq!(
+			int.memory.find_var("a").unwrap(), 
+			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (0.8_f32)).unwrap());
+		 
+		println!("run 3");
+		int.check_and_run("a = a + 0.5;").unwrap();
+		
+		assert_eq!(
+			int.memory.find_var("a").unwrap(), 
+			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (1.3_f32)).unwrap());
+		
+		println!("run 4");
+		int.check_and_run("a = a * 2 + 1.4;").unwrap();
+		
+		assert_eq!(
+			int.memory.find_var("a").unwrap(), 
+			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (4_f32)).unwrap());
+	}
 }

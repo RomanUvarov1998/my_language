@@ -78,36 +78,26 @@ mod tests {
 	use super::super::*;
 	
 	#[test]
-	pub fn can_run_declare_than_set_variable() {
-		println!("start"); 
-		let mut int = Interpreter::new();
+	fn add_uninit_variable() {
+		let mut mem = Memory::new();
+		mem.add_variable(String::from("a"), DataType::Float32, None).unwrap();
 		
-		println!("run 1");
-		int.check_and_run("var a: f32;").unwrap();
+		assert_eq!(mem.vars[0], VarData::new_uninit(String::from("a"), DataType::Float32));
 		
-		assert_eq!(
-			int.memory.find_var("a").unwrap(), 
-			&VarData::new_uninit(String::from("a"), DataType::Float32));
+		assert_eq!(mem.get_variable_value("a"), Err(VarErr::NotSet { name: String::from("a") }));
 		
-		println!("run 2");
-		int.check_and_run("a = 0.3 + 0.5;").unwrap();
+		assert_eq!(mem.get_variable_type("a"), Ok(DataType::Float32));
+	}
+	
+	#[test]
+	fn add_variable_with_value() {
+		let mut mem = Memory::new();
+		mem.add_variable(String::from("a"), DataType::Float32, Some(Value::Float32(2_f32))).unwrap();
 		
-		assert_eq!(
-			int.memory.find_var("a").unwrap(), 
-			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (0.8_f32)).unwrap());
-		 
-		println!("run 3");
-		int.check_and_run("a = a + 0.5;").unwrap();
+		assert_eq!(mem.vars[0], VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32(2_f32)).unwrap());
 		
-		assert_eq!(
-			int.memory.find_var("a").unwrap(), 
-			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (1.3_f32)).unwrap());
+		assert_eq!(mem.get_variable_value("a"), Ok(&Value::Float32(2_f32)));
 		
-		println!("run 4");
-		int.check_and_run("a = a * 2 + 1.4;").unwrap();
-		
-		assert_eq!(
-			int.memory.find_var("a").unwrap(), 
-			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (4_f32)).unwrap());
+		assert_eq!(mem.get_variable_type("a"), Ok(DataType::Float32));
 	}
 }
