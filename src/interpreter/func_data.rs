@@ -60,7 +60,7 @@ impl FuncDef {
 		}
 		
 		for i in 0..self.args.len() {
-			if args_data_types[i] != self.args[i].data_type {
+			if !self.args[i].type_check(args_data_types[i]) {
 				return Err( FuncErr::ArgType { 
 					param_name: self.args[i].name.clone(),
 					actual_type: self.args[i].data_type,
@@ -79,14 +79,21 @@ impl FuncDef {
 
 pub struct FuncArg {
 	name: String,
-	data_type: DataType,
+	data_type: Option<DataType>,
 }
 
 impl FuncArg {
-	pub fn new(name: String, data_type: DataType) -> Self {
+	pub fn new(name: String, data_type: Option<DataType>) -> Self {
 		Self {
 			name,
 			data_type,
+		}
+	}
+	
+	pub fn type_check(&self, data_type: DataType) -> bool {
+		match self.data_type {
+			Some(dt) => data_type == dt,
+			None => true,
 		}
 	}
 }
@@ -102,7 +109,7 @@ pub enum FuncErr {
 	},
 	ArgType { 
 		param_name: String,
-		actual_type: DataType,
+		actual_type: Option<DataType>,
 		given_type: DataType,
 	},
 	NotDefined { name: String },

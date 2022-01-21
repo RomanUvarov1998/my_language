@@ -1,3 +1,5 @@
+//-------------------- VarData --------------
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct VarData {
 	name: String,
@@ -40,9 +42,10 @@ impl VarData {
 	}	
 }
 
-#[derive(Debug, Clone, Copy)]
+//-------------------- DataType --------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataType {
-	Any,
 	Float32,
 	String,
 	Bool,
@@ -57,27 +60,8 @@ impl DataType {
 		}
 	}
 }
-impl PartialEq for DataType {	
-	fn eq(&self, other: &Self) -> bool {
-		use DataType::*;
-		match self {
-			Any => true,
-			Float32 => match other {
-				Float32 | Any => true,
-				_ => false,
-			},
-			String => match other {
-				String | Any => true,
-				_ => false,
-			},
-			Bool => match other {
-				Bool | Any => true,
-				_ => false,
-			},
-		}
-	}
-}
-impl Eq for DataType {}
+
+//-------------------- Value --------------
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -127,6 +111,8 @@ impl Value {
 	}
 }
 
+//-------------------- VarErr --------------
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum VarErr {
 	NotDefined { name: String },
@@ -159,4 +145,12 @@ impl std::fmt::Display for VarErr {
 				write!(f, "Incompatible types: '{:?}' and '{:?}'", var_data_type, value_data_type),
 		}
 	}
+}
+
+//-------------------- Tests --------------
+
+#[cfg(test)]
+mod tests {
+	//#[test]
+	//fn 
 }

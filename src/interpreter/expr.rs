@@ -347,8 +347,10 @@ impl ExprContext {
 						StatementOp::Semicolon | StatementOp::Comma 
 							=> Ok(true),
 					},
-					TokenContent::Keyword (..) 
-						=> Err( InterpErr::from (ExprErr::UnexpectedToken (tok.clone()) ) ),
+					TokenContent::Keyword (kw) => match kw {
+						Keyword::Var => Err( InterpErr::from (ExprErr::UnexpectedToken (tok.clone()) ) ),
+						Keyword::True | Keyword::False => Ok(false),
+					},
 				},
 		}
 	}

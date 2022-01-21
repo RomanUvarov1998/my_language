@@ -27,7 +27,7 @@ impl Interpreter {
 		builtin_func_defs.add(FuncDef::new(
 			"print".to_string(),
 			vec![
-				FuncArg::new("value".to_string(), DataType::Any),
+				FuncArg::new("value".to_string(), None),
 			]
 		)).unwrap();
 		
@@ -338,36 +338,22 @@ mod tests {
 	}
 
 	#[test]
-	pub fn can_run_declare_than_set_variable() {
-		println!("start"); 
+	fn builtin_functions() {
 		let mut int = Interpreter::new();
 		
-		println!("run 1");
-		int.check_and_run("var a: f32;").unwrap();
+		match int.check_and_run("@print(\"hello\");") {
+			Ok(InterpInnerSignal::CanContinue) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
 		
-		assert_eq!(
-			int.memory.find_var("a").unwrap(), 
-			&VarData::new_uninit(String::from("a"), DataType::Float32));
+		match int.check_and_run("@print(3);") {
+			Ok(InterpInnerSignal::CanContinue) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
 		
-		println!("run 2");
-		int.check_and_run("a = 0.3 + 0.5;").unwrap();
-		
-		assert_eq!(
-			int.memory.find_var("a").unwrap(), 
-			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (0.8_f32)).unwrap());
-		 
-		println!("run 3");
-		int.check_and_run("a = a + 0.5;").unwrap();
-		
-		assert_eq!(
-			int.memory.find_var("a").unwrap(), 
-			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (1.3_f32)).unwrap());
-		
-		println!("run 4");
-		int.check_and_run("a = a * 2 + 1.4;").unwrap();
-		
-		assert_eq!(
-			int.memory.find_var("a").unwrap(), 
-			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (4_f32)).unwrap());
+		match int.check_and_run("@print(False);") {
+			Ok(InterpInnerSignal::CanContinue) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
 	}
 }

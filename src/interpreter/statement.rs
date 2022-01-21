@@ -28,6 +28,7 @@ impl StatementsIter {
 				
 			Token { content: TokenContent::Operator (Operator::Assign), .. } => 
 				self.parse_variable_set(name, is_builtin)?,
+				
 			_ => return Err( InterpErr::from ( TokenErr::ExpectedButFound { 
 					expected: vec![
 						TokenContent::Bracket(Bracket::Left),
@@ -226,7 +227,7 @@ impl Statement {
 			Statement::FuncCall { kind, name, arg_exprs } => {
 				match kind {
 					FuncKind::UserDefined => todo!(),
-					FuncKind::Builtin => {						
+					FuncKind::Builtin => {					
 						let fd: &FuncDef = builtin_func_defs.try_find(name)?;
 						
 						let args_data_types: Result<Vec<DataType>, InterpErr> = arg_exprs.iter()

@@ -75,7 +75,6 @@ impl Memory {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use super::super::*;
 	
 	#[test]
 	fn add_uninit_variable() {
