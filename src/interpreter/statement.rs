@@ -21,7 +21,7 @@ impl StatementsIter {
 	}	
 	
 	fn parse_variable_set_or_func_call(&mut self, name: String, is_builtin: bool) -> Result<Statement, InterpErr> {
-		let second = self.tokens_iter.next_or_err()?;
+		let second = self.tokens_iter.next_or_end_reached_err()?;
 		let statement = match second {
 			Token { content: TokenContent::Bracket(Bracket::Left), .. } => 
 				self.parse_func_call(name, is_builtin)?,
@@ -47,7 +47,7 @@ impl StatementsIter {
 		let type_name = self.tokens_iter.next_name_or_err()?;
 		let data_type = DataType::parse(&type_name)?;
 		
-		let tok_assign = self.tokens_iter.next_or_err()?;
+		let tok_assign = self.tokens_iter.next_or_end_reached_err()?;
 		match tok_assign {
 			Token { content: TokenContent::Operator (Operator::Assign), .. } => {},
 			Token { content: TokenContent::StatementOp ( StatementOp::Semicolon ), .. } => return 
@@ -96,15 +96,15 @@ impl StatementsIter {
 	fn parse_func_call(&mut self, func_name: String, is_builtin: bool) -> Result<Statement, InterpErr> {
 		let mut arg_exprs = Vec::<Expr>::new();
 		
-		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_err()?.content() {
-			self.tokens_iter.next_or_err().unwrap();
+		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_end_reached_err()?.content() {
+			self.tokens_iter.next_or_end_reached_err().unwrap();
 		} else {
 			loop {			
 				arg_exprs.push(Expr::new(
 					&mut self.tokens_iter,
 					ExprContextKind::FunctionArg)?);
 					
-				match self.tokens_iter.next_or_err()? {
+				match self.tokens_iter.next_or_end_reached_err()? {
 					Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
 					
 					Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
@@ -135,17 +135,10 @@ impl Iterator for StatementsIter {
 	type Item = Result<Statement, InterpErr>;
 	
 	fn next(&mut self) -> Option<Self::Item> {
-		match self.tokens_iter.cache_until_semicolon() {
-			Ok(true) => {},
-			Ok(false) => return None,
+		let first: Token = match self.tokens_iter.next()? {
+			Ok(tok) => tok,
 			Err(err) => return Some(Err(InterpErr::from(err))),
-		}
-		
-		if self.tokens_iter.cached_queue_is_empty() { 
-			return None;
-		}
-		
-		let first = self.tokens_iter.next_or_err().unwrap();
+		};
 		
 		let statement_result = match first {
 			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => 
@@ -166,10 +159,6 @@ impl Iterator for StatementsIter {
 					found
 				} ) ),
 		};
-		
-		if let Err(_) = statement_result {
-			self.tokens_iter.clear_cached_queue();
-		}
 		
 		Some(statement_result)
 	}	
@@ -269,6 +258,7 @@ pub enum FuncKind {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use super::super::*;
 	use super::super::var_data::Value;
 	use super::super::memory::Memory;
 	
@@ -428,100 +418,30 @@ mod tests {
 	}
 	
 	#[test]
-	pub fn can_make_statement_in_multiple_steps() {
-		let mut statements_iter = StatementsIter::new();
-		
-		let mem = Memory::new();
-		
-		statements_iter.push_string("var".to_string());		
-		assert_eq!(statements_iter.next(), None);
-		
-		statements_iter.push_string("a: ".to_string());
-		assert_eq!(statements_iter.next(), None);
-		
-		statements_iter.push_string("f32 ".to_string());
-		assert_eq!(statements_iter.next(), None);
-		
-		statements_iter.push_string(" = 3 ".to_string());
-		assert_eq!(statements_iter.next(), None);
-		
-		statements_iter.push_string(";".to_string());
-		let st = statements_iter.next().unwrap().unwrap();
-		match st {
-			Statement::WithVariable ( 
-				WithVariable::DeclareSet {
-					var_name, 
-					data_type: DataType::Float32, 
-					value_expr
-				} 
-			) 
-			if 
-				(value_expr.calc(&mem).unwrap() == Value::Float32(3_f32) &&
-				var_name == String::from("a"))
-				=> {},
-			_ => panic!("wrong statement: {:?}", st),
+	pub fn cannot_make_unfinished_statement() {		
+		let check_end_reached = |code: &str| {
+			let mut statements_iter = StatementsIter::new();
+			statements_iter.push_string(code.to_string());				
+			match statements_iter.next() {
+				Some(Err(InterpErr { inner: InnerErr::Token( TokenErr::EndReached { .. }), .. } )) => {},
+				err @ _ => panic!("Wrong result for code {}: {:?}, expected EndReached error", code, err),
+			}
 		};
 		
-		statements_iter.push_string("a".to_string());		
-		assert_eq!(statements_iter.next(), None);
+		check_end_reached("var");
+		check_end_reached("var a");
+		check_end_reached("var a:");
+		check_end_reached("var a: f32");
+		check_end_reached("var a: f32 = ");
+		check_end_reached("var a: f32 = 3");
 		
-		statements_iter.push_string(" = 4".to_string());		
-		assert_eq!(statements_iter.next(), None);
+		check_end_reached("a");
+		check_end_reached("a = ");
+		check_end_reached("a = 4");
 		
-		statements_iter.push_string(";".to_string());				
-		let st = statements_iter.next().unwrap().unwrap();
-		match st {
-			Statement::WithVariable ( 
-				WithVariable::Set {
-					var_name, 
-					value_expr
-				} 
-			) 
-			if 
-				(value_expr.calc(&mem).unwrap() == Value::Float32(4_f32) &&
-				var_name == String::from("a"))
-				=> {},
-			_ => panic!("wrong statement: {:?}", st),
-		};
-		
-		statements_iter.push_string("@print(".to_string());		
-		assert_eq!(statements_iter.next(), None);
-		
-		statements_iter.push_string("2 + 3 *(".to_string());		
-		assert_eq!(statements_iter.next(), None);
-		
-		statements_iter.push_string("4 + 3".to_string());		
-		assert_eq!(statements_iter.next(), None);
-		
-		statements_iter.push_string(")".to_string());		
-		assert_eq!(statements_iter.next(), None);
-		
-		statements_iter.push_string(");".to_string());				
-		match statements_iter.next().unwrap().unwrap() {
-			Statement::FuncCall {
-				kind: FuncKind::Builtin,
-				name, 
-				arg_exprs
-			} => {
-				assert_eq!("print", &name);
-				
-				assert_eq!(arg_exprs.len(), 1);
-				
-				let mem = Memory::new();
-				
-				let right_ans = 2_f32 + 3_f32 * (4_f32 + 3_f32);
-				
-				match arg_exprs[0].calc(&mem).unwrap() {
-					Value::Float32 (val) => if (val - right_ans).abs() > std::f32::EPSILON * 2.0 {
-						panic!("{} != {}", right_ans, val);
-					},
-					ans @ _ => panic!("Wrong answer {:?}", ans),
-				}
-			},
-			st @ _ => panic!("Wrong pattern {:?}", st),
-		};
-		
-		assert_eq!(statements_iter.next(), None);
+		check_end_reached("@");
+		check_end_reached("@f");
+		check_end_reached("@f(");
+		check_end_reached("@f()");
 	}
-
 }

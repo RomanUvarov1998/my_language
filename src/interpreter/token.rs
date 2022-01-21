@@ -23,42 +23,14 @@ impl TokensIter {
 		self.iter.push_string(text);
 	}
 	
-	pub fn cache_until_semicolon(&mut self) -> Result<bool, TokenErr> { 
-		loop {
-			match self.parse_next_token() {
-				Some(Ok(token)) => {
-					self.cached_queue.push_back(token);
-					
-					match self.cached_queue.back().unwrap() {
-						Token { content: TokenContent::StatementOp (StatementOp::Semicolon), .. } 
-							=> return Ok(true),
-						_ => {},
-					}
-				},
-				
-				Some(Err(err)) => return Err(TokenErr::from(err)),
-				
-				None => return Ok(false),
-			}
-		}
-	}
-	
-	pub fn cached_queue_is_empty(&self) -> bool {
-		self.cached_queue.is_empty()
-	}
-	
-	pub fn clear_cached_queue(&mut self) {
-		self.cached_queue.clear();
-	}
-	
-	pub fn peek_or_err(&mut self) -> Result<&Token, TokenErr> {
+	pub fn peek_or_end_reached_err(&mut self) -> Result<&Token, TokenErr> {
 		if self.peeked_token.is_none() {
-			self.peeked_token = Some(self.next_or_err()?);
+			self.peeked_token = Some(self.next_or_end_reached_err()?);
 		}
 		Ok(self.peeked_token.as_ref().unwrap())
 	}
 	
-	pub fn next_or_err(&mut self) -> Result<Token, TokenErr> {
+	pub fn next_or_end_reached_err(&mut self) -> Result<Token, TokenErr> {
 		match self.next() {
 			Some(token_result) => token_result,
 			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
@@ -317,8 +289,16 @@ impl TokensIter {
 			} )
 		}
 	}
+}
 
-	fn parse_next_token(&mut self) -> Option<Result<Token, TokenErr>> {		
+impl Iterator for TokensIter {
+	type Item = Result<Token, TokenErr>;
+	
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.peeked_token.is_some() {
+			return Some( Ok( self.peeked_token.take().unwrap() ) );
+		}
+		
 		for ch in self.iter.by_ref() {			
 			let token_result = match ch.kind() {
 				CharKind::Digit (_) | CharKind::Dot => self.parse_number(ch),
@@ -359,22 +339,6 @@ impl TokensIter {
 		}
 		
 		None
-	}
-}
-
-impl Iterator for TokensIter {
-	type Item = Result<Token, TokenErr>;
-	
-	fn next(&mut self) -> Option<Self::Item> {
-		if self.peeked_token.is_some() {
-			return Some( Ok( self.peeked_token.take().unwrap() ) );
-		}
-		
-		if let Some(token) = self.cached_queue.pop_front() {
-			return Some(Ok(token));
-		}
-		
-		Some( Err( TokenErr::EndReached { pos: self.iter.last_pos() } ) )
 	}
 }
 
@@ -548,7 +512,10 @@ pub enum Keyword {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenErr {
 	Construct (ParsedChar),
-	ExpectedButFound { expected: Vec<TokenContent>, found: Token },
+	ExpectedButFound { 
+		expected: Vec<TokenContent>, 
+		found: Token 
+	},
 	EndReached { pos: CharPos },
 }
 
@@ -578,9 +545,9 @@ mod tests {
 			let mut tokens_iter = TokensIter::new();
 			tokens_iter.push_string(code.to_string());
 						
-			assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), tc);
+			assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), tc);
 			
-			match tokens_iter.next_or_err().unwrap_err() {
+			match tokens_iter.next_or_end_reached_err().unwrap_err() {
 				TokenErr::EndReached { .. } => {},
 				err @ _ => panic!("Unexpected err: {:?}", err),
 			}
@@ -618,25 +585,25 @@ mod tests {
 		let mut tokens_iter = TokensIter::new();
 		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!".to_string());
 		
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (1_f32));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Minus));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Mul));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (9_f32));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Name (String::from("var1var")));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEqual));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Less));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEqual));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Equal));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::NotEqual));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Not));
-		assert_eq!(tokens_iter.parse_next_token(), None);
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Minus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Mul));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var1var")));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEqual));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Less));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEqual));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Equal));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::NotEqual));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Not));
+		assert_eq!(tokens_iter.next(), None);
 	}
 
 	#[test]
@@ -644,98 +611,25 @@ mod tests {
 		let mut tokens_iter = TokensIter::new();
 		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var \"vasya\" > >= < <=  == !=  !  ".to_string());
 		
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (1_f32));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Minus));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Mul));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Number (9_f32));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Name (String::from("var1")));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEqual));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Less));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEqual));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Equal));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::NotEqual));
-		assert_eq!(*tokens_iter.parse_next_token().unwrap().unwrap().content(), TokenContent::Operator (Operator::Not));
-		assert_eq!(tokens_iter.parse_next_token(), None);
-	}
-
-	#[test]
-	pub fn cannot_cache_if_no_semicolon() {
-		let mut tokens_iter = TokensIter::new();
-		let code = "1\t+  23.4 \n-  45.6\n\n *7.8  / \t\t9 \n var1 var";
-		tokens_iter.push_string(code.to_string());
-		
-		assert_eq!(tokens_iter.cached_queue_is_empty(), true);
-		
-		assert_eq!(tokens_iter.cache_until_semicolon().unwrap(), false);
-		
-		assert_eq!(tokens_iter.cached_queue_is_empty(), false);
-		
-		assert_eq!(tokens_iter.parse_next_token(), None);
-		
-		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (1_f32));
-		assert_eq!(
-			*tokens_iter.next_or_err().unwrap().content(), 
-			TokenContent::Operator (Operator::Plus));
-		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (23.4_f32));
-		assert_eq!(
-			*tokens_iter.next_or_err().unwrap().content(), 
-			TokenContent::Operator (Operator::Minus));
-		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (45.6_f32));
-		assert_eq!(
-			*tokens_iter.next_or_err().unwrap().content(), 
-			TokenContent::Operator (Operator::Mul));
-		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (7.8_f32));
-		assert_eq!(
-			*tokens_iter.next_or_err().unwrap().content(), 
-			TokenContent::Operator (Operator::Div));
-		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (9_f32));
-		assert_eq!(
-			*tokens_iter.next_or_err().unwrap().content(), 
-			TokenContent::Name (String::from("var1")));
-		assert_eq!(
-			*tokens_iter.next_or_err().unwrap().content(), 
-			TokenContent::Keyword ( Keyword::Var ));
-		
-		match tokens_iter.next_or_err().unwrap_err() {
-			TokenErr::EndReached { .. } => {},
-			err @ _ => panic!("Unexpected err: {:?}", err),
-		}
-	}
-
-	#[test]
-	pub fn caches_if_has_semicolon() {
-		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1\t+  23.4 \n-  45.6\n\n *7.8;  / \t\t9 \n var1 var".to_string());
-		
-		assert_eq!(tokens_iter.cached_queue_is_empty(), true);
-		
-		assert_eq!(tokens_iter.cache_until_semicolon().unwrap(), true);
-		
-		assert_eq!(tokens_iter.cached_queue_is_empty(), false);
-		
-		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (1_f32));
-		assert_eq!(
-			*tokens_iter.next_or_err().unwrap().content(), 
-			TokenContent::Operator (Operator::Plus));
-		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (23.4_f32));
-		assert_eq!(
-			*tokens_iter.next_or_err().unwrap().content(), 
-			TokenContent::Operator (Operator::Minus));
-		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (45.6_f32));
-		assert_eq!(
-			*tokens_iter.next_or_err().unwrap().content(), 
-			TokenContent::Operator (Operator::Mul));
-		assert_eq!(*tokens_iter.next_or_err().unwrap().content(), TokenContent::Number (7.8_f32));
-		assert_eq!(
-			*tokens_iter.next_or_err().unwrap().content(), 
-			TokenContent::StatementOp (StatementOp::Semicolon));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (23.4_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Minus));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (45.6_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Mul));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var1")));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEqual));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Less));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LessEqual));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Equal));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::NotEqual));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Not));
+		assert_eq!(tokens_iter.next(), None);
 	}
 }

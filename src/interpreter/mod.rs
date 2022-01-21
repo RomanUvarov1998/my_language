@@ -136,7 +136,7 @@ pub struct InterpErr {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum InnerErr {
+pub enum InnerErr {
 	Token (TokenErr),
 	Expr (ExprErr),
 	Var (VarErr),

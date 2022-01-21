@@ -95,11 +95,11 @@ impl Expr {
 		let mut prev_is_operand = false;
 		
 		loop {
-			let next_token_ref = tokens_iter.peek_or_err()?;
+			let next_token_ref = tokens_iter.peek_or_end_reached_err()?;
 			
 			if context.check_expr_end(next_token_ref)? {		
 				if expr_stack.len() == 0 {
-					let found_token = tokens_iter.next_or_err()?;
+					let found_token = tokens_iter.next_or_end_reached_err()?;
 					return Err( InterpErr::from(ExprErr::ExpectedExprButFound(found_token)) );
 				}
 				break;
@@ -1331,7 +1331,6 @@ mod tests {
 	) {
 		let mut tokens_iter = TokensIter::new();	
 		tokens_iter.push_string(expr_str.to_string());
-		assert!(tokens_iter.cache_until_semicolon().unwrap());
 		
 		let expr_stack: Vec<(Token, Symbol)> = Expr::create_stack(
 			&mut tokens_iter, 
@@ -1342,7 +1341,6 @@ mod tests {
 		if syms_expr_stack == correct_expr_stack { 
 			let mut tokens_iter = TokensIter::new();	
 			tokens_iter.push_string(expr_str.to_string());
-			assert!(tokens_iter.cache_until_semicolon().unwrap());
 		
 			let expr = Expr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
 			

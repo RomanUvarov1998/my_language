@@ -1,9 +1,7 @@
 mod interpreter;
-mod console_reader;
 mod file_reader;
 
 use interpreter::*;
-use console_reader::ConsoleReader;
 
 fn main() {	
 	let mut interpreter = Interpreter::new();
@@ -11,19 +9,6 @@ fn main() {
 	let args: Vec<String> = std::env::args().collect();
 	
 	match args.len() {
-		0 => unreachable!(),
-		1 => {
-			let mut input = ConsoleReader::new();
-			loop  {
-				match interpreter.check_and_run(input.next_line()) {
-					Ok(msg) => match msg {
-						InterpInnerSignal::CanContinue => {},
-						InterpInnerSignal::Exit => break,
-					},
-					Err(err) => println!("{}", err),
-				}
-			}
-		},
 		2 => {
 			let file_name: &str = &args[1];
 			let code: String = file_reader::try_read(file_name);
