@@ -119,7 +119,7 @@ pub struct CharPos {
 }
 
 impl CharPos {
-	fn new() -> Self {
+	pub fn new() -> Self {
 		Self {
 			line: 0,
 			col: 0,

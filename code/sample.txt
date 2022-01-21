@@ -1,0 +1,9 @@
+@print("Must print 'Hello, world!':");
+var a: str = "Hello,";
+var b: str = " world!";
+@print(a + b);
+
+@print("Must print '11':");
+var c: f32 = 3;
+var d: f32 = 4;
+@print(c + d * 2);

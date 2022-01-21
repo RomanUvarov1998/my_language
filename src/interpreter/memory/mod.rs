@@ -83,28 +83,28 @@ mod tests {
 		let mut int = Interpreter::new();
 		
 		println!("run 1");
-		int.run("var a: f32;").unwrap();
+		int.check_and_run("var a: f32;").unwrap();
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 
 			&VarData::new_uninit(String::from("a"), DataType::Float32));
 		
 		println!("run 2");
-		int.run("a = 0.3 + 0.5;").unwrap();
+		int.check_and_run("a = 0.3 + 0.5;").unwrap();
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 
 			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (0.8_f32)).unwrap());
 		 
 		println!("run 3");
-		int.run("a = a + 0.5;").unwrap();
+		int.check_and_run("a = a + 0.5;").unwrap();
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 
 			&VarData::new_with_value(String::from("a"), DataType::Float32, Value::Float32 (1.3_f32)).unwrap());
 		
 		println!("run 4");
-		int.run("a = a * 2 + 1.4;").unwrap();
+		int.check_and_run("a = a * 2 + 1.4;").unwrap();
 		
 		assert_eq!(
 			int.memory.find_var("a").unwrap(), 

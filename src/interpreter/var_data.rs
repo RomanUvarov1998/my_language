@@ -40,8 +40,9 @@ impl VarData {
 	}	
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy)]
 pub enum DataType {
+	Any,
 	Float32,
 	String,
 	Bool,
@@ -56,6 +57,27 @@ impl DataType {
 		}
 	}
 }
+impl PartialEq for DataType {	
+	fn eq(&self, other: &Self) -> bool {
+		use DataType::*;
+		match self {
+			Any => true,
+			Float32 => match other {
+				Float32 | Any => true,
+				_ => false,
+			},
+			String => match other {
+				String | Any => true,
+				_ => false,
+			},
+			Bool => match other {
+				Bool | Any => true,
+				_ => false,
+			},
+		}
+	}
+}
+impl Eq for DataType {}
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -78,6 +100,19 @@ impl PartialEq for Value {
 			Value::Bool (b1) => match other {
 				Value::Bool (b2) => b1 == b2,
 				_ => false,
+			},
+		}
+	}
+}
+impl std::fmt::Display for Value {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Value::Float32 (v) => write!(f, "{}", v),
+			Value::String (v) => write!(f, "{}", v),
+			Value::Bool (v) => if *v {
+				write!(f, "True")
+			} else {
+				write!(f, "False")
 			},
 		}
 	}
@@ -121,7 +156,7 @@ impl std::fmt::Display for VarErr {
 			VarErr::WrongValue { new_var_value, var_data_type } =>
 				write!(f, "Wrong value '{:?}' for type '{:?}'", new_var_value, var_data_type),
 			VarErr::WrongType { value_data_type, var_data_type } =>
-				write!(f, "Incompatible types: '{:?}' and '{:?}'", value_data_type, var_data_type),
+				write!(f, "Incompatible types: '{:?}' and '{:?}'", var_data_type, value_data_type),
 		}
 	}
 }

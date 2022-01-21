@@ -392,6 +392,9 @@ impl Token {
 		Self { pos_begin, pos_end, content }
 	}
 	
+	pub fn pos_begin(&self) -> CharPos { self.pos_begin }
+	pub fn pos_end(&self) -> CharPos { self.pos_end }
+	
 	pub fn content(&self) -> &TokenContent {
 		&self.content
 	}
@@ -552,23 +555,15 @@ pub enum TokenErr {
 impl std::fmt::Display for TokenErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			TokenErr::Construct (parsed_char) => {
-				super::display_error_pos(f, parsed_char.pos(), parsed_char.pos())?;
-				write!(f, "Unexpected character '{}'", parsed_char.ch())
-			},
-			TokenErr::ExpectedButFound { expected, found } => {
-				super::display_error_pos(f, found.pos_begin, found.pos_end)?;
-				
+			TokenErr::Construct (parsed_char) => write!(f, "Unexpected character '{}'", parsed_char.ch()),
+			TokenErr::ExpectedButFound { expected, found } => {				
 				writeln!(f, "Expected: ")?;
 				for tc in expected {
 					writeln!(f, "\t{}", tc)?;
 				}
 				write!(f, "But found {}", found.content())
 			},
-			TokenErr::EndReached { pos } => {
-				super::display_error_pos(f, *pos, *pos)?;
-				write!(f, "Unexpected end")
-			},
+			TokenErr::EndReached { .. } => write!(f, "Unexpected end"),
 		}
 	}
 }

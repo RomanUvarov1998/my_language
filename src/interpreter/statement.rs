@@ -2,6 +2,7 @@ use super::token::*;
 use super::expr::{Expr, ExprContextKind};
 use super::{InterpErr};
 use super::var_data::{DataType, VarErr};
+use super::func_data::{FuncsDefList, FuncDef};
 use super::memory::Memory;
 
 pub struct StatementsIter {
@@ -27,7 +28,7 @@ impl StatementsIter {
 				
 			Token { content: TokenContent::Operator (Operator::Assign), .. } => 
 				self.parse_variable_set(name, is_builtin)?,
-			_ => return Err( InterpErr::Token ( TokenErr::ExpectedButFound { 
+			_ => return Err( InterpErr::from ( TokenErr::ExpectedButFound { 
 					expected: vec![
 						TokenContent::Bracket(Bracket::Left),
 						TokenContent::Operator (Operator::Assign),
@@ -55,7 +56,7 @@ impl StatementsIter {
 					data_type, 
 				}
 			) ),
-			found @ _ => return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
+			found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound { 
 							expected: vec![
 								TokenContent::Operator (Operator::Assign),
 								TokenContent::StatementOp ( StatementOp::Semicolon ),
@@ -109,7 +110,7 @@ impl StatementsIter {
 					Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
 					
 					found @ _ => 
-						return Err( InterpErr::Token( TokenErr::ExpectedButFound { 
+						return Err( InterpErr::from( TokenErr::ExpectedButFound { 
 							expected: vec![
 								TokenContent::StatementOp(StatementOp::Comma),
 								TokenContent::Bracket ( Bracket::Right ),
@@ -157,7 +158,7 @@ impl Iterator for StatementsIter {
 				self.parse_variable_set_or_func_call(name, true),
 				
 			found @ _ => 
-				Err( InterpErr::Token( TokenErr::ExpectedButFound { 
+				Err( InterpErr::from( TokenErr::ExpectedButFound { 
 					expected: vec![
 						TokenContent::Keyword ( Keyword::Var ),
 						TokenContent::Name( String::from("<name>") ),
@@ -187,14 +188,29 @@ pub enum Statement {
 }
 
 impl Statement {
-	pub fn precalc_types(&self, types_memory: &mut Memory) -> Result<(), InterpErr> {
+	pub fn check_types(
+		&self, 
+		types_memory: &mut Memory, 
+		builtin_func_defs: &FuncsDefList, 
+		vars_memory: &Memory
+	) -> Result<(), InterpErr> 
+	{
 		match self {
 			Statement::WithVariable (st) => match st {
-				WithVariable::Declare { var_name, data_type } => 
-					types_memory.add_variable(var_name.clone(), *data_type,  None)?,
+				WithVariable::Declare { var_name, data_type } => {
+					if let Ok(_) = vars_memory.get_variable_type(var_name) {
+						return Err(InterpErr::from(VarErr::AlreadyExists { name: var_name.clone() }));
+					}
+					types_memory.add_variable(var_name.clone(), *data_type,  None)?;
+				},
+					
 				WithVariable::DeclareSet { var_name, data_type, value_expr } => {
+					if let Ok(_) = vars_memory.get_variable_type(var_name) {
+						return Err(InterpErr::from(VarErr::AlreadyExists { name: var_name.clone() }));
+					}
 					types_memory.add_variable(var_name.clone(), *data_type, None)?;
-					let expr_data_type: DataType = value_expr.calc_data_type(types_memory)?;
+					
+					let expr_data_type: DataType = value_expr.calc_data_type(types_memory, vars_memory)?;
 					if *data_type != expr_data_type {
 						return Err(InterpErr::from(VarErr::WrongType { 
 							value_data_type: expr_data_type, 
@@ -202,9 +218,13 @@ impl Statement {
 						}));
 					}
 				},
+				
 				WithVariable::Set { var_name, value_expr } => {
-					let var_data_type: DataType = types_memory.get_variable_type(var_name)?;
-					let expr_data_type: DataType = value_expr.calc_data_type(types_memory)?;
+					let var_data_type: DataType = match types_memory.get_variable_type(var_name) {
+						Err(_) => vars_memory.get_variable_type(var_name)?,
+						Ok(dt) => dt,
+					};
+					let expr_data_type: DataType = value_expr.calc_data_type(types_memory, vars_memory)?;
 					if var_data_type != expr_data_type {
 						return Err(InterpErr::from(VarErr::WrongType { 
 							value_data_type: expr_data_type, 
@@ -213,8 +233,20 @@ impl Statement {
 					}
 				},				
 			},
-			Statement::FuncCall { .. /*kind, name, arg_exprs*/ } => {
-				todo!();
+			
+			Statement::FuncCall { kind, name, arg_exprs } => {
+				match kind {
+					FuncKind::UserDefined => todo!(),
+					FuncKind::Builtin => {						
+						let fd: &FuncDef = builtin_func_defs.try_find(name)?;
+						
+						let args_data_types: Result<Vec<DataType>, InterpErr> = arg_exprs.iter()
+							.map(|expr| expr.calc_data_type(types_memory, vars_memory))
+							.collect();
+						
+						fd.check_args(args_data_types?)?;
+					},
+				}
 			}
 		}
 		Ok(())
@@ -232,22 +264,6 @@ pub enum WithVariable {
 pub enum FuncKind {
 	UserDefined,
 	Builtin,
-}
-
-//------------------- StatementErr --------------------
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum StatementErr {
-	#[allow(unused)]
-	EndReached,
-}
-
-impl std::fmt::Display for StatementErr {
-	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-		match self {
-			StatementErr::EndReached => writeln!(f, "End reached"),
-		}
-	}
 }
 
 #[cfg(test)]
