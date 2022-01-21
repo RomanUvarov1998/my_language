@@ -81,7 +81,7 @@ impl Interpreter {
 					self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?,
 			},
 			
-			Statement::FuncCall { kind, name, arg_exprs } => {				
+			Statement::FuncCall { kind, func_name, arg_exprs } => {				
 				match kind {
 					FuncKind::Builtin => {						
 						let mut arg_vals = Vec::<Value>::with_capacity(arg_exprs.len());
@@ -89,7 +89,7 @@ impl Interpreter {
 							arg_vals.push(expr.calc(&self.memory)?);
 						}
 						
-						if let InterpInnerSignal::Exit = self.call_builtin_func(&name, arg_vals)? {
+						if let InterpInnerSignal::Exit = self.call_builtin_func(&func_name, arg_vals)? {
 							return Ok( InterpInnerSignal::Exit );
 						}
 					},

@@ -126,7 +126,7 @@ impl StatementsIter {
 		
 		Ok ( Statement::FuncCall {
 			kind: if is_builtin { FuncKind::Builtin } else { FuncKind::UserDefined },
-			name: func_name, 
+			func_name, 
 			arg_exprs,
 		} )
 	}
@@ -165,6 +165,31 @@ impl Iterator for StatementsIter {
 	}	
 }
 
+//--------------------- NameToken --------------------------
+
+pub struct NameToken {
+	name: String,
+	tok: Token,
+}
+
+impl NameToken {
+	fn from(tok: Token) -> Result<Self, InterpErr> {
+		match tok {
+			Token { content: TokenContent::Name (ref name), .. } => Ok( NameToken {
+				name: name.clone(),
+				tok,
+			} ),
+			found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound {
+							expected: vec![TokenContent::Name ("<name>".to_string())], 
+							found,
+						} ) ),
+		}
+	}
+	
+	pub fn value(&self) -> &str { &self.name }
+	pub fn tok(&self) -> &Token { &self.tok }
+}
+
 //------------------- Statement --------------------
 
 #[derive(Debug, Eq, PartialEq)]
@@ -172,7 +197,7 @@ pub enum Statement {
 	WithVariable (WithVariable),
 	FuncCall { 
 		kind: FuncKind,
-		name: String, 
+		func_name: String, 
 		arg_exprs: Vec<Expr> 
 	},
 }
@@ -224,11 +249,11 @@ impl Statement {
 				},				
 			},
 			
-			Statement::FuncCall { kind, name, arg_exprs } => {
+			Statement::FuncCall { kind, func_name, arg_exprs } => {
 				match kind {
 					FuncKind::UserDefined => todo!(),
 					FuncKind::Builtin => {					
-						let fd: &FuncDef = builtin_func_defs.try_find(name)?;
+						let fd: &FuncDef = builtin_func_defs.try_find(func_name)?;
 						
 						let args_data_types: Result<Vec<DataType>, InterpErr> = arg_exprs.iter()
 							.map(|expr| expr.calc_data_type(types_memory, vars_memory))
@@ -369,10 +394,10 @@ mod tests {
 		match st_iter.next().unwrap().unwrap() {
 			Statement::FuncCall {
 				kind: FuncKind::Builtin,
-				name, 
+				func_name, 
 				arg_exprs
 			} => {
-				assert_eq!("print", &name);
+				assert_eq!("print", &func_name);
 				
 				assert_eq!(arg_exprs.len(), 1);
 				
@@ -402,10 +427,10 @@ mod tests {
 		match st_iter.next().unwrap().unwrap() {
 			Statement::FuncCall {
 				kind: FuncKind::Builtin,
-				name, 
+				func_name, 
 				arg_exprs
 			} => {
-				assert_eq!("print", &name);
+				assert_eq!("print", &func_name);
 				
 				assert_eq!(arg_exprs.len(), 0);
 			},
