@@ -524,7 +524,8 @@ impl ExprOperator {
 			Operator::LogicalAnd => ExprOperator::LogicalAnd,
 			Operator::LogicalOr => ExprOperator::LogicalOr,
 			Operator::LogicalXor => ExprOperator::LogicalXor,
-			Operator::Assign | Operator::Not => unreachable!(),
+			Operator::Not => ExprOperator::Not,
+			Operator::Assign => unreachable!(),
 		}
 	}
 	
@@ -1219,6 +1220,18 @@ mod tests {
 		],
 		Value::Bool(true));
 		
+		test_expr_and_its_stack_eq("!True;", vec![
+			Symbol::Operand (Operand::Value (Value::Bool (true))),
+			Symbol::ExprOperator (ExprOperator::Not),
+		],
+		Value::Bool(false));
+		
+		test_expr_and_its_stack_eq("!False;", vec![
+			Symbol::Operand (Operand::Value (Value::Bool (false))),
+			Symbol::ExprOperator (ExprOperator::Not),
+		],
+		Value::Bool(true));
+		
 		test_expr_and_its_stack_eq("True == True;", vec![
 			Symbol::Operand (Operand::Value (Value::Bool (true))),
 			Symbol::Operand (Operand::Value (Value::Bool (true))),
@@ -1267,6 +1280,14 @@ mod tests {
 			Symbol::ExprOperator (ExprOperator::Greater),
 		],
 		Value::Bool(false));
+		
+		test_expr_and_its_stack_eq("!(2 > 3);", vec![
+			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
+			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
+			Symbol::ExprOperator (ExprOperator::Greater),
+			Symbol::ExprOperator (ExprOperator::Not),
+		],
+		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("2 >= 3;", vec![
 			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
