@@ -111,7 +111,7 @@ impl Expr {
 			match token.content() {	
 				TokenContent::Number (num) => {
 					if prev_is_operand {
-						return Err( InterpErr::from( ExprErr::UnexpectedToken (token) ) );
+						return Err(unexpected(token));
 					}
 					
 					let sym = Symbol::new_number(*num);
@@ -121,7 +121,7 @@ impl Expr {
 				},
 				TokenContent::Name (_) | TokenContent::BuiltinName (_) => {
 					if prev_is_operand {
-						return Err( InterpErr::from( ExprErr::UnexpectedToken (token) ) );
+						return Err(unexpected(token));
 					}
 					
 					let sym = Symbol::new_name(NameToken::from(token.clone()).unwrap());
@@ -131,7 +131,7 @@ impl Expr {
 				},
 				TokenContent::StringLiteral (s) => {
 					if prev_is_operand {
-						return Err( InterpErr::from( ExprErr::UnexpectedToken (token) ) );
+						return Err(unexpected(token));
 					}
 					
 					let sym = Symbol::new_string_literal(s.clone());
@@ -167,7 +167,7 @@ impl Expr {
 							=> {
 								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, token, tok_op)?;
 						},
-						Operator::Assign => return Err( InterpErr::from( ExprErr::UnexpectedToken (token) ) ),
+						Operator::Assign => return Err(unexpected(token)),
 					};
 					
 					prev_is_operand = false;
@@ -184,7 +184,7 @@ impl Expr {
 				},
 				
 				TokenContent::Keyword (kw) => match kw {
-					Keyword::Var => return Err( InterpErr::from( ExprErr::UnexpectedToken (token) ) ),
+					Keyword::Var => return Err(unexpected(token)),
 					Keyword::True | Keyword::False => {
 						let sym = Symbol::new_bool_literal(*kw);
 						expr_stack.push((token, sym));
@@ -199,7 +199,7 @@ impl Expr {
 		while let Some(top_tok_sym) = tmp_stack.pop() {
 			match top_tok_sym.1 {
 				Symbol::Operand (..) => expr_stack.push(top_tok_sym),
-				Symbol::LeftBracket => return Err( InterpErr::from( ExprErr::UnpairedBracket (top_tok_sym.0) ) ),
+				Symbol::LeftBracket => return Err( unpaired_bracket(top_tok_sym.0) ),
 				Symbol::ExprOperator (..) => expr_stack.push(top_tok_sym),
 			}
 		}
@@ -222,10 +222,7 @@ impl Expr {
 				match tmp_stack.last() {
 					Some(top_ref) => 
 						match &top_ref.1 {
-							Symbol::Operand (..) => {  
-								return Err( InterpErr::from( ExprErr::UnexpectedToken (
-									tmp_stack.pop().unwrap().0) ) );
-							},
+							Symbol::Operand (..) => return Err(unexpected(tmp_stack.pop().unwrap().0)),
 								
 							Symbol::LeftBracket => break,
 							
@@ -301,65 +298,48 @@ impl ExprContext {
 	}
 	
 	fn check_expr_end(&mut self, tok: &Token) -> Result<bool, InterpErr> {
-		match self.kind {
-			ExprContextKind::ValueToAssign =>
-				match tok.content() {
-					TokenContent::Number (..) | 
-						TokenContent::Operator (..) | 
-						TokenContent::Name (..) |
-						TokenContent::BuiltinName (..) |
-						TokenContent::StringLiteral (..)
-						=> Ok(false),
-					TokenContent::Bracket (br) 
-						=> Ok( self.check_brackets(*br) ),
-					TokenContent::StatementOp (st_op) => match st_op {
-						StatementOp::Colon | StatementOp::Comma | StatementOp::Comment (_)
-							=> Err( InterpErr::from (ExprErr::UnexpectedToken (tok.clone()) ) ),
-						StatementOp::Semicolon => Ok(true),
-					},
-					TokenContent::Keyword (kw) => match kw {
-						Keyword::Var => Err( InterpErr::from (ExprErr::UnexpectedToken (tok.clone()) ) ),
-						Keyword::True | Keyword::False => Ok(false),
-					},
+		match tok.content() {
+			TokenContent::Number (..) | 
+				TokenContent::Operator (..) | 
+				TokenContent::Name (..) |
+				TokenContent::BuiltinName (..) |
+				TokenContent::StringLiteral (..)
+				=> Ok(false),
+			TokenContent::Bracket (_) 
+				=> self.check_brackets(tok),
+			TokenContent::StatementOp (st_op) => match st_op {
+				StatementOp::Colon | StatementOp::Comment (_) => Err(unexpected(tok.clone())),
+				StatementOp::Comma => match self.kind {
+					ExprContextKind::ValueToAssign => Err(unexpected(tok.clone())),
+					ExprContextKind::FunctionArg => Ok(true),
 				},
-			ExprContextKind::FunctionArg =>
-				match tok.content() {
-					TokenContent::Number (..) | 
-						TokenContent::Operator (..) | 
-						TokenContent::Name (..) |
-						TokenContent::BuiltinName (..) |
-						TokenContent::StringLiteral (..)
-						=> Ok(false),
-					TokenContent::Bracket (br) 
-						=> Ok( self.check_brackets(*br) ),
-					TokenContent::StatementOp (st_op) => match st_op {
-						StatementOp::Colon | StatementOp::Comment (_)
-							=> Err( InterpErr::from (ExprErr::UnexpectedToken (tok.clone()) ) ),
-						StatementOp::Semicolon | StatementOp::Comma 
-							=> Ok(true),
-					},
-					TokenContent::Keyword (kw) => match kw {
-						Keyword::Var => Err( InterpErr::from (ExprErr::UnexpectedToken (tok.clone()) ) ),
-						Keyword::True | Keyword::False => Ok(false),
-					},
-				},
+				StatementOp::Semicolon => Ok(true),
+			},
+			TokenContent::Keyword (kw) => match kw {
+				Keyword::Var => Err(unexpected(tok.clone())),
+				Keyword::True | Keyword::False => Ok(false),
+			},
 		}
 	}
 	
-	fn check_brackets(&mut self, br: Bracket) -> bool {
-		match br {
-			Bracket::Left => {
+	fn check_brackets(&mut self, br_tok: &Token) -> Result<bool, InterpErr> {
+		match br_tok {
+			Token { content: TokenContent::Bracket (Bracket::Left), .. } => {
 				self.left_brackets_count += 1;
-				false
+				Ok(false)
 			},
-			Bracket::Right => {
+			Token { content: TokenContent::Bracket (Bracket::Right), .. }  => {
 				if self.left_brackets_count > 0 {
 					self.left_brackets_count -= 1;
-					false
+					Ok(false)
 				} else {
-					true
+					match self.kind {
+						ExprContextKind::ValueToAssign => Err( unpaired_bracket(br_tok.clone()) ),
+						ExprContextKind::FunctionArg => Ok(true),
+					}
 				}
 			},
+			_ => unreachable!(),
 		}
 	}
 }
@@ -984,6 +964,14 @@ impl std::fmt::Display for ExprErr {
 			},
 		}
 	}
+}
+
+fn unexpected(token: Token) -> InterpErr {
+	InterpErr::from (ExprErr::UnexpectedToken (token))
+}
+
+fn unpaired_bracket(token: Token) -> InterpErr {
+	InterpErr::from (ExprErr::UnpairedBracket (token))
 }
 
 //------------------------------- Tests ----------------------------------
