@@ -224,7 +224,7 @@ impl TokensIter {
 						while let Some(ch) = self.iter.next() {
 							match ch.kind() {
 								CharKind::NewLine => break,
-								CharKind::Invalid => return Err( TokenErr::Construct (ch) ),
+								//CharKind::Invalid => return Err( TokenErr::Construct (ch) ),
 								_ => {
 									content.push(ch.ch());
 									last_char = ch;
