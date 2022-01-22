@@ -199,7 +199,7 @@ impl Expr {
 		while let Some(top_tok_sym) = tmp_stack.pop() {
 			match top_tok_sym.1 {
 				Symbol::Operand (..) => expr_stack.push(top_tok_sym),
-				Symbol::LeftBracket => return Err( InterpErr::from( ExprErr::UnexpectedToken (top_tok_sym.0) ) ),
+				Symbol::LeftBracket => return Err( InterpErr::from( ExprErr::UnpairedBracket (top_tok_sym.0) ) ),
 				Symbol::ExprOperator (..) => expr_stack.push(top_tok_sym),
 			}
 		}
