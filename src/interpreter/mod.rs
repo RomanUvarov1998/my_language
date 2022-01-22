@@ -9,7 +9,7 @@ mod func_data;
 use statement::*;
 use memory::*;
 use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
-use var_data::{VarErr, Value};
+use var_data::{VarErr, Value, DataType};
 use string_char::CharPos;
 
 //------------------------ Interpreter --------------------
@@ -67,6 +67,8 @@ impl Interpreter {
 	
 	fn run_statement(&mut self, statement: Statement) -> Result<InterpInnerSignal, InterpErr> {
 		match statement {
+			Statement::Comment (_) => {},
+			
 			Statement::WithVariable (st) => match st {
 				WithVariable::Declare { var_name, data_type } => 
 					self.memory.add_variable(var_name, data_type, None)?,

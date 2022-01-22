@@ -313,7 +313,7 @@ impl ExprContext {
 					TokenContent::Bracket (br) 
 						=> Ok( self.check_brackets(*br) ),
 					TokenContent::StatementOp (st_op) => match st_op {
-						StatementOp::Colon | StatementOp::Comma 
+						StatementOp::Colon | StatementOp::Comma | StatementOp::Comment (_)
 							=> Err( InterpErr::from (ExprErr::UnexpectedToken (tok.clone()) ) ),
 						StatementOp::Semicolon => Ok(true),
 					},
@@ -333,7 +333,7 @@ impl ExprContext {
 					TokenContent::Bracket (br) 
 						=> Ok( self.check_brackets(*br) ),
 					TokenContent::StatementOp (st_op) => match st_op {
-						StatementOp::Colon 
+						StatementOp::Colon | StatementOp::Comment (_)
 							=> Err( InterpErr::from (ExprErr::UnexpectedToken (tok.clone()) ) ),
 						StatementOp::Semicolon | StatementOp::Comma 
 							=> Ok(true),

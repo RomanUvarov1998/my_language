@@ -190,13 +190,38 @@ impl TokensIter {
 		Ok( token )
 	}
 
-	fn parse_operator(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
+	fn parse_operator_or_comment(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
 		match first_char.kind() {
 			CharKind::Plus => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Plus )) ),
 			CharKind::Minus => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Minus )) ),
-			CharKind::LeftSlash => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Div )) ),
 			CharKind::Asterisk => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Mul )) ),
 			CharKind::Circumflex => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Pow )) ),
+
+			CharKind::LeftSlash => match self.iter.peek() {
+				Some(second_char) => match second_char.kind() {
+					CharKind::LeftSlash => {
+						let second_char: ParsedChar = self.iter.next().unwrap();
+						
+						let mut content = String::new();
+						
+						let mut last_char: ParsedChar = second_char;
+						while let Some(ch) = self.iter.next() {
+							match ch.kind() {
+								CharKind::NewLine => break,
+								CharKind::Invalid => return Err( TokenErr::Construct (ch) ),
+								_ => {
+									content.push(ch.ch());
+									last_char = ch;
+								},
+							}
+						};
+						
+						Ok( Token::new(first_char.pos(), last_char.pos(), TokenContent::StatementOp ( StatementOp::Comment (content) )) )
+					},
+					_ => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Div )) ),
+				},
+				None => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Div )) ),
+			},
 			
 			CharKind::Exclamation => match self.iter.peek() {
 				Some(second_char) => match second_char.kind() {
@@ -297,7 +322,7 @@ impl Iterator for TokensIter {
 					| CharKind::LeftSlash
 					| CharKind::Eq
 					| CharKind::Exclamation
-						=> self.parse_operator(ch),
+						=> self.parse_operator_or_comment(ch),
 						
 				CharKind::DoubleQuote => self.parse_string_literal(ch.pos()),
 				
@@ -404,6 +429,7 @@ impl std::fmt::Display for TokenContent {
 				StatementOp::Colon => write!(f, "'{}'", ":"),
 				StatementOp::Semicolon => write!(f, "'{}'", ";"),
 				StatementOp::Comma => write!(f, "'{}'", ","),
+				StatementOp::Comment (content) => write!(f, "Comment //'{}'", content),
 			},
 			TokenContent::Keyword (kw) => match kw {
 				Keyword::Var => write!(f, "'{}'", "var"),
@@ -482,11 +508,12 @@ pub enum Bracket {
 	Left,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatementOp {
 	Colon,
 	Semicolon,
 	Comma,
+	Comment (String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -556,6 +583,7 @@ mod tests {
 		test_token_content_detection(":", TokenContent::StatementOp (StatementOp::Colon));
 		test_token_content_detection(";", TokenContent::StatementOp (StatementOp::Semicolon));
 		test_token_content_detection(",", TokenContent::StatementOp (StatementOp::Comma));
+		test_token_content_detection("//23rwrer2", TokenContent::StatementOp (StatementOp::Comment (String::from("23rwrer2"))));
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
 		test_token_content_detection("@print", TokenContent::BuiltinName (String::from("print")));
 		test_token_content_detection("\"vasya\"", TokenContent::StringLiteral (String::from("vasya")));
@@ -573,7 +601,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!land lor lxor".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!land lor lxor:;,//sdsdfd".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -596,13 +624,17 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalAnd));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalOr));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalXor));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Colon));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Semicolon));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comma));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from("sdsdfd"))));
 		assert_eq!(tokens_iter.next(), None);
 	}
 
 	#[test]
 	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor".to_string());
+		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t // sdfsdfs \n\t ".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -626,6 +658,10 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalAnd));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalOr));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::LogicalXor));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Colon));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Semicolon));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comma));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from(" sdfsdfs "))));
 		assert_eq!(tokens_iter.next(), None);
 	}
 }

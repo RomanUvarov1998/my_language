@@ -142,6 +142,9 @@ impl Iterator for StatementsIter {
 		};
 		
 		let statement_result = match first {
+			Token { content: TokenContent::StatementOp ( StatementOp::Comment (content) ), .. } => 
+				Ok( Statement::Comment (content) ),
+				
 			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => 
 				self.parse_varable_declaration(),	
 			
@@ -209,6 +212,7 @@ impl Eq for NameToken {}
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Statement {
+	Comment (String),
 	WithVariable (WithVariable),
 	FuncCall { 
 		kind: FuncKind,
@@ -226,6 +230,8 @@ impl Statement {
 	) -> Result<(), InterpErr> 
 	{
 		match self {
+			Statement::Comment (_) => {},
+				
 			Statement::WithVariable (st) => match st {
 				WithVariable::Declare { var_name, data_type } => {
 					if let Ok(_) = vars_memory.get_variable_type(var_name) {
@@ -351,7 +357,38 @@ mod tests {
 	use super::super::statement::NameToken;
 	
 	#[test]
-	pub fn can_make_variable_declare_statement() {
+	fn can_parse_comment() {
+		let mut statements_iter = StatementsIter::new();
+		
+		statements_iter.push_string("//var a: f32;\nvar a: f32;//d".to_string());	
+		
+		assert_eq!(
+			statements_iter.next().unwrap().unwrap(), 
+			Statement::Comment (String::from("var a: f32;")) 
+		);
+		
+		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
+		
+		assert_eq!(
+			statements_iter.next().unwrap().unwrap(), 
+			Statement::WithVariable ( 
+				WithVariable::Declare {
+					var_name: nt, 
+					data_type: DataType::Float32, 
+				} 
+			) 
+		);
+		
+		assert_eq!(
+			statements_iter.next().unwrap().unwrap(), 
+			Statement::Comment (String::from("d")) 
+		);
+		
+		assert!(statements_iter.next().is_none());
+	}
+	
+	#[test]
+	fn can_make_variable_declare_statement() {
 		let mut statements_iter = StatementsIter::new();
 		
 		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
@@ -391,7 +428,7 @@ mod tests {
 	}
 	
 	#[test]
-	pub fn can_make_variable_declare_set_statement() {
+	fn can_make_variable_declare_set_statement() {
 		let mut statements_iter = StatementsIter::new();
 		let mem = Memory::new();
 		
@@ -514,7 +551,7 @@ mod tests {
 	}
 	
 	#[test]
-	pub fn cannot_make_unfinished_statement() {		
+	fn cannot_make_unfinished_statement() {		
 		let check_end_reached = |code: &str| {
 			let mut statements_iter = StatementsIter::new();
 			statements_iter.push_string(code.to_string());				
