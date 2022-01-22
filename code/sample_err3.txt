@@ -8,4 +8,4 @@ var f1: f32 = 3;
 var f2: f32 = 4;
 @print(f1 + f2 * 2);
 
-var fs: ewrwerwe;
+@sobaka(46);

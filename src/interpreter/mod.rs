@@ -9,7 +9,7 @@ mod func_data;
 use statement::*;
 use memory::*;
 use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
-use var_data::{VarErr, Value, DataType};
+use var_data::{VarErr, Value};
 use string_char::CharPos;
 
 //------------------------ Interpreter --------------------
@@ -25,14 +25,14 @@ impl Interpreter {
 		let mut builtin_func_defs = FuncsDefList::new();
 		
 		builtin_func_defs.add(FuncDef::new(
-			"print".to_string(),
+			"print",
 			vec![
 				FuncArg::new("value".to_string(), None),
 			]
 		)).unwrap();
 		
 		builtin_func_defs.add(FuncDef::new(
-			"exit".to_string(),
+			"exit",
 			Vec::new()
 		)).unwrap();
 		
@@ -103,8 +103,8 @@ impl Interpreter {
 		Ok( InterpInnerSignal::CanContinue )
 	}
 	
-	fn call_builtin_func(&self, name: &str, args_values: Vec<Value>) -> Result<InterpInnerSignal, InterpErr> {
-		match name {
+	fn call_builtin_func(&self, name: &NameToken, args_values: Vec<Value>) -> Result<InterpInnerSignal, InterpErr> {
+		match name.value() {
 			"print" => {
 				println!("{}", args_values[0]);
 				Ok( InterpInnerSignal::CanContinue )
@@ -224,39 +224,39 @@ impl From<ExprErr> for InterpErr {
 impl From<VarErr> for InterpErr {
 	fn from(err: VarErr) -> InterpErr {
 		match err {		
-			VarErr::NotDefined { .. } => InterpErr {
-				pos_begin: CharPos::new(),
-				pos_end: CharPos::new(),
+			VarErr::NotDefined { ref name } => InterpErr {
+				pos_begin: name.tok().pos_begin(),
+				pos_end: name.tok().pos_end(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
-			VarErr::NotSet { .. } => InterpErr {
-				pos_begin: CharPos::new(),
-				pos_end: CharPos::new(),
+			VarErr::NotSet { ref name } => InterpErr {
+				pos_begin: name.tok().pos_begin(),
+				pos_end: name.tok().pos_end(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
-			VarErr::UnknownType { .. } => InterpErr {
-				pos_begin: CharPos::new(),
-				pos_end: CharPos::new(),
+			VarErr::UnknownType { ref name } => InterpErr {
+				pos_begin: name.tok().pos_begin(),
+				pos_end: name.tok().pos_end(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
-			VarErr::AlreadyExists { .. } => InterpErr {
-				pos_begin: CharPos::new(),
-				pos_end: CharPos::new(),
+			VarErr::AlreadyExists { ref name } => InterpErr {
+				pos_begin: name.tok().pos_begin(),
+				pos_end: name.tok().pos_end(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
-			VarErr::WrongValue { .. } => InterpErr {
-				pos_begin: CharPos::new(),
-				pos_end: CharPos::new(),
+			VarErr::WrongValue { ref var_name, .. } => InterpErr {
+				pos_begin: var_name.tok().pos_begin(),
+				pos_end: var_name.tok().pos_end(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
-			VarErr::WrongType { .. } => InterpErr {
-				pos_begin: CharPos::new(),
-				pos_end: CharPos::new(),
+			VarErr::WrongType { ref var_name, .. } => InterpErr {
+				pos_begin: var_name.tok().pos_begin(),
+				pos_end: var_name.tok().pos_end(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
@@ -264,32 +264,17 @@ impl From<VarErr> for InterpErr {
 	}
 }
 
-impl From<FuncErr> for InterpErr {
-	fn from(err: FuncErr) -> InterpErr {
-		match err {			
-			FuncErr::ArgsCnt { .. } => InterpErr {
-				pos_begin: CharPos::new(),
-				pos_end: CharPos::new(),
-				descr: format!("{}", err),
-				inner: InnerErr::Func (err),
-			},
-			FuncErr::ArgType { .. } => InterpErr {
-				pos_begin: CharPos::new(),
-				pos_end: CharPos::new(),
-				descr: format!("{}", err),
-				inner: InnerErr::Func (err),
-			},
-			FuncErr::NotDefined { .. } => InterpErr {
-				pos_begin: CharPos::new(),
-				pos_end: CharPos::new(),
-				descr: format!("{}", err),
-				inner: InnerErr::Func (err),
-			},
-			FuncErr::AlreadyDefined { .. } => InterpErr {
-				pos_begin: CharPos::new(),
-				pos_end: CharPos::new(),
-				descr: format!("{}", err),
-				inner: InnerErr::Func (err),
+impl From<StatementErr> for InterpErr {
+	fn from(err: StatementErr) -> InterpErr {
+		match err {
+			StatementErr::Func { err: ferr, ref name } => {
+				let descr: String = format!("{}", err);
+				InterpErr {
+					pos_begin: name.tok().pos_begin(),
+					pos_end: name.tok().pos_end(),
+					descr,
+					inner: InnerErr::Func (ferr),
+				}
 			},
 		}
 	}
@@ -300,6 +285,9 @@ impl From<FuncErr> for InterpErr {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use super::token::{Token, TokenContent};
+	use super::string_char::CharPos;
+	use super::statement::NameToken;
 	
 	#[test]
 	fn check_err_if_redeclare_variable() {
@@ -311,7 +299,7 @@ mod tests {
 		}
 		
 		match int.check_and_run("var a: f32 = 4;") {
-			Err(InterpErr { inner: InnerErr::Var(VarErr::AlreadyExists { name }), .. } ) if name == String::from("a") => {},
+			Err(InterpErr { inner: InnerErr::Var(VarErr::AlreadyExists { name }), .. } ) if name.value() == String::from("a") => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 	}
@@ -320,11 +308,14 @@ mod tests {
 	fn check_err_if_set_var_to_data_of_wrong_type() {
 		let mut int = Interpreter::new();
 		
+		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
+		
 		match int.check_and_run("var a: f32 = \"hello\";") {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::WrongType { 
 				value_data_type: DataType::String, 
 				var_data_type: DataType::Float32,
-			}), .. } ) => {},
+				var_name,
+			}), .. } ) if var_name == nt => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 		
@@ -332,7 +323,8 @@ mod tests {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::WrongType { 
 				value_data_type: DataType::Float32, 
 				var_data_type: DataType::String,
-			}), .. } ) => {},
+				var_name,
+			}), .. } ) if var_name == nt => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 	}

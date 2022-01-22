@@ -2,7 +2,7 @@ use super::token::*;
 use super::expr::{Expr, ExprContextKind};
 use super::{InterpErr};
 use super::var_data::{DataType, VarErr};
-use super::func_data::{FuncsDefList, FuncDef};
+use super::func_data::{FuncsDefList, FuncDef, FuncErr};
 use super::memory::Memory;
 
 pub struct StatementsIter {
@@ -20,7 +20,7 @@ impl StatementsIter {
 		self.tokens_iter.push_string(text);
 	}	
 	
-	fn parse_variable_set_or_func_call(&mut self, name: String, is_builtin: bool) -> Result<Statement, InterpErr> {
+	fn parse_variable_set_or_func_call(&mut self, name: NameToken, is_builtin: bool) -> Result<Statement, InterpErr> {
 		let second = self.tokens_iter.next_or_end_reached_err()?;
 		let statement = match second {
 			Token { content: TokenContent::Bracket(Bracket::Left), .. } => 
@@ -41,11 +41,11 @@ impl StatementsIter {
 	}
 	
 	fn parse_varable_declaration(&mut self) -> Result<Statement, InterpErr> {	
-		let var_name = self.tokens_iter.next_name_or_err()?;
+		let var_name: NameToken = NameToken::from(self.tokens_iter.next_or_end_reached_err()?)?;
 		
 		self.tokens_iter.next_expect_colon()?;
 		
-		let type_name = self.tokens_iter.next_name_or_err()?;
+		let type_name: NameToken = NameToken::from(self.tokens_iter.next_or_end_reached_err()?)?;
 		let data_type = DataType::parse(&type_name)?;
 		
 		let tok_assign = self.tokens_iter.next_or_end_reached_err()?;
@@ -80,7 +80,7 @@ impl StatementsIter {
 		) )
 	}
 	
-	fn parse_variable_set(&mut self, var_name: String, _is_builtin: bool) -> Result<Statement, InterpErr> {		
+	fn parse_variable_set(&mut self, var_name: NameToken, _is_builtin: bool) -> Result<Statement, InterpErr> {		
 		let value_expr = Expr::new(
 			&mut self.tokens_iter,
 			ExprContextKind::ValueToAssign)?;
@@ -94,7 +94,7 @@ impl StatementsIter {
 		) )
 	}
 
-	fn parse_func_call(&mut self, func_name: String, is_builtin: bool) -> Result<Statement, InterpErr> {
+	fn parse_func_call(&mut self, func_name: NameToken, is_builtin: bool) -> Result<Statement, InterpErr> {
 		let mut arg_exprs = Vec::<Expr>::new();
 		
 		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_end_reached_err()?.content() {
@@ -145,11 +145,11 @@ impl Iterator for StatementsIter {
 			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => 
 				self.parse_varable_declaration(),	
 			
-			Token { content: TokenContent::Name( name ), .. } => 
-				self.parse_variable_set_or_func_call(name, false),
+			Token { content: TokenContent::Name(_), .. } => 
+				self.parse_variable_set_or_func_call(NameToken::from(first).unwrap(), false),
 			
-			Token { content: TokenContent::BuiltinName( name ), .. } =>
-				self.parse_variable_set_or_func_call(name, true),
+			Token { content: TokenContent::BuiltinName(_), .. } =>
+				self.parse_variable_set_or_func_call(NameToken::from(first).unwrap(), true),
 				
 			found @ _ => 
 				Err( InterpErr::from( TokenErr::ExpectedButFound { 
@@ -167,15 +167,17 @@ impl Iterator for StatementsIter {
 
 //--------------------- NameToken --------------------------
 
+#[derive(Debug, Clone)]
 pub struct NameToken {
 	name: String,
-	tok: Token,
+	tok: Token, // // TODO: use more lightweigt struct to keep Name position
 }
 
 impl NameToken {
-	fn from(tok: Token) -> Result<Self, InterpErr> {
+	pub fn from(tok: Token) -> Result<Self, InterpErr> {
 		match tok {
-			Token { content: TokenContent::Name (ref name), .. } => Ok( NameToken {
+			Token { content: TokenContent::Name (ref name), .. }
+				| Token { content: TokenContent::BuiltinName (ref name), .. } => Ok( NameToken {
 				name: name.clone(),
 				tok,
 			} ),
@@ -190,6 +192,19 @@ impl NameToken {
 	pub fn tok(&self) -> &Token { &self.tok }
 }
 
+impl std::fmt::Display for NameToken {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", self.value())
+	}
+}
+
+impl PartialEq for NameToken {
+	fn eq(&self, other: &Self) -> bool {
+		self.value() == other.value()
+	}
+}
+impl Eq for NameToken {}
+
 //------------------- Statement --------------------
 
 #[derive(Debug, Eq, PartialEq)]
@@ -197,7 +212,7 @@ pub enum Statement {
 	WithVariable (WithVariable),
 	FuncCall { 
 		kind: FuncKind,
-		func_name: String, 
+		func_name: NameToken, 
 		arg_exprs: Vec<Expr> 
 	},
 }
@@ -230,6 +245,7 @@ impl Statement {
 						return Err(InterpErr::from(VarErr::WrongType { 
 							value_data_type: expr_data_type, 
 							var_data_type: *data_type,
+							var_name: var_name.clone(),
 						}));
 					}
 				},
@@ -244,6 +260,7 @@ impl Statement {
 						return Err(InterpErr::from(VarErr::WrongType { 
 							value_data_type: expr_data_type, 
 							var_data_type,
+							var_name: var_name.clone(),
 						}));
 					}
 				},				
@@ -253,13 +270,30 @@ impl Statement {
 				match kind {
 					FuncKind::UserDefined => todo!(),
 					FuncKind::Builtin => {					
-						let fd: &FuncDef = builtin_func_defs.try_find(func_name)?;
+						let func_def: &FuncDef = match builtin_func_defs.try_find(func_name.value()) {
+							Err(err) => match err {
+								FuncErr::NotDefined =>
+									return Err(InterpErr::from(StatementErr::Func { err, name: func_name.clone() })),
+								_ => unreachable!(),
+							},
+							Ok(fd) => fd,
+						};
 						
 						let args_data_types: Result<Vec<DataType>, InterpErr> = arg_exprs.iter()
 							.map(|expr| expr.calc_data_type(types_memory, vars_memory))
 							.collect();
 						
-						fd.check_args(args_data_types?)?;
+						match func_def.check_args(args_data_types?) {
+							Err(err) => match err {
+								FuncErr::ArgsCnt { .. } => 
+									return Err(InterpErr::from(StatementErr::Func { err, name: func_name.clone() })),
+								FuncErr::ArgType { .. } => {
+									return Err(InterpErr::from(StatementErr::Func { err, name: func_name.clone() }))
+								},
+								_ => unreachable!(),
+							},
+							Ok(()) => {},
+						}
 					},
 				}
 			}
@@ -270,9 +304,9 @@ impl Statement {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum WithVariable {
-	Declare { var_name: String, data_type: DataType },
-	DeclareSet { var_name: String, data_type: DataType, value_expr: Expr },
-	Set { var_name: String, value_expr: Expr },
+	Declare { var_name: NameToken, data_type: DataType },
+	DeclareSet { var_name: NameToken, data_type: DataType, value_expr: Expr },
+	Set { var_name: NameToken, value_expr: Expr },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -281,22 +315,52 @@ pub enum FuncKind {
 	Builtin,
 }
 
+//------------------- StatementErr --------------------
+
+pub enum StatementErr {
+	Func { err: FuncErr, name: NameToken }
+}
+
+impl std::fmt::Display for StatementErr {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			StatementErr::Func { err, name } => match err {
+				FuncErr::ArgsCnt { actual_cnt, given_cnt } => 
+					write!(f, "Builtin function '{}' has {} argument(-s) but {} were given", &name, actual_cnt, given_cnt),
+				FuncErr::ArgType { actual_type, given_type } => 
+					write!(f, "Argument '{}' must have {:?} type but {:?} were given", &name, actual_type, given_type),
+				FuncErr::NotDefined => 
+					write!(f, "Builtin function '{}' is not defined", &name),
+				FuncErr::AlreadyDefined => 
+					write!(f, "Builtin function '{}' already defined", &name),
+			}
+		}
+	}
+}
+
+//------------------- Tests --------------------
+
 #[cfg(test)]
 mod tests {
 	use super::*;
 	use super::super::*;
 	use super::super::var_data::Value;
 	use super::super::memory::Memory;
+	use super::super::token::{Token, TokenContent};
+	use super::super::string_char::CharPos;
+	use super::super::statement::NameToken;
 	
 	#[test]
 	pub fn can_make_variable_declare_statement() {
 		let mut statements_iter = StatementsIter::new();
 		
+		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
+		
 		statements_iter.push_string("var a: f32;".to_string());		
 		let st = statements_iter.next().unwrap().unwrap();
 		assert_eq!(st, Statement::WithVariable ( 
 				WithVariable::Declare {
-					var_name: String::from("a"), 
+					var_name: nt.clone(), 
 					data_type: DataType::Float32, 
 				} 
 			) 
@@ -307,7 +371,7 @@ mod tests {
 		let st = statements_iter.next().unwrap().unwrap();
 		assert_eq!(st, Statement::WithVariable ( 
 				WithVariable::Declare {
-					var_name: String::from("a"), 
+					var_name: nt.clone(), 
 					data_type: DataType::String, 
 				} 
 			) 
@@ -318,7 +382,7 @@ mod tests {
 		let st = statements_iter.next().unwrap().unwrap();
 		assert_eq!(st, Statement::WithVariable ( 
 				WithVariable::Declare {
-					var_name: String::from("a"), 
+					var_name: nt.clone(), 
 					data_type: DataType::Bool, 
 				} 
 			) 
@@ -330,6 +394,8 @@ mod tests {
 	pub fn can_make_variable_declare_set_statement() {
 		let mut statements_iter = StatementsIter::new();
 		let mem = Memory::new();
+		
+		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
 		
 		statements_iter.push_string("var a: f32 = 3;".to_string());
 		let st = statements_iter.next().unwrap().unwrap();
@@ -343,7 +409,7 @@ mod tests {
 			) 
 			if 
 				(value_expr.calc(&mem).unwrap() == Value::Float32(3_f32) &&
-				var_name == String::from("a"))
+				var_name == nt)
 				=> {},
 			_ => panic!("wrong statement: {:?}", st),
 		};		
@@ -361,7 +427,7 @@ mod tests {
 			) 
 			if 
 				(value_expr.calc(&mem).unwrap() == Value::String(String::from("hello")) &&
-				var_name == String::from("a"))
+				var_name == nt)
 				=> {},
 			_ => panic!("wrong statement: {:?}", st),
 		};		
@@ -379,7 +445,7 @@ mod tests {
 			) 
 			if 
 				(value_expr.calc(&mem).unwrap() == Value::Bool(true) &&
-				var_name == String::from("a"))
+				var_name == nt)
 				=> {},
 			_ => panic!("wrong statement: {:?}", st),
 		};		
@@ -391,13 +457,15 @@ mod tests {
 		let mut st_iter = StatementsIter::new();
 		st_iter.push_string("@print(1.2 + 3.45);".to_string());
 		
+		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::BuiltinName(String::from("print")))).unwrap();
+		
 		match st_iter.next().unwrap().unwrap() {
 			Statement::FuncCall {
 				kind: FuncKind::Builtin,
 				func_name, 
 				arg_exprs
 			} => {
-				assert_eq!("print", &func_name);
+				assert_eq!(nt, func_name);
 				
 				assert_eq!(arg_exprs.len(), 1);
 				
@@ -424,13 +492,15 @@ mod tests {
 		let mut st_iter = StatementsIter::new();
 		st_iter.push_string("@print();".to_string());
 		
+		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::BuiltinName(String::from("print")))).unwrap();
+		
 		match st_iter.next().unwrap().unwrap() {
 			Statement::FuncCall {
 				kind: FuncKind::Builtin,
 				func_name, 
 				arg_exprs
 			} => {
-				assert_eq!("print", &func_name);
+				assert_eq!(nt, func_name);
 				
 				assert_eq!(arg_exprs.len(), 0);
 			},

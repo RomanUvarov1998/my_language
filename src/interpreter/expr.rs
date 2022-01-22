@@ -2,6 +2,7 @@ use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, Statement
 use super::InterpErr;
 use super::memory::Memory;
 use super::var_data::{Value, DataType};
+use super::statement::NameToken;
 
 type TokSym = (Token, Symbol);
 
@@ -118,22 +119,12 @@ impl Expr {
 					
 					prev_is_operand = true;
 				},
-				TokenContent::Name (name) => {
+				TokenContent::Name (_) | TokenContent::BuiltinName (_) => {
 					if prev_is_operand {
 						return Err( InterpErr::from( ExprErr::UnexpectedToken (token) ) );
 					}
 					
-					let sym = Symbol::new_name(name.clone());
-					expr_stack.push((token, sym));
-					
-					prev_is_operand = true;
-				},
-				TokenContent::BuiltinName (name) => {
-					if prev_is_operand {
-						return Err( InterpErr::from( ExprErr::UnexpectedToken (token) ) );
-					}
-					
-					let sym = Symbol::new_builtin_name(name.clone());
+					let sym = Symbol::new_name(NameToken::from(token.clone()).unwrap());
 					expr_stack.push((token, sym));
 					
 					prev_is_operand = true;
@@ -386,9 +377,10 @@ impl Symbol {
 	fn new_number(num: f32) -> Self {
 		Symbol::Operand( Operand::Value (Value::Float32(num)) )
 	}
-	fn new_name(name: String) -> Self {
+	fn new_name(name: NameToken) -> Self {
 		Symbol::Operand( Operand::Name (name) )
 	}
+	#[allow(unused)]
 	fn new_builtin_name(name: String) -> Self {
 		Symbol::Operand( Operand::BuiltinName (name) )
 	}
@@ -413,7 +405,8 @@ impl Symbol {
 #[derive(Debug, Clone)]
 enum Operand {
 	Value (Value),
-	Name (String),
+	Name (NameToken),
+	#[allow(unused)]
 	BuiltinName (String),
 }
 impl Eq for Operand {}

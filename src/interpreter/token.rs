@@ -37,19 +37,6 @@ impl TokensIter {
 		}
 	}
 	
-	pub fn next_name_or_err(&mut self) -> Result<String, TokenErr> {
-		match self.next() {
-			Some(token_result) => match token_result? {
-				Token { content: TokenContent::Name (name), .. } => Ok(name),
-				found @ _ => Err( TokenErr::ExpectedButFound {
-							expected: vec![TokenContent::Name ("<name>".to_string())], 
-							found,
-						} )
-			},
-			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
-		}
-	}
-	
 	pub fn next_expect_semicolon(&mut self) -> Result<(), TokenErr> {
 		match self.next() {
 			Some(token_result) => Self::expect(
@@ -352,7 +339,7 @@ pub struct Token {
 }
 
 impl Token {
-	fn new(pos_begin: CharPos, pos_end: CharPos, content: TokenContent) -> Self {
+	pub fn new(pos_begin: CharPos, pos_end: CharPos, content: TokenContent) -> Self {
 		Self { pos_begin, pos_end, content }
 	}
 	

@@ -1,17 +1,20 @@
+use super::statement::NameToken;
+
 //-------------------- VarData --------------
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct VarData {
-	name: String,
+	name: NameToken,
 	var_value: Option<Value>,
 	data_type: DataType,
 }
+
 impl VarData {
-	pub fn new_uninit(name: String, data_type: DataType) -> Self {
+	pub fn new_uninit(name: NameToken, data_type: DataType) -> Self {
 		VarData { name, var_value: None, data_type }
 	}
 	
-	pub fn new_with_value(name: String, data_type: DataType, new_value: Value) -> Result<Self, VarErr>{
+	pub fn new_with_value(name: NameToken, data_type: DataType, new_value: Value) -> Result<Self, VarErr>{
 		let mut vd: VarData = VarData::new_uninit(name, data_type);
 		vd.set(new_value)?;
 		Ok(vd)
@@ -24,7 +27,8 @@ impl VarData {
 		} else {
 			Err( VarErr::WrongValue { 
 					new_var_value, 
-					var_data_type: self.data_type 
+					var_data_type: self.data_type,
+					var_name: self.name.clone(),
 				} )
 		}
 	}
@@ -37,7 +41,7 @@ impl VarData {
 		self.data_type
 	}
 	
-	pub fn get_name(&self) -> &str {
+	pub fn get_name(&self) -> &NameToken {
 		&self.name
 	}	
 }
@@ -51,12 +55,12 @@ pub enum DataType {
 	Bool,
 }
 impl DataType {
-	pub fn parse(name: &str) -> Result<Self, VarErr> {
-		match name {
+	pub fn parse(name: &NameToken) -> Result<Self, VarErr> {
+		match name.value() {
 			"f32" => Ok( DataType::Float32 ),
 			"str" => Ok( DataType::String ),
 			"bool" => Ok( DataType::Bool ),
-			_ => Err( VarErr::UnknownType { name: name.to_string() } ),
+			_ => Err( VarErr::UnknownType { name: name.clone() } ),
 		}
 	}
 }
@@ -115,17 +119,19 @@ impl Value {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum VarErr {
-	NotDefined { name: String },
-	NotSet { name: String },
-	UnknownType { name: String },
-	AlreadyExists { name: String },
+	NotDefined { name: NameToken },
+	NotSet { name: NameToken },
+	UnknownType { name: NameToken },
+	AlreadyExists { name: NameToken },
 	WrongValue { 
 		new_var_value: Value, 
 		var_data_type: DataType,
+		var_name: NameToken,
 	},
 	WrongType { 
 		value_data_type: DataType, 
 		var_data_type: DataType,
+		var_name: NameToken,
 	},
 }
 
@@ -139,9 +145,9 @@ impl std::fmt::Display for VarErr {
 				write!(f, "Unknown type '{}'", &name),
 			VarErr::AlreadyExists { name } => 
 				write!(f, "Already exists '{}'", &name),
-			VarErr::WrongValue { new_var_value, var_data_type } =>
+			VarErr::WrongValue { new_var_value, var_data_type, .. } =>
 				write!(f, "Wrong value '{:?}' for type '{:?}'", new_var_value, var_data_type),
-			VarErr::WrongType { value_data_type, var_data_type } =>
+			VarErr::WrongType { value_data_type, var_data_type, .. } =>
 				write!(f, "Incompatible types: '{:?}' and '{:?}'", var_data_type, value_data_type),
 		}
 	}
