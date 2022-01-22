@@ -145,6 +145,25 @@ impl CharPos {
 	}
 }
 
+use std::cmp::Ordering;
+impl std::cmp::PartialOrd for CharPos {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl std::cmp::Ord for CharPos {
+	fn cmp(&self, other: &Self) -> Ordering {
+		if self.line < other.line {
+			Ordering::Less
+		} else if self.line > other.line {
+			Ordering::Greater
+		} else {
+			self.col.cmp(&other.col)
+		}
+	}
+}
+
 //------------------------------ CharKind ----------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

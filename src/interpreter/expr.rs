@@ -3,12 +3,15 @@ use super::InterpErr;
 use super::memory::Memory;
 use super::var_data::{Value, DataType};
 use super::statement::NameToken;
+use super::string_char::CharPos;
 
 type TokSym = (Token, Symbol);
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Expr {
 	expr_stack: Vec<TokSym>,
+	pos_begin: CharPos,
+	pos_end: CharPos,
 }
 
 impl Expr {	
@@ -16,7 +19,19 @@ impl Expr {
 		let context = ExprContext::new(context_kind);
 		let expr_stack = Self::create_stack(tokens_iter, context)?;
 		
-		Ok( Self { expr_stack } )
+		let mut pos_begin: CharPos = expr_stack[0].0.pos_begin();
+		let mut pos_end: CharPos = expr_stack[0].0.pos_end();
+		
+		for (tok_ref, _) in &expr_stack {
+			pos_begin = std::cmp::min(tok_ref.pos_begin(), pos_begin);
+			pos_end = std::cmp::max(tok_ref.pos_end(), pos_end);
+		}
+		
+		Ok( Self { 
+			expr_stack,
+			pos_begin,
+			pos_end,
+		} )
 	}
 		
 	pub fn calc(&self, memory: &Memory) -> Result<Value, InterpErr> {
@@ -88,6 +103,14 @@ impl Expr {
 		assert_eq!(type_calc_stack.pop(), None);
 		
 		Ok(result)
+	}
+
+	pub fn pos_begin(&self) -> CharPos {
+		self.pos_begin
+	}
+	
+	pub fn pos_end(&self) -> CharPos {
+		self.pos_end
 	}
 
 	fn create_stack(tokens_iter: &mut TokensIter, mut context: ExprContext) -> Result<Vec<TokSym>, InterpErr> {

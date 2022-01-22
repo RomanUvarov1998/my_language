@@ -339,7 +339,19 @@ impl Statement {
 			}
 		
 			Statement::Branching (br) => match br {
-				Branching::If { condition_expr, body } => todo!(),
+				Branching::If { condition_expr, body } => {
+					match condition_expr.calc_data_type(types_memory, vars_memory)? {
+						DataType::Bool => {},
+						_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
+													cond_expr_begin: condition_expr.pos_begin(),
+													cond_expr_end: condition_expr.pos_end(),
+												} ) ),
+					}
+					
+					for st_ref in body {
+						st_ref.check_types(types_memory, builtin_func_defs, vars_memory)?;
+					}
+				},
 			}
 		}
 		Ok(())
@@ -373,6 +385,10 @@ pub enum Branching {
 pub enum StatementErr {
 	Func { err: FuncErr, name: NameToken },
 	UnfinishedBody (CharPos),
+	IfConditionType { 
+		cond_expr_begin: CharPos,
+		cond_expr_end: CharPos,
+	},
 }
 
 impl std::fmt::Display for StatementErr {
@@ -390,6 +406,8 @@ impl std::fmt::Display for StatementErr {
 			},
 			StatementErr::UnfinishedBody (_) => 
 				write!(f, "Unfinished body"),
+			StatementErr::IfConditionType { .. } => 
+				write!(f, "'If' condition expression data type must be bool"),
 		}
 	}
 }

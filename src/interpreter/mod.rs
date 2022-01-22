@@ -55,8 +55,8 @@ impl Interpreter {
 			statements.push(st);
 		}
 		
-		for st in statements {
-			match self.run_statement(st)? {
+		for st_ref in &statements {
+			match self.run_statement(st_ref)? {
 				InterpInnerSignal::CanContinue => continue,
 				InterpInnerSignal::Exit => return Ok(InterpInnerSignal::Exit),
 			}
@@ -65,18 +65,18 @@ impl Interpreter {
 		Ok(InterpInnerSignal::CanContinue)
 	}
 	
-	fn run_statement(&mut self, statement: Statement) -> Result<InterpInnerSignal, InterpErr> {
+	fn run_statement(&mut self, statement: &Statement) -> Result<InterpInnerSignal, InterpErr> {
 		match statement {
 			Statement::Comment (_) => {},
 			
 			Statement::WithVariable (st) => match st {
 				WithVariable::Declare { var_name, data_type } => 
-					self.memory.add_variable(var_name, data_type, None)?,
+					self.memory.add_variable(var_name.clone(), *data_type, None)?,
 					
 				WithVariable::DeclareSet { var_name, data_type, value_expr } =>
 					self.memory.add_variable(
-						var_name, 
-						data_type,
+						var_name.clone(), 
+						*data_type,
 						Some(value_expr.calc(&self.memory)?))?,
 				
 				WithVariable::Set { var_name, value_expr } => 
@@ -103,7 +103,15 @@ impl Interpreter {
 			},
 			
 			Statement::Branching (br) => match br {
-				Branching::If { condition_expr, body } => todo!(),
+				Branching::If { condition_expr, body } => {
+					// TODO: make local variables to be kept in local scope memory of 'if' statement
+					
+					if let Value::Bool(true) = condition_expr.calc(&self.memory)? {
+						for st_ref in body {
+							self.run_statement(st_ref)?;
+						}
+					}
+				},
 			},
 		}
 		Ok( InterpInnerSignal::CanContinue )
@@ -287,6 +295,12 @@ impl From<StatementErr> for InterpErr {
 				descr,
 				inner: InnerErr::Statement (err),
 			},
+			StatementErr::IfConditionType { cond_expr_begin, cond_expr_end, } => InterpErr {
+				pos_begin: cond_expr_begin,
+				pos_end: cond_expr_end,
+				descr,
+				inner: InnerErr::Statement (err),
+			},
 		}
 	}
 }
@@ -299,6 +313,7 @@ mod tests {
 	use super::token::{Token, TokenContent};
 	use super::string_char::CharPos;
 	use super::statement::NameToken;
+	use super::var_data::DataType;
 	
 	#[test]
 	fn check_err_if_redeclare_variable() {
@@ -316,9 +331,7 @@ mod tests {
 	}
 	
 	#[test]
-	fn check_err_if_set_var_to_data_of_wrong_type() {
-		use super::var_data::DataType;
-		
+	fn check_err_if_set_var_to_data_of_wrong_type() {		
 		let mut int = Interpreter::new();
 		
 		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
@@ -358,6 +371,21 @@ mod tests {
 		
 		match int.check_and_run("@print(False);") {
 			Ok(InterpInnerSignal::CanContinue) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
+
+	#[test]
+	fn if_statement() {
+		let mut int = Interpreter::new();
+		
+		match int.check_and_run("if 2 == 2 { @print(\"2 == 2\"); @print(\"Cool!\"); } @exit();") {
+			Ok(InterpInnerSignal::Exit) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+		
+		match int.check_and_run("if 4 { @print(\"2 == 2\"); @print(\"Cool!\"); } @exit();") {
+			Err(InterpErr { inner: InnerErr::Statement(StatementErr::IfConditionType { .. }), .. } ) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 	}

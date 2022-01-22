@@ -18,3 +18,11 @@ var a: f32 = 2 + 3 * 4 + 5) + 3;
 
 // This function call will not fail:
 @print(46);
+
+// 'if' statement:
+var c1: f32 = 3;
+var c2: f32 = 4;
+
+if c1 * c2 > c1 + c2 {
+	@print("c1 * c2 is greater than c1 + c2");
+}
