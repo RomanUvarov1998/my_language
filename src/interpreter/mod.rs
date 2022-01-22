@@ -9,7 +9,7 @@ mod func_data;
 use statement::*;
 use memory::*;
 use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
-use var_data::{VarErr, Value, DataType};
+use var_data::{VarErr, Value};
 use string_char::CharPos;
 
 //------------------------ Interpreter --------------------
@@ -308,6 +308,8 @@ mod tests {
 	
 	#[test]
 	fn check_err_if_set_var_to_data_of_wrong_type() {
+		use super::super::var_data::DataType;
+		
 		let mut int = Interpreter::new();
 		
 		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
