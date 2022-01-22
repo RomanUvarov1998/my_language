@@ -175,16 +175,18 @@ impl Expr {
 				
 				TokenContent::Bracket (br) => {
 					let tok_br: Bracket = *br;
-					Self::add_bracket(&mut expr_stack, &mut tmp_stack, token, tok_br)?;
 					
 					prev_is_operand = match tok_br {
 						Bracket::Right => true,
 						Bracket::Left => false,
+						Bracket::LeftCurly | Bracket::RightCurly => return Err(unexpected(token)),
 					};
+					
+					Self::add_bracket(&mut expr_stack, &mut tmp_stack, token, tok_br)?;
 				},
 				
 				TokenContent::Keyword (kw) => match kw {
-					Keyword::Var => return Err(unexpected(token)),
+					Keyword::Var | Keyword::If => return Err(unexpected(token)),
 					Keyword::True | Keyword::False => {
 						let sym = Symbol::new_bool_literal(*kw);
 						expr_stack.push((token, sym));
@@ -270,6 +272,8 @@ impl Expr {
 					};
 				};
 			},
+			Bracket::LeftCurly => return Err(unexpected(tok)),
+			Bracket::RightCurly => return Err(unexpected(tok)),
 		};
 		
 		Ok(())
@@ -282,6 +286,7 @@ impl Expr {
 pub enum ExprContextKind {
 	ValueToAssign,
 	FunctionArg,
+	IfCondition,
 }
 
 pub struct ExprContext {
@@ -310,34 +315,41 @@ impl ExprContext {
 			TokenContent::StatementOp (st_op) => match st_op {
 				StatementOp::Colon | StatementOp::Comment (_) => Err(unexpected(tok.clone())),
 				StatementOp::Comma => match self.kind {
-					ExprContextKind::ValueToAssign => Err(unexpected(tok.clone())),
+					ExprContextKind::ValueToAssign | ExprContextKind::IfCondition => Err(unexpected(tok.clone())),
 					ExprContextKind::FunctionArg => Ok(true),
 				},
 				StatementOp::Semicolon => Ok(true),
 			},
 			TokenContent::Keyword (kw) => match kw {
-				Keyword::Var => Err(unexpected(tok.clone())),
+				Keyword::Var | Keyword::If => Err(unexpected(tok.clone())),
 				Keyword::True | Keyword::False => Ok(false),
 			},
 		}
 	}
 	
 	fn check_brackets(&mut self, br_tok: &Token) -> Result<bool, InterpErr> {
-		match br_tok {
-			Token { content: TokenContent::Bracket (Bracket::Left), .. } => {
-				self.left_brackets_count += 1;
-				Ok(false)
-			},
-			Token { content: TokenContent::Bracket (Bracket::Right), .. }  => {
-				if self.left_brackets_count > 0 {
-					self.left_brackets_count -= 1;
+		match br_tok.content() {
+			TokenContent::Bracket(br) => match br {
+				Bracket::Left => {
+					self.left_brackets_count += 1;
 					Ok(false)
-				} else {
-					match self.kind {
-						ExprContextKind::ValueToAssign => Err( unpaired_bracket(br_tok.clone()) ),
-						ExprContextKind::FunctionArg => Ok(true),
+				},
+				Bracket::Right  => {
+					if self.left_brackets_count > 0 {
+						self.left_brackets_count -= 1;
+						Ok(false)
+					} else {
+						match self.kind {
+							ExprContextKind::ValueToAssign | ExprContextKind::IfCondition => Err( unpaired_bracket(br_tok.clone()) ),
+							ExprContextKind::FunctionArg => Ok(true),
+						}
 					}
-				}
+				},
+				Bracket::LeftCurly => match self.kind {
+					ExprContextKind::IfCondition => Ok(true),
+					ExprContextKind::ValueToAssign | ExprContextKind::FunctionArg => Err( unpaired_bracket(br_tok.clone()) ),
+				},
+				_ => Err( unexpected(br_tok.clone()) ),
 			},
 			_ => unreachable!(),
 		}

@@ -1,6 +1,7 @@
 use super::token::*;
 use super::expr::{Expr, ExprContextKind};
 use super::{InterpErr};
+use super::string_char::CharPos;
 use super::var_data::{DataType, VarErr};
 use super::func_data::{FuncsDefList, FuncDef, FuncErr};
 use super::memory::Memory;
@@ -80,6 +81,31 @@ impl StatementsIter {
 		) )
 	}
 	
+	fn parse_if_statement(&mut self) -> Result<Statement, InterpErr> {
+		let condition_expr = Expr::new(
+			&mut self.tokens_iter,
+			ExprContextKind::IfCondition)?;
+		
+		self.tokens_iter.next_expect_left_curly_bracket()?;
+		
+		let mut body = Vec::<Statement>::new();
+		
+		loop {
+			match self.tokens_iter.peek_or_end_reached_err()? {
+				Token { content: TokenContent::Bracket (Bracket::RightCurly), .. } => {
+					self.tokens_iter.next_or_end_reached_err().unwrap();
+					break;
+				},
+				_ => match self.parse_next_statement() {
+					Some(statement_result) => body.push(statement_result?),
+					None => return Err( InterpErr::from( StatementErr::UnfinishedBody (self.tokens_iter.pos()) ) ),
+				},
+			}
+		}
+		
+		Ok( Statement::Branching (Branching::If { condition_expr, body }) )
+	}
+	
 	fn parse_variable_set(&mut self, var_name: NameToken, _is_builtin: bool) -> Result<Statement, InterpErr> {		
 		let value_expr = Expr::new(
 			&mut self.tokens_iter,
@@ -130,12 +156,8 @@ impl StatementsIter {
 			arg_exprs,
 		} )
 	}
-}
 
-impl Iterator for StatementsIter {
-	type Item = Result<Statement, InterpErr>;
-	
-	fn next(&mut self) -> Option<Self::Item> {
+	fn parse_next_statement(&mut self) -> Option<Result<Statement, InterpErr>> {
 		let first: Token = match self.tokens_iter.next()? {
 			Ok(tok) => tok,
 			Err(err) => return Some(Err(InterpErr::from(err))),
@@ -147,6 +169,9 @@ impl Iterator for StatementsIter {
 				
 			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => 
 				self.parse_varable_declaration(),	
+				
+			Token { content: TokenContent::Keyword ( Keyword::If ), .. } => 
+				self.parse_if_statement(),	
 			
 			Token { content: TokenContent::Name(_), .. } => 
 				self.parse_variable_set_or_func_call(NameToken::from(first).unwrap(), false),
@@ -165,6 +190,14 @@ impl Iterator for StatementsIter {
 		};
 		
 		Some(statement_result)
+	}
+}
+
+impl Iterator for StatementsIter {
+	type Item = Result<Statement, InterpErr>;
+	
+	fn next(&mut self) -> Option<Self::Item> {
+		self.parse_next_statement()
 	}	
 }
 
@@ -217,8 +250,9 @@ pub enum Statement {
 	FuncCall { 
 		kind: FuncKind,
 		func_name: NameToken, 
-		arg_exprs: Vec<Expr> 
+		arg_exprs: Vec<Expr>,
 	},
+	Branching (Branching),
 }
 
 impl Statement {
@@ -303,6 +337,10 @@ impl Statement {
 					},
 				}
 			}
+		
+			Statement::Branching (br) => match br {
+				Branching::If { condition_expr, body } => todo!(),
+			}
 		}
 		Ok(())
 	}
@@ -321,10 +359,20 @@ pub enum FuncKind {
 	Builtin,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub enum Branching {
+	If {
+		condition_expr: Expr,
+		body: Vec<Statement>,
+	},
+}
+
 //------------------- StatementErr --------------------
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatementErr {
-	Func { err: FuncErr, name: NameToken }
+	Func { err: FuncErr, name: NameToken },
+	UnfinishedBody (CharPos),
 }
 
 impl std::fmt::Display for StatementErr {
@@ -339,7 +387,9 @@ impl std::fmt::Display for StatementErr {
 					write!(f, "Builtin function '{}' is not defined", &name),
 				FuncErr::AlreadyDefined => 
 					write!(f, "Builtin function '{}' already defined", &name),
-			}
+			},
+			StatementErr::UnfinishedBody (_) => 
+				write!(f, "Unfinished body"),
 		}
 	}
 }
@@ -548,6 +598,103 @@ mod tests {
 			st_iter.next(),
 			None
 		);
+	}
+	
+	#[test]
+	fn can_parse_branching_if_statement() {
+		let mut statements_iter = StatementsIter::new();
+		
+		statements_iter.push_string("if 2 == 2 { @print(\"2 == 2\"); @print(\"Cool!\"); } @exit();".to_string());	
+		let st = statements_iter.next().unwrap().unwrap();
+		
+		let nt_print = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("print")))).unwrap();
+		
+		let types_memory = Memory::new();
+		let vars_memory = Memory::new();
+		
+		match st {
+			Statement::Branching (
+				Branching::If {
+					condition_expr,
+					body,
+				} 
+			) => {
+				assert_eq!(
+					condition_expr.calc_data_type(&types_memory, &vars_memory).unwrap(), 
+					DataType::Bool);
+					
+				assert_eq!(
+					condition_expr.calc(&vars_memory).unwrap(), 
+					Value::Bool(true));
+					
+				match body.as_slice() {
+					[st1, st2] => {
+						// st1
+						match st1 {
+							Statement::FuncCall { 
+								kind: FuncKind::Builtin,
+								func_name, 
+								arg_exprs,
+							} => {
+								assert_eq!(*func_name, nt_print);
+								
+								assert_eq!(arg_exprs.len(), 1);
+								
+								assert_eq!(
+									arg_exprs[0].calc_data_type(&types_memory, &vars_memory).unwrap(), 
+									DataType::String);
+									
+								assert_eq!(
+									arg_exprs[0].calc(&vars_memory).unwrap(), 
+									Value::String(String::from("2 == 2")));
+							},
+							st @ _ => panic!("Wrong statement: {:?}", st),
+						}
+							
+						// st2
+						match st2 {
+							Statement::FuncCall { 
+								kind: FuncKind::Builtin,
+								func_name, 
+								arg_exprs,
+							} => {
+								assert_eq!(*func_name, nt_print);
+						
+						assert_eq!(arg_exprs.len(), 1);
+								
+								assert_eq!(
+									arg_exprs[0].calc_data_type(&types_memory, &vars_memory).unwrap(), 
+									DataType::String);
+									
+								assert_eq!(
+									arg_exprs[0].calc(&vars_memory).unwrap(), 
+									Value::String(String::from("Cool!")));
+							},
+							st @ _ => panic!("Wrong statement: {:?}", st),
+						}
+					},
+					_ => panic!("Wrong body: {:?}", body),
+				}
+			},
+			_ => panic!("Wrong statement: {:?}", st),
+		}	
+		
+		let st = statements_iter.next().unwrap().unwrap();
+		let nt_exit = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("exit")))).unwrap();
+		match st {
+			Statement::FuncCall { 
+				kind: FuncKind::Builtin,
+				func_name, 
+				arg_exprs,
+			} => {
+				assert_eq!(func_name, nt_exit);
+						
+				assert_eq!(arg_exprs.len(), 0);
+			},
+			_ => panic!("Wrong statement: {:?}", st),
+		}
+		
+		assert!(statements_iter.next().is_none());
 	}
 	
 	#[test]

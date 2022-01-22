@@ -6,7 +6,7 @@ mod statement;
 mod var_data;
 mod func_data;
 
-use statement::*;
+use statement::{StatementsIter, NameToken, Statement, WithVariable, FuncKind, Branching, StatementErr};
 use memory::*;
 use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
 use var_data::{VarErr, Value};
@@ -83,7 +83,7 @@ impl Interpreter {
 					self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?,
 			},
 			
-			Statement::FuncCall { kind, func_name, arg_exprs } => {				
+			Statement::FuncCall { kind, func_name, arg_exprs } => {
 				match kind {
 					FuncKind::Builtin => {						
 						let mut arg_vals = Vec::<Value>::with_capacity(arg_exprs.len());
@@ -100,6 +100,10 @@ impl Interpreter {
 						//self.memory.call_func(name, args)?;
 					},
 				}
+			},
+			
+			Statement::Branching (br) => match br {
+				Branching::If { condition_expr, body } => todo!(),
 			},
 		}
 		Ok( InterpInnerSignal::CanContinue )
@@ -143,6 +147,7 @@ pub enum InnerErr {
 	Expr (ExprErr),
 	Var (VarErr),
 	Func (FuncErr),
+	Statement (StatementErr),
 }
 
 impl InterpErr {
@@ -268,15 +273,19 @@ impl From<VarErr> for InterpErr {
 
 impl From<StatementErr> for InterpErr {
 	fn from(err: StatementErr) -> InterpErr {
+		let descr: String = format!("{}", err);
 		match err {
-			StatementErr::Func { err: ferr, ref name } => {
-				let descr: String = format!("{}", err);
-				InterpErr {
-					pos_begin: name.tok().pos_begin(),
-					pos_end: name.tok().pos_end(),
-					descr,
-					inner: InnerErr::Func (ferr),
-				}
+			StatementErr::Func { err: ferr, ref name } => InterpErr {
+				pos_begin: name.tok().pos_begin(),
+				pos_end: name.tok().pos_end(),
+				descr,
+				inner: InnerErr::Func (ferr),
+			},
+			StatementErr::UnfinishedBody (pos) => InterpErr {
+				pos_begin: pos,
+				pos_end: pos,
+				descr,
+				inner: InnerErr::Statement (err),
 			},
 		}
 	}
@@ -308,7 +317,7 @@ mod tests {
 	
 	#[test]
 	fn check_err_if_set_var_to_data_of_wrong_type() {
-		use super::super::var_data::DataType;
+		use super::var_data::DataType;
 		
 		let mut int = Interpreter::new();
 		

@@ -8,4 +8,13 @@ var f1: f32 = 3;
 var f2: f32 = 4;
 @print(f1 + f2 * 2);
 
-@sobaka(46);
+// Check expression end
+var a: f32 = 2 + 3 * 4 + 5) + 3;
+@print("a = ");
+@print(a);
+
+// This function call will fail:
+// @sobaka(46);
+
+// This function call will not fail:
+@print(46);

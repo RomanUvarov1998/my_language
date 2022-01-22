@@ -23,6 +23,10 @@ impl TokensIter {
 		self.iter.push_string(text);
 	}
 	
+	pub fn pos(&self) -> CharPos {
+		self.iter.last_pos()
+	}
+	
 	pub fn peek_or_end_reached_err(&mut self) -> Result<&Token, TokenErr> {
 		if self.peeked_token.is_none() {
 			self.peeked_token = Some(self.next_or_end_reached_err()?);
@@ -51,6 +55,15 @@ impl TokensIter {
 			Some(token_result) => Self::expect(
 				token_result?, 
 				TokenContent::StatementOp (StatementOp::Colon)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
+	}
+	
+	pub fn next_expect_left_curly_bracket(&mut self) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::Bracket (Bracket::LeftCurly)),
 			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 		}
 	}
@@ -118,6 +131,8 @@ impl TokensIter {
 					CharKind::LeftSlash |
 					CharKind::LeftBracket |
 					CharKind::RightBracket |
+					CharKind::LeftCurlyBracket |
+					CharKind::RightCurlyBracket |
 					CharKind::Eq |
 					CharKind::Letter |
 					CharKind::Punctuation (_) |
@@ -175,6 +190,7 @@ impl TokensIter {
 		
 		let token = match name.as_str() {
 			"var" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::Var )),
+			"if" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::If )),
 			"True" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::True )),
 			"False" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::False )),
 			"land" => Token::new(first_char.pos(), pos_end, TokenContent::Operator ( Operator::LogicalAnd )),
@@ -329,6 +345,9 @@ impl Iterator for TokensIter {
 				CharKind::LeftBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Left )) ),
 				CharKind::RightBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Right )) ),
 				
+				CharKind::LeftCurlyBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::LeftCurly )) ),
+				CharKind::RightCurlyBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::RightCurly )) ),
+				
 				CharKind::Letter 
 					| CharKind::Dog 
 						=> self.parse_name_or_keyword_or_operator(ch),
@@ -420,8 +439,10 @@ impl std::fmt::Display for TokenContent {
 				Operator::LogicalXor => write!(f, "'{}'", "LogicalXor"),
 			},
 			TokenContent::Bracket (br) => match br {
-				Bracket::Right => write!(f, "'{}'", ")"),
 				Bracket::Left => write!(f, "'{}'", "("),
+				Bracket::Right => write!(f, "'{}'", ")"),
+				Bracket::LeftCurly => write!(f, "'{}'", "{{"),
+				Bracket::RightCurly => write!(f, "'{}'", "}}"),
 			},
 			TokenContent::Name (name) => write!(f, "'{}'", name),
 			TokenContent::BuiltinName (name) => write!(f, "'{}'", name),
@@ -433,6 +454,7 @@ impl std::fmt::Display for TokenContent {
 			},
 			TokenContent::Keyword (kw) => match kw {
 				Keyword::Var => write!(f, "'{}'", "var"),
+				Keyword::If => write!(f, "'{}'", "if"),
 				Keyword::True => write!(f, "'{}'", "True"),
 				Keyword::False => write!(f, "'{}'", "False"),
 			},
@@ -504,8 +526,10 @@ pub enum Operator {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Bracket {
-	Right,
 	Left,
+	Right,
+	LeftCurly,
+	RightCurly,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -519,6 +543,7 @@ pub enum StatementOp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Keyword {
 	Var,
+	If,
 	True,
 	False,
 }
@@ -578,6 +603,8 @@ mod tests {
 		test_token_content_detection("==", TokenContent::Operator (Operator::Equal));
 		test_token_content_detection("(", TokenContent::Bracket (Bracket::Left));
 		test_token_content_detection(")", TokenContent::Bracket (Bracket::Right));
+		test_token_content_detection("{", TokenContent::Bracket (Bracket::LeftCurly));
+		test_token_content_detection("}", TokenContent::Bracket (Bracket::RightCurly));
 		test_token_content_detection("=", TokenContent::Operator (Operator::Assign));
 		test_token_content_detection("var1", TokenContent::Name (String::from("var1")));
 		test_token_content_detection(":", TokenContent::StatementOp (StatementOp::Colon));
@@ -585,6 +612,7 @@ mod tests {
 		test_token_content_detection(",", TokenContent::StatementOp (StatementOp::Comma));
 		test_token_content_detection("//23rwrer2", TokenContent::StatementOp (StatementOp::Comment (String::from("23rwrer2"))));
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
+		test_token_content_detection("if", TokenContent::Keyword ( Keyword::If ));
 		test_token_content_detection("@print", TokenContent::BuiltinName (String::from("print")));
 		test_token_content_detection("\"vasya\"", TokenContent::StringLiteral (String::from("vasya")));
 		test_token_content_detection(">", TokenContent::Operator (Operator::Greater));
@@ -601,7 +629,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!land lor lxor:;,//sdsdfd".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!land lor lxor:;,(){}if//sdsdfd".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -627,6 +655,11 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Colon));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Semicolon));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comma));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Left));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Right));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftCurly));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightCurly));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::If ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from("sdsdfd"))));
 		assert_eq!(tokens_iter.next(), None);
 	}
@@ -634,7 +667,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t // sdfsdfs \n\t ".to_string());
+		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t (  \n\t ) \n\t { \n\t } \n\t if \n\t // sdfsdfs \n\t ".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -661,6 +694,11 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Colon));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Semicolon));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comma));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Left));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Right));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftCurly));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightCurly));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::If ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from(" sdfsdfs "))));
 		assert_eq!(tokens_iter.next(), None);
 	}
