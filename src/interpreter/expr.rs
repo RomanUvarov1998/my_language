@@ -209,7 +209,7 @@ impl Expr {
 				},
 				
 				TokenContent::Keyword (kw) => match kw {
-					Keyword::Var | Keyword::If => return Err(unexpected(token)),
+					Keyword::Var | Keyword::If | Keyword::Else => return Err(unexpected(token)),
 					Keyword::True | Keyword::False => {
 						let sym = Symbol::new_bool_literal(*kw);
 						expr_stack.push((token, sym));
@@ -344,7 +344,7 @@ impl ExprContext {
 				StatementOp::Semicolon => Ok(true),
 			},
 			TokenContent::Keyword (kw) => match kw {
-				Keyword::Var | Keyword::If => Err(unexpected(tok.clone())),
+				Keyword::Var | Keyword::If | Keyword::Else => Err(unexpected(tok.clone())),
 				Keyword::True | Keyword::False => Ok(false),
 			},
 		}

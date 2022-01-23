@@ -27,6 +27,15 @@ impl TokensIter {
 		self.iter.last_pos()
 	}
 	
+	pub fn peek(&mut self) -> Result<Option<&Token>, TokenErr> {
+		if self.peeked_token.is_none() {
+			if let Some(token_result) = self.next() {
+				self.peeked_token = Some(token_result?);
+			}
+		}
+		Ok(self.peeked_token.as_ref())
+	}
+	
 	pub fn peek_or_end_reached_err(&mut self) -> Result<&Token, TokenErr> {
 		if self.peeked_token.is_none() {
 			self.peeked_token = Some(self.next_or_end_reached_err()?);
@@ -191,6 +200,7 @@ impl TokensIter {
 		let token = match name.as_str() {
 			"var" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::Var )),
 			"if" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::If )),
+			"else" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::Else )),
 			"True" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::True )),
 			"False" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::False )),
 			"land" => Token::new(first_char.pos(), pos_end, TokenContent::Operator ( Operator::LogicalAnd )),
@@ -455,6 +465,7 @@ impl std::fmt::Display for TokenContent {
 			TokenContent::Keyword (kw) => match kw {
 				Keyword::Var => write!(f, "'{}'", "var"),
 				Keyword::If => write!(f, "'{}'", "if"),
+				Keyword::Else => write!(f, "'{}'", "else"),
 				Keyword::True => write!(f, "'{}'", "True"),
 				Keyword::False => write!(f, "'{}'", "False"),
 			},
@@ -544,6 +555,7 @@ pub enum StatementOp {
 pub enum Keyword {
 	Var,
 	If,
+	Else,
 	True,
 	False,
 }
@@ -613,6 +625,7 @@ mod tests {
 		test_token_content_detection("//23rwrer2", TokenContent::StatementOp (StatementOp::Comment (String::from("23rwrer2"))));
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
 		test_token_content_detection("if", TokenContent::Keyword ( Keyword::If ));
+		test_token_content_detection("else", TokenContent::Keyword ( Keyword::Else ));
 		test_token_content_detection("@print", TokenContent::BuiltinName (String::from("print")));
 		test_token_content_detection("\"vasya\"", TokenContent::StringLiteral (String::from("vasya")));
 		test_token_content_detection(">", TokenContent::Operator (Operator::Greater));
@@ -629,7 +642,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!land lor lxor:;,(){}if//sdsdfd".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!land lor lxor:;,(){}if else//sdsdfd".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -660,6 +673,7 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftCurly));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightCurly));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::If ));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Else ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from("sdsdfd"))));
 		assert_eq!(tokens_iter.next(), None);
 	}
@@ -667,7 +681,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t (  \n\t ) \n\t { \n\t } \n\t if \n\t // sdfsdfs \n\t ".to_string());
+		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t (  \n\t ) \n\t { \n\t } \n\t if \n\t else \n\t // sdfsdfs \n\t ".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -699,6 +713,7 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftCurly));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightCurly));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::If ));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Else ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from(" sdfsdfs "))));
 		assert_eq!(tokens_iter.next(), None);
 	}

@@ -81,30 +81,43 @@ impl StatementsIter {
 		) )
 	}
 	
-	fn parse_if_statement(&mut self) -> Result<Statement, InterpErr> {
+	fn parse_if_else_statement(&mut self) -> Result<Statement, InterpErr> {
 		let condition_expr = Expr::new(
 			&mut self.tokens_iter,
 			ExprContextKind::IfCondition)?;
 		
-		self.tokens_iter.next_expect_left_curly_bracket()?;
+		let mut true_body = Vec::<Statement>::new();		
+		self.parse_body(&mut true_body)?;
 		
-		let mut body = Vec::<Statement>::new();
-		
-		loop {
-			match self.tokens_iter.peek_or_end_reached_err()? {
-				Token { content: TokenContent::Bracket (Bracket::RightCurly), .. } => {
-					self.tokens_iter.next_or_end_reached_err().unwrap();
-					break;
-				},
-				_ => match self.parse_next_statement() {
-					Some(statement_result) => body.push(statement_result?),
-					None => return Err( InterpErr::from( StatementErr::UnfinishedBody (self.tokens_iter.pos()) ) ),
-				},
-			}
+		let mut false_body = Vec::<Statement>::new();		
+		if let Some(Token { content: TokenContent::Keyword (Keyword::Else), .. }) = self.tokens_iter.peek()? {
+			self.tokens_iter.next_or_end_reached_err().unwrap();
+			self.parse_body(&mut false_body)?;
 		}
 		
-		Ok( Statement::Branching (Branching::If { condition_expr, body }) )
+		Ok( Statement::Branching (Branching::IfElse { 
+			condition_expr, 
+			true_body,
+			false_body
+		}) )
 	}
+	
+	fn parse_body(&mut self, body: &mut Vec<Statement>) -> Result<(), InterpErr> {
+			self.tokens_iter.next_expect_left_curly_bracket()?;
+			
+			loop {
+				match self.tokens_iter.peek_or_end_reached_err()? {
+					Token { content: TokenContent::Bracket (Bracket::RightCurly), .. } => {
+						self.tokens_iter.next_or_end_reached_err().unwrap();
+						break Ok(());
+					},
+					_ => match self.parse_next_statement() {
+						Some(statement_result) => body.push(statement_result?),
+						None => break Err( InterpErr::from( StatementErr::UnfinishedBody (self.tokens_iter.pos()) ) ),
+					},
+				}
+			}
+		}
 	
 	fn parse_variable_set(&mut self, var_name: NameToken, _is_builtin: bool) -> Result<Statement, InterpErr> {		
 		let value_expr = Expr::new(
@@ -171,7 +184,7 @@ impl StatementsIter {
 				self.parse_varable_declaration(),	
 				
 			Token { content: TokenContent::Keyword ( Keyword::If ), .. } => 
-				self.parse_if_statement(),	
+				self.parse_if_else_statement(),	
 			
 			Token { content: TokenContent::Name(_), .. } => 
 				self.parse_variable_set_or_func_call(NameToken::from(first).unwrap(), false),
@@ -339,7 +352,7 @@ impl Statement {
 			}
 		
 			Statement::Branching (br) => match br {
-				Branching::If { condition_expr, body } => {
+				Branching::IfElse { condition_expr, true_body, false_body } => {
 					match condition_expr.calc_data_type(types_memory, vars_memory)? {
 						DataType::Bool => {},
 						_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
@@ -348,7 +361,11 @@ impl Statement {
 												} ) ),
 					}
 					
-					for st_ref in body {
+					for st_ref in true_body {
+						st_ref.check_types(types_memory, builtin_func_defs, vars_memory)?;
+					}
+					
+					for st_ref in false_body {
 						st_ref.check_types(types_memory, builtin_func_defs, vars_memory)?;
 					}
 				},
@@ -373,10 +390,10 @@ pub enum FuncKind {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum Branching {
-	If {
+	IfElse {
 		condition_expr: Expr,
-		body: Vec<Statement>,
-		// TODO: add 'else' body
+		true_body: Vec<Statement>,
+		false_body: Vec<Statement>,
 	},
 }
 
@@ -620,22 +637,23 @@ mod tests {
 	}
 	
 	#[test]
-	fn can_parse_branching_if_statement() {
+	fn can_parse_branching_if_else_statement() {
 		let mut statements_iter = StatementsIter::new();
 		
-		statements_iter.push_string("if 2 == 2 { @print(\"2 == 2\"); @print(\"Cool!\"); } @exit();".to_string());	
-		let st = statements_iter.next().unwrap().unwrap();
-		
 		let nt_print = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("print")))).unwrap();
+		let nt_exit = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("exit")))).unwrap();
 		
 		let types_memory = Memory::new();
 		let vars_memory = Memory::new();
 		
+		statements_iter.push_string("if 2 == 2 { @print(\"2 == 2\"); @print(\"Cool!\"); } @exit();".to_string());	
+		let st = statements_iter.next().unwrap().unwrap();		
 		match st {
 			Statement::Branching (
-				Branching::If {
+				Branching::IfElse {
 					condition_expr,
-					body,
+					true_body,
+					false_body,
 				} 
 			) => {
 				assert_eq!(
@@ -646,15 +664,11 @@ mod tests {
 					condition_expr.calc(&vars_memory).unwrap(), 
 					Value::Bool(true));
 					
-				match body.as_slice() {
+				match true_body.as_slice() {
 					[st1, st2] => {
 						// st1
 						match st1 {
-							Statement::FuncCall { 
-								kind: FuncKind::Builtin,
-								func_name, 
-								arg_exprs,
-							} => {
+							Statement::FuncCall { kind: FuncKind::Builtin, func_name, arg_exprs } => {
 								assert_eq!(*func_name, nt_print);
 								
 								assert_eq!(arg_exprs.len(), 1);
@@ -672,14 +686,10 @@ mod tests {
 							
 						// st2
 						match st2 {
-							Statement::FuncCall { 
-								kind: FuncKind::Builtin,
-								func_name, 
-								arg_exprs,
-							} => {
+							Statement::FuncCall { kind: FuncKind::Builtin, func_name, arg_exprs } => {
 								assert_eq!(*func_name, nt_print);
 						
-						assert_eq!(arg_exprs.len(), 1);
+								assert_eq!(arg_exprs.len(), 1);
 								
 								assert_eq!(
 									arg_exprs[0].calc_data_type(&types_memory, &vars_memory).unwrap(), 
@@ -692,14 +702,135 @@ mod tests {
 							st @ _ => panic!("Wrong statement: {:?}", st),
 						}
 					},
-					_ => panic!("Wrong body: {:?}", body),
+					_ => panic!("Wrong true_body: {:?}", true_body),
 				}
+				
+				assert_eq!(false_body.len(), 0);
 			},
 			_ => panic!("Wrong statement: {:?}", st),
 		}	
 		
 		let st = statements_iter.next().unwrap().unwrap();
-		let nt_exit = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("exit")))).unwrap();
+		match st {
+			Statement::FuncCall { 
+				kind: FuncKind::Builtin,
+				func_name, 
+				arg_exprs,
+			} => {
+				assert_eq!(func_name, nt_exit);
+						
+				assert_eq!(arg_exprs.len(), 0);
+			},
+			_ => panic!("Wrong statement: {:?}", st),
+		}
+		
+		statements_iter.push_string(
+			"if 2 == 2 { @print(\"2 == 2\"); @print(\"Cool!\"); } else { @print(\"2 != 2\"); @print(\"Cool!\"); } @exit();".to_string());	
+		let st = statements_iter.next().unwrap().unwrap();		
+		match st {
+			Statement::Branching (
+				Branching::IfElse {
+					condition_expr,
+					true_body,
+					false_body,
+				} 
+			) => {
+				assert_eq!(
+					condition_expr.calc_data_type(&types_memory, &vars_memory).unwrap(), 
+					DataType::Bool);
+					
+				assert_eq!(
+					condition_expr.calc(&vars_memory).unwrap(), 
+					Value::Bool(true));
+					
+				match true_body.as_slice() {
+					[st1, st2] => {
+						// st1
+						match st1 {
+							Statement::FuncCall { kind: FuncKind::Builtin, func_name, arg_exprs } => {
+								assert_eq!(*func_name, nt_print);
+								
+								assert_eq!(arg_exprs.len(), 1);
+								
+								assert_eq!(
+									arg_exprs[0].calc_data_type(&types_memory, &vars_memory).unwrap(), 
+									DataType::String);
+									
+								assert_eq!(
+									arg_exprs[0].calc(&vars_memory).unwrap(), 
+									Value::String(String::from("2 == 2")));
+							},
+							st @ _ => panic!("Wrong statement: {:?}", st),
+						}
+							
+						// st2
+						match st2 {
+							Statement::FuncCall { kind: FuncKind::Builtin, func_name, arg_exprs } => {
+								assert_eq!(*func_name, nt_print);
+						
+								assert_eq!(arg_exprs.len(), 1);
+								
+								assert_eq!(
+									arg_exprs[0].calc_data_type(&types_memory, &vars_memory).unwrap(), 
+									DataType::String);
+									
+								assert_eq!(
+									arg_exprs[0].calc(&vars_memory).unwrap(), 
+									Value::String(String::from("Cool!")));
+							},
+							st @ _ => panic!("Wrong statement: {:?}", st),
+						}
+					},
+					_ => panic!("Wrong true_body: {:?}", true_body),
+				}
+				
+				match false_body.as_slice() {
+					[st1, st2] => {
+						// st1
+						match st1 {
+							Statement::FuncCall { kind: FuncKind::Builtin, func_name, arg_exprs } => {
+								assert_eq!(*func_name, nt_print);
+								
+								assert_eq!(arg_exprs.len(), 1);
+								
+								assert_eq!(
+									arg_exprs[0].calc_data_type(&types_memory, &vars_memory).unwrap(), 
+									DataType::String);
+									
+								assert_eq!(
+									arg_exprs[0].calc(&vars_memory).unwrap(), 
+									Value::String(String::from("2 != 2")));
+							},
+							st @ _ => panic!("Wrong statement: {:?}", st),
+						}
+							
+						// st2
+						match st2 {
+							Statement::FuncCall { kind: FuncKind::Builtin, func_name, arg_exprs } => {
+								assert_eq!(*func_name, nt_print);
+						
+								assert_eq!(arg_exprs.len(), 1);
+								
+								assert_eq!(
+									arg_exprs[0].calc_data_type(&types_memory, &vars_memory).unwrap(), 
+									DataType::String);
+									
+								assert_eq!(
+									arg_exprs[0].calc(&vars_memory).unwrap(), 
+									Value::String(String::from("Cool!")));
+							},
+							st @ _ => panic!("Wrong statement: {:?}", st),
+						}
+					},
+					_ => panic!("Wrong true_body: {:?}", true_body),
+				}
+				
+				assert_eq!(false_body.len(), 2);
+			},
+			_ => panic!("Wrong statement: {:?}", st),
+		}
+		
+		let st = statements_iter.next().unwrap().unwrap();
 		match st {
 			Statement::FuncCall { 
 				kind: FuncKind::Builtin,
