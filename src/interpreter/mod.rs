@@ -137,7 +137,7 @@ impl Interpreter {
 				},
 			},
 		}
-		Ok( InterpInnerSignal::CanContinue )
+		Ok( InterpInnerSignal::CanContinue ) // TODO: put InterpInnerSignal::Exit in error to suddenly halt program from Body of if-else or while
 	}
 	
 	fn call_builtin_func(&self, name: &NameToken, args_values: Vec<Value>) -> Result<InterpInnerSignal, InterpErr> {
@@ -149,6 +149,7 @@ impl Interpreter {
 			"exit" => {
 				Ok( InterpInnerSignal::Exit )
 			},
+			// TODO: add @read() func to get input from console
 			_ => unreachable!(),
 		}
 	}

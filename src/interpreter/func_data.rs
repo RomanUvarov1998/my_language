@@ -76,7 +76,7 @@ impl FuncDef {
 
 pub struct FuncArg {
 	#[allow(dead_code)]
-	name: String,
+	name: String, // TODO: use token for func arg if function is user defined
 	data_type: Option<DataType>,
 }
 
