@@ -68,7 +68,7 @@ impl Expr {
 		Ok(result)
 	}
 	
-	pub fn calc_data_type(&self, types_memory: &Memory, vars_memory: &Memory) -> Result<DataType, InterpErr> {		
+	pub fn check_and_calc_data_type(&self, types_memory: &Memory, vars_memory: &Memory) -> Result<DataType, InterpErr> {		
 		assert!(self.expr_stack.len() > 0);
 		let mut type_calc_stack = Vec::<DataType>::with_capacity(self.expr_stack.len());
 		

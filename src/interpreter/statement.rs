@@ -326,7 +326,7 @@ impl Statement {
 					}
 					types_memory.add_variable(var_name.clone(), *data_type, None)?;
 					
-					let expr_data_type: DataType = value_expr.calc_data_type(types_memory, vars_memory)?;
+					let expr_data_type: DataType = value_expr.check_and_calc_data_type(types_memory, vars_memory)?;
 					if *data_type != expr_data_type {
 						return Err(InterpErr::from(VarErr::WrongType { 
 							value_data_type: expr_data_type, 
@@ -341,7 +341,7 @@ impl Statement {
 						Err(_) => vars_memory.get_variable_type(var_name)?,
 						Ok(dt) => dt,
 					};
-					let expr_data_type: DataType = value_expr.calc_data_type(types_memory, vars_memory)?;
+					let expr_data_type: DataType = value_expr.check_and_calc_data_type(types_memory, vars_memory)?;
 					if var_data_type != expr_data_type {
 						return Err(InterpErr::from(VarErr::WrongType { 
 							value_data_type: expr_data_type, 
@@ -366,7 +366,7 @@ impl Statement {
 						};
 						
 						let args_data_types: Result<Vec<DataType>, InterpErr> = arg_exprs.iter()
-							.map(|expr| expr.calc_data_type(types_memory, vars_memory))
+							.map(|expr| expr.check_and_calc_data_type(types_memory, vars_memory))
 							.collect();
 						
 						match func_def.check_args(args_data_types?) {
@@ -387,7 +387,7 @@ impl Statement {
 			Statement::Branching (br) => match br {
 				Branching::IfElse { if_bodies, else_body } => {
 					for body in if_bodies.iter() {
-						match body.condition_expr.calc_data_type(types_memory, vars_memory)? {
+						match body.condition_expr.check_and_calc_data_type(types_memory, vars_memory)? {
 							DataType::Bool => {},
 							_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
 														cond_expr_begin: body.condition_expr.pos_begin(),
@@ -403,7 +403,7 @@ impl Statement {
 					}
 				},
 				Branching::While { body } => {
-					match body.condition_expr().calc_data_type(types_memory, vars_memory)? {
+					match body.condition_expr().check_and_calc_data_type(types_memory, vars_memory)? {
 						DataType::Bool => {},
 						_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
 													cond_expr_begin: body.condition_expr.pos_begin(),
@@ -921,7 +921,7 @@ mod tests {
 			assert_eq!(data_type, DataType::Float32);
 		
 			assert_eq!(
-				value_expr.calc_data_type(&types_memory, &vars_memory).unwrap(), 
+				value_expr.check_and_calc_data_type(&types_memory, &vars_memory).unwrap(), 
 				DataType::Float32);
 						
 			assert_eq!(
@@ -967,7 +967,7 @@ mod tests {
 		let vars_memory = Memory::new();
 		
 		assert_eq!(
-			condition_expr.calc_data_type(&types_memory, &vars_memory).unwrap(), 
+			condition_expr.check_and_calc_data_type(&types_memory, &vars_memory).unwrap(), 
 			DataType::Bool);
 					
 		assert_eq!(
@@ -1002,7 +1002,7 @@ mod tests {
 				assert_eq!(arg_exprs.len(), 1);
 				
 				assert_eq!(
-					arg_exprs[0].calc_data_type(&types_memory, &vars_memory).unwrap(), 
+					arg_exprs[0].check_and_calc_data_type(&types_memory, &vars_memory).unwrap(), 
 					DataType::String);
 					
 				assert_eq!(
