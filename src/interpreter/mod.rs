@@ -6,7 +6,7 @@ mod statement;
 mod var_data;
 mod func_data;
 
-use statement::{StatementsIter, NameToken, Statement, WithVariable, FuncKind, Branching, StatementErr};
+use statement::{StatementsIter, NameToken, Statement, WithVariable, FuncKind, Branching, StatementErr, Body};
 use memory::*;
 use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
 use var_data::{VarErr, Value};
@@ -103,28 +103,30 @@ impl Interpreter {
 			},
 			
 			Statement::Branching (br) => match br {
-				Branching::IfElse { parts, else_body } => {
+				Branching::IfElse { parts } => {
 					// TODO: make local variables to be kept in local scope memory of 'if' statement
-					let mut met_true = false;
 					
 					'parts: for part in parts {
-						match part.condition_expr().calc(&self.memory)? {
-							Value::Bool(true) => {
-								for st_ref in part.statements() {
+						match part {
+							Body::Conditional { condition_expr, statements } => {						
+								match condition_expr.calc(&self.memory)? {
+									Value::Bool(true) => {
+										for st_ref in statements {
+											self.run_statement(st_ref)?;
+										}
+										break 'parts;
+									},
+									Value::Bool(false) => {},
+									result @ _ => panic!("Wrong condition expr data type: {:?}", result.get_type()),
+								}		
+							},
+							Body::Unconditional { statements } => {
+								for st_ref in statements {
 									self.run_statement(st_ref)?;
 								}
-								met_true = true;
-								break 'parts;
 							},
-							Value::Bool(false) => {},
-							result @ _ => panic!("Wrong condition expr data type: {:?}", result.get_type()),
 						}
-					}
-					
-					if !met_true {
-						for st_ref in else_body {
-							self.run_statement(st_ref)?;
-						}
+						
 					}
 				},
 			},
