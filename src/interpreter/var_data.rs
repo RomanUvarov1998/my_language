@@ -115,6 +115,30 @@ impl Value {
 	}
 }
 
+impl From<f32> for Value {
+	fn from(val: f32) -> Self {
+		Value::Float32(val)
+	}
+}
+
+impl From<String> for Value {
+	fn from(val: String) -> Self {
+		Value::String(val)
+	}
+}
+
+impl From<&str> for Value {
+	fn from(val: &str) -> Self {
+		Value::String(val.to_string())
+	}
+}
+
+impl From<bool> for Value {
+	fn from(val: bool) -> Self {
+		Value::Bool(val)
+	}
+}
+
 //-------------------- VarErr --------------
 
 #[derive(Debug, PartialEq, Eq)]

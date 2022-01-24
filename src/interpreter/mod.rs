@@ -6,7 +6,7 @@ mod statement;
 mod var_data;
 mod func_data;
 
-use statement::{StatementsIter, NameToken, Statement, WithVariable, FuncKind, Branching, StatementErr, Body};
+use statement::{StatementsIter, NameToken, Statement, WithVariable, FuncKind, Branching, StatementErr};
 use memory::*;
 use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
 use var_data::{VarErr, Value};
@@ -103,30 +103,36 @@ impl Interpreter {
 			},
 			
 			Statement::Branching (br) => match br {
-				Branching::IfElse { parts } => {
+				Branching::IfElse { if_bodies, else_body } => {
 					// TODO: make local variables to be kept in local scope memory of 'if' statement
 					
-					'parts: for part in parts {
-						match part {
-							Body::Conditional { condition_expr, statements } => {						
-								match condition_expr.calc(&self.memory)? {
-									Value::Bool(true) => {
-										for st_ref in statements {
-											self.run_statement(st_ref)?;
-										}
-										break 'parts;
-									},
-									Value::Bool(false) => {},
-									result @ _ => panic!("Wrong condition expr data type: {:?}", result.get_type()),
-								}		
-							},
-							Body::Unconditional { statements } => {
-								for st_ref in statements {
+					let mut got_true = false;
+					
+					'if_out: for body in if_bodies {
+						match body.condition_expr().calc(&self.memory)? {
+							Value::Bool(true) => {
+								for st_ref in body.statements() {
 									self.run_statement(st_ref)?;
 								}
+								got_true = true;
+								break 'if_out;
 							},
+							Value::Bool(false) => {},
+							result @ _ => panic!("Wrong condition expr data type: {:?}", result.get_type()),
 						}
-						
+					}
+					
+					if !got_true {
+						for st_ref in else_body.statements() {
+							self.run_statement(st_ref)?;
+						}
+					}
+				},
+				Branching::While { body } => {
+					while let Value::Bool(true) = body.condition_expr().calc(&self.memory)? {
+						for st_ref in body.statements() {
+							self.run_statement(st_ref)?;
+						}
 					}
 				},
 			},

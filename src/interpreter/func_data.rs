@@ -75,6 +75,7 @@ impl FuncDef {
 }
 
 pub struct FuncArg {
+	#[allow(dead_code)]
 	name: String,
 	data_type: Option<DataType>,
 }
