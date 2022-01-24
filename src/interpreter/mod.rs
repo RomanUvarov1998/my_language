@@ -103,25 +103,28 @@ impl Interpreter {
 			},
 			
 			Statement::Branching (br) => match br {
-				Branching::IfElse { condition_expr, true_body, false_body } => {
+				Branching::IfElse { parts, else_body } => {
 					// TODO: make local variables to be kept in local scope memory of 'if' statement
+					let mut met_true = false;
 					
-					match condition_expr.calc(&self.memory)? {
-						Value::Bool(true) => {
-							for st_ref in true_body {
-								self.run_statement(st_ref)?;
-							}
-						},
-						Value::Bool(false) => {
-							for st_ref in false_body {
-								self.run_statement(st_ref)?;
-							}
+					'parts: for part in parts {
+						match part.condition_expr().calc(&self.memory)? {
+							Value::Bool(true) => {
+								for st_ref in part.statements() {
+									self.run_statement(st_ref)?;
+								}
+								met_true = true;
+								break 'parts;
+							},
+							Value::Bool(false) => {},
+							result @ _ => panic!("Wrong condition expr data type: {:?}", result.get_type()),
 						}
-						result @ _ => panic!("Wrong condition expr data type: {:?}", result.get_type()),
 					}
 					
-					if let Value::Bool(true) = condition_expr.calc(&self.memory)? {
-						
+					if !met_true {
+						for st_ref in else_body {
+							self.run_statement(st_ref)?;
+						}
 					}
 				},
 			},

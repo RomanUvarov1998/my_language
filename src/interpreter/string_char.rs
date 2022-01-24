@@ -221,7 +221,7 @@ impl From<char> for CharKind {
 				CharKind::Letter
 			} else if let Some(value) = ch.to_digit(RADIX) {
 				CharKind::Digit(value)
-			} else if ch.is_ascii_control() {
+			} else if ch.is_ascii_control() || ch == '\r' {
 				CharKind::Control
 			} else {
 				CharKind::Invalid

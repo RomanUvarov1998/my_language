@@ -67,7 +67,7 @@ impl TokensIter {
 			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 		}
 	}
-	
+		
 	pub fn next_expect_left_curly_bracket(&mut self) -> Result<(), TokenErr> {
 		match self.next() {
 			Some(token_result) => Self::expect(
@@ -146,7 +146,7 @@ impl TokensIter {
 					CharKind::Letter |
 					CharKind::Punctuation (_) |
 					CharKind::Whitespace |
-					CharKind::Invalid => {
+					CharKind::Invalid => { // TODO: somehow \r includes into string literal and fails the output
 						self.iter.next().unwrap();
 						string_content.push(parsed_char.ch());
 					},
@@ -155,7 +155,7 @@ impl TokensIter {
 					
 					CharKind::DoubleQuote => {
 						self.iter.next().unwrap();
-						return Ok( Token::new(pos_begin, parsed_char.pos(), TokenContent::StringLiteral (string_content)) );
+						return Ok( Token::new(pos_begin, parsed_char.pos(), TokenContent::StringLiteral (string_content.trim_end().to_string())) );
 					},
 					
 					CharKind::NewLine => return Err( TokenErr::Construct (parsed_char) ),

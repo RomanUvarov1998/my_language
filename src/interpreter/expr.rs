@@ -33,7 +33,7 @@ impl Expr {
 			pos_end,
 		} )
 	}
-		
+	
 	pub fn calc(&self, memory: &Memory) -> Result<Value, InterpErr> {
 		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len());
 		let mut expr = self.expr_stack.clone();
