@@ -448,6 +448,9 @@ pub enum Branching {
 	IfElse {
 		parts: Vec<Body>,
 	},
+	// While {
+		// parts: Vec<Body>,
+	// },
 }
 
 #[derive(Debug, Eq, PartialEq)]
