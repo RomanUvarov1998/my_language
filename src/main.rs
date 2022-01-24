@@ -15,6 +15,10 @@ fn main() {
 			match interpreter.check_and_run(&code) {
 				Ok(_) => {},
 				Err(err) => {
+					if *err.inner() == InnerErr::HaltRequest {
+						return;
+					}
+					
 					println!("ERROR: {}:{} - {}:{}", 
 						err.pos_begin().line() + 1, err.pos_begin().col(),
 						err.pos_end().line() + 1, err.pos_end().col());

@@ -43,7 +43,7 @@ impl Interpreter {
 		}
 	}
 	
-	pub fn check_and_run(&mut self, code: &str) -> Result<InterpInnerSignal, InterpErr> {
+	pub fn check_and_run(&mut self, code: &str) -> Result<(), InterpErr> {
 		self.statements_iter.push_string(code.to_string());
 		
 		let mut statements = Vec::<Statement>::new();
@@ -56,16 +56,13 @@ impl Interpreter {
 		}
 		
 		for st_ref in &statements {
-			match self.run_statement(st_ref)? {
-				InterpInnerSignal::CanContinue => continue,
-				InterpInnerSignal::Exit => return Ok(InterpInnerSignal::Exit),
-			}
+			self.run_statement(st_ref)?;
 		}
 		
-		Ok(InterpInnerSignal::CanContinue)
+		Ok(())
 	}
 	
-	fn run_statement(&mut self, statement: &Statement) -> Result<InterpInnerSignal, InterpErr> {
+	fn run_statement(&mut self, statement: &Statement) -> Result<(), InterpErr> {
 		match statement {
 			Statement::Comment (_) => {},
 			
@@ -91,9 +88,7 @@ impl Interpreter {
 							arg_vals.push(expr.calc(&self.memory)?);
 						}
 						
-						if let InterpInnerSignal::Exit = self.call_builtin_func(&func_name, arg_vals)? {
-							return Ok( InterpInnerSignal::Exit );
-						}
+						self.call_builtin_func(&func_name, arg_vals)?;
 					},
 					FuncKind::UserDefined => {
 						todo!();
@@ -137,30 +132,22 @@ impl Interpreter {
 				},
 			},
 		}
-		Ok( InterpInnerSignal::CanContinue ) // TODO: put InterpInnerSignal::Exit in error to suddenly halt program from Body of if-else or while
+		Ok(())
 	}
 	
-	fn call_builtin_func(&self, name: &NameToken, args_values: Vec<Value>) -> Result<InterpInnerSignal, InterpErr> {
+	fn call_builtin_func(&self, name: &NameToken, args_values: Vec<Value>) -> Result<(), InterpErr> {
 		match name.value() {
 			"print" => {
 				println!("{}", args_values[0]);
-				Ok( InterpInnerSignal::CanContinue )
+				Ok(())
 			},
 			"exit" => {
-				Ok( InterpInnerSignal::Exit )
+				Err( InterpErr::new_halt_request() )
 			},
 			// TODO: add @read() func to get input from console
 			_ => unreachable!(),
 		}
 	}
-}
-
-//------------------------ InterpInnerSignal --------------------
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum InterpInnerSignal {
-	CanContinue,
-	Exit,
 }
 
 //------------------------ InterpErr --------------------
@@ -180,12 +167,22 @@ pub enum InnerErr {
 	Var (VarErr),
 	Func (FuncErr),
 	Statement (StatementErr),
+	HaltRequest,
 }
 
 impl InterpErr {
+	fn new_halt_request() -> Self {
+		InterpErr {
+			pos_begin: CharPos::new(),
+			pos_end: CharPos::new(),
+			descr: String::new(),
+			inner: InnerErr::HaltRequest,
+		}
+	}
 	pub fn pos_begin(&self) -> CharPos { self.pos_begin }
 	pub fn pos_end(&self) -> CharPos { self.pos_end }
 	pub fn descr(&self) -> &str { &self.descr }
+	pub fn inner(&self) -> &InnerErr { &self.inner }
 }
 
 impl std::fmt::Display for InterpErr {
@@ -344,7 +341,7 @@ mod tests {
 		let mut int = Interpreter::new();
 		
 		match int.check_and_run("var a: f32 = 3;") {
-			Ok(InterpInnerSignal::CanContinue) => {},
+			Ok(()) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 		
@@ -384,17 +381,17 @@ mod tests {
 		let mut int = Interpreter::new();
 		
 		match int.check_and_run("@print(\"hello\");") {
-			Ok(InterpInnerSignal::CanContinue) => {},
+			Ok(()) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 		
 		match int.check_and_run("@print(3);") {
-			Ok(InterpInnerSignal::CanContinue) => {},
+			Ok(()) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 		
 		match int.check_and_run("@print(False);") {
-			Ok(InterpInnerSignal::CanContinue) => {},
+			Ok(()) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 	}
@@ -404,7 +401,7 @@ mod tests {
 		let mut int = Interpreter::new();
 		
 		match int.check_and_run("if 2 == 2 { @print(\"2 == 2\"); @print(\"Cool!\"); } @exit();") {
-			Ok(InterpInnerSignal::Exit) => {},
+			Err(err) => assert_eq!(*err.inner(), InnerErr::HaltRequest),
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 		
