@@ -346,7 +346,7 @@ impl Statement {
 				match kind {
 					FuncKind::UserDefined => todo!(),
 					FuncKind::Builtin => {					
-						let func_def: &BuiltinFuncDef = match builtin_func_defs.try_find(func_name.value()) {
+						let func_def: &BuiltinFuncDef = match builtin_func_defs.find(func_name.value()) {
 							Err(err) => match err {
 								BuiltinFuncErr::NotDefined =>
 									return Err(InterpErr::from(StatementErr::Func { err, name: func_name.clone() })),
@@ -514,8 +514,6 @@ impl std::fmt::Display for StatementErr {
 					write!(f, "Argument '{}' must have {:?} type but {:?} were given", &name, actual_type, given_type),
 				BuiltinFuncErr::NotDefined => 
 					write!(f, "Builtin function '{}' is not defined", &name),
-				BuiltinFuncErr::AlreadyDefined => 
-					write!(f, "Builtin function '{}' already defined", &name),
 			},
 			StatementErr::UnfinishedBody (_) => 
 				write!(f, "Unfinished body"),

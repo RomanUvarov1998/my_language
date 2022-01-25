@@ -1,6 +1,7 @@
 // TODO: rename module to 'func'
 
-use super::var_data::DataType;
+use super::var_data::{DataType, Value};
+use super::InterpErr;
 
 //------------------------- BuiltinFuncsDefList -----------------------
 
@@ -15,20 +16,18 @@ impl BuiltinFuncsDefList {
 		}
 	}
 	
-	pub fn add(&mut self, func_def: BuiltinFuncDef) -> Result<(), BuiltinFuncErr> {
+	pub fn add(&mut self, func_def: BuiltinFuncDef) {
 		let func_name: &str = func_def.get_name();
 		if let Some(..) =  self.funcs
 			.iter()
 			.find(|func| func.get_name() == func_name) {
-			return Err( BuiltinFuncErr::AlreadyDefined );
+				panic!("Builtin function '{}' is already defined", func_name);
 		}
 		
 		self.funcs.push(func_def);
-		
-		Ok(())
 	}
 	
-	pub fn try_find<'mem>(&'mem self, name: &str) -> Result<&'mem BuiltinFuncDef, BuiltinFuncErr> {
+	pub fn find<'mem>(&'mem self, name: &str) -> Result<&'mem BuiltinFuncDef, BuiltinFuncErr> {
 		match self.funcs.iter().find(|func| func.get_name() == name) {
 			Some(func) => Ok(func),
 			None => Err( BuiltinFuncErr::NotDefined ),
@@ -38,16 +37,22 @@ impl BuiltinFuncsDefList {
 
 //------------------------- BuiltinFuncDef -----------------------
 
+pub type BuiltinFuncBody = Box<dyn Fn(Vec<Value>) -> Result<(), InterpErr>>;
+
 pub struct BuiltinFuncDef {
 	name: &'static str,
 	args: Vec<BuiltinFuncArg>,
+	body: BuiltinFuncBody,
+	return_type: Option<DataType>,
 }
 
 impl BuiltinFuncDef {
-	pub fn new(name: &'static str, args: Vec<BuiltinFuncArg>) -> Self {
+	pub fn new(name: &'static str, args: Vec<BuiltinFuncArg>, body: BuiltinFuncBody, return_type: Option<DataType>) -> Self {
 		Self {
 			name,
 			args,
+			body,
+			return_type,
 		}
 	}
 	
@@ -73,6 +78,14 @@ impl BuiltinFuncDef {
 	
 	pub fn get_name(&self) -> &'static str {
 		self.name
+	}
+	
+	pub fn return_type(&self) -> Option<DataType> {
+		self.return_type
+	}
+	
+	pub fn call(&self, args_values: Vec<Value>) -> Result<(), InterpErr> {
+		(self.body)(args_values)
 	}
 }
 
@@ -100,7 +113,7 @@ impl BuiltinFuncArg {
 
 //------------------------- BuiltinFuncErr -----------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BuiltinFuncErr {
 	ArgsCnt {
 		actual_cnt: usize,
@@ -111,5 +124,4 @@ pub enum BuiltinFuncErr {
 		given_type: DataType,
 	},
 	NotDefined,
-	AlreadyDefined,
 }

@@ -6,9 +6,9 @@ mod statement;
 mod var_data;
 mod func_data;
 
-use statement::{StatementsIter, NameToken, Statement, WithVariable, FuncKind, Branching, StatementErr};
+use statement::{StatementsIter, Statement, WithVariable, FuncKind, Branching, StatementErr};
 use memory::*;
-use func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncErr};
+use func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
 use var_data::{VarErr, Value};
 use string_char::CharPos;
 
@@ -28,13 +28,22 @@ impl Interpreter {
 			"print",
 			vec![
 				BuiltinFuncArg::new("value".to_string(), None),
-			]
-		)).unwrap();
+			],
+			Box::new(|args_values: Vec<Value>| -> Result<(), InterpErr> {
+				println!("{}", args_values[0]);
+				Ok(())
+			}) as BuiltinFuncBody,
+			None
+		));
 		
 		builtin_func_defs.add(BuiltinFuncDef::new(
 			"exit",
-			Vec::new()
-		)).unwrap();
+			Vec::new(),
+			Box::new(|_args_values: Vec<Value>| -> Result<(), InterpErr> {
+				Err( InterpErr::new_halt_request() )
+			}) as BuiltinFuncBody,
+			None
+		));
 		
 		Self {
 			memory: Memory::new(),
@@ -82,13 +91,15 @@ impl Interpreter {
 			
 			Statement::FuncCall { kind, func_name, arg_exprs } => {
 				match kind {
-					FuncKind::Builtin => {						
+					FuncKind::Builtin => {
+						let f = self.builtin_func_defs.find(func_name.value()).unwrap();
+						
 						let mut arg_vals = Vec::<Value>::with_capacity(arg_exprs.len());
 						for expr in arg_exprs {
 							arg_vals.push(expr.calc(&self.memory)?);
 						}
 						
-						self.call_builtin_func(&func_name, arg_vals)?;
+						return f.call(arg_vals);
 					},
 					FuncKind::UserDefined => {
 						todo!();
@@ -133,24 +144,6 @@ impl Interpreter {
 			},
 		}
 		Ok(())
-	}
-	
-	fn call_builtin_func(&self, name: &NameToken, args_values: Vec<Value>) -> Result<(), InterpErr> {
-		match name.value() {
-			"print" => {
-				println!("{}", args_values[0]);
-				Ok(())
-			},
-			"exit" => {
-				Err( InterpErr::new_halt_request() )
-			},
-			"to_str" => {
-				
-				Ok(())
-			},
-			// TODO: add @read() func to get input from console
-			_ => unreachable!(),
-		}
 	}
 }
 

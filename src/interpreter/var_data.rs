@@ -65,6 +65,16 @@ impl DataType {
 	}
 }
 
+impl std::fmt::Display for DataType {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			DataType::Float32 => write!(f, "Float32"),
+			DataType::String => write!(f, "String"),
+			DataType::Bool => write!(f, "Bool"),
+		}
+	}
+}
+
 //-------------------- Value --------------
 
 #[derive(Debug, Clone)]
