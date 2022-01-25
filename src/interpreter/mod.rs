@@ -51,7 +51,7 @@ impl Interpreter {
 	
 		while let Some(statement_result) = self.statements_iter.next() {
 			let st: Statement = statement_result?;
-			st.check_types(&mut types_memory, &self.builtin_func_defs, &self.memory)?;
+			st.check_types(&mut types_memory, &self.builtin_func_defs)?;
 			statements.push(st);
 		}
 		
