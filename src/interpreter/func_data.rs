@@ -1,3 +1,5 @@
+// TODO: rename module to 'func'
+
 use super::var_data::DataType;
 
 //------------------------- BuiltinFuncsDefList -----------------------
