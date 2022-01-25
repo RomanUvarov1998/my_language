@@ -68,7 +68,7 @@ impl Expr {
 		Ok(result)
 	}
 	
-	pub fn check_and_calc_data_type(&self, types_memory: &Memory) -> Result<DataType, InterpErr> {		
+	pub fn check_and_calc_data_type(&self, check_memory: &Memory) -> Result<DataType, InterpErr> {		
 		assert!(self.expr_stack.len() > 0);
 		let mut type_calc_stack = Vec::<DataType>::with_capacity(self.expr_stack.len());
 		
@@ -78,7 +78,7 @@ impl Expr {
 				(.., Symbol::Operand (ref opnd)) => {
 					let opnd_dt: DataType = match opnd {
 						Operand::Value (val) => val.get_type(),
-						Operand::Name (name) => types_memory.get_variable_type(&name)?,
+						Operand::Name (name) => check_memory.get_variable_type(&name)?,
 						Operand::BuiltinName (_name) => todo!(),
 					};
 					type_calc_stack.push(opnd_dt);

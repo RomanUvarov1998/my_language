@@ -36,6 +36,11 @@ impl Interpreter {
 			Vec::new()
 		)).unwrap();
 		
+		builtin_func_defs.add(FuncDef::new(
+			"to_str",
+			FuncArg::new("value".to_string(), None),
+		)).unwrap();
+		
 		Self {
 			memory: Memory::new(),
 			builtin_func_defs,
@@ -47,11 +52,11 @@ impl Interpreter {
 		self.statements_iter.push_string(code.to_string());
 		
 		let mut statements = Vec::<Statement>::new();
-		let mut types_memory = Memory::new();
+		let mut check_memory = Memory::new();
 	
 		while let Some(statement_result) = self.statements_iter.next() {
 			let st: Statement = statement_result?;
-			st.check_types(&mut types_memory, &self.builtin_func_defs)?;
+			st.check(&mut check_memory, &self.builtin_func_defs)?;
 			statements.push(st);
 		}
 		
@@ -143,6 +148,9 @@ impl Interpreter {
 			},
 			"exit" => {
 				Err( InterpErr::new_halt_request() )
+			},
+			"to_str" => {
+				Ok(())
 			},
 			// TODO: add @read() func to get input from console
 			_ => unreachable!(),

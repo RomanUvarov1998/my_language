@@ -302,9 +302,9 @@ pub enum Statement {
 }
 
 impl Statement {
-	pub fn check_types(
+	pub fn check(
 		&self, 
-		types_memory: &mut Memory, 
+		check_memory: &mut Memory, 
 		builtin_func_defs: &FuncsDefList
 	) -> Result<(), InterpErr> 
 	{
@@ -313,13 +313,13 @@ impl Statement {
 				
 			Statement::WithVariable (st) => match st {
 				WithVariable::Declare { var_name, data_type } => {
-					types_memory.add_variable(var_name.clone(), *data_type,  None)?;
+					check_memory.add_variable(var_name.clone(), *data_type,  None)?;
 				},
 					
 				WithVariable::DeclareSet { var_name, data_type, value_expr } => {
-					types_memory.add_variable(var_name.clone(), *data_type, None)?;
+					check_memory.add_variable(var_name.clone(), *data_type, None)?;
 					
-					let expr_data_type: DataType = value_expr.check_and_calc_data_type(types_memory)?;
+					let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_memory)?;
 					if *data_type != expr_data_type {
 						return Err(InterpErr::from(VarErr::WrongType { 
 							value_data_type: expr_data_type, 
@@ -330,8 +330,8 @@ impl Statement {
 				},
 				
 				WithVariable::Set { var_name, value_expr } => {
-					let var_data_type: DataType = types_memory.get_variable_type(var_name)?;
-					let expr_data_type: DataType = value_expr.check_and_calc_data_type(types_memory)?;
+					let var_data_type: DataType = check_memory.get_variable_type(var_name)?;
+					let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_memory)?;
 					if var_data_type != expr_data_type {
 						return Err(InterpErr::from(VarErr::WrongType { 
 							value_data_type: expr_data_type, 
@@ -356,7 +356,7 @@ impl Statement {
 						};
 						
 						let args_data_types: Result<Vec<DataType>, InterpErr> = arg_exprs.iter()
-							.map(|expr| expr.check_and_calc_data_type(types_memory))
+							.map(|expr| expr.check_and_calc_data_type(check_memory))
 							.collect();
 						
 						match func_def.check_args(args_data_types?) {
@@ -377,7 +377,7 @@ impl Statement {
 			Statement::Branching (br) => match br {
 				Branching::IfElse { if_bodies, else_body } => {
 					for body in if_bodies.iter() {
-						match body.condition_expr.check_and_calc_data_type(types_memory)? {
+						match body.condition_expr.check_and_calc_data_type(check_memory)? {
 							DataType::Bool => {},
 							_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
 														cond_expr_begin: body.condition_expr.pos_begin(),
@@ -385,15 +385,15 @@ impl Statement {
 													} ) ),
 						}
 						for st_ref in body.statements.iter() {
-							st_ref.check_types(types_memory, builtin_func_defs)?;
+							st_ref.check(check_memory, builtin_func_defs)?;
 						}
 					}
 					for st_ref in else_body.statements.iter() {
-						st_ref.check_types(types_memory, builtin_func_defs)?;
+						st_ref.check(check_memory, builtin_func_defs)?;
 					}
 				},
 				Branching::While { body } => {
-					match body.condition_expr().check_and_calc_data_type(types_memory)? {
+					match body.condition_expr().check_and_calc_data_type(check_memory)? {
 						DataType::Bool => {},
 						_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
 													cond_expr_begin: body.condition_expr.pos_begin(),
@@ -401,7 +401,7 @@ impl Statement {
 												} ) ),
 					}
 					for st_ref in body.statements().iter() {
-						st_ref.check_types(types_memory, builtin_func_defs)?;
+						st_ref.check(check_memory, builtin_func_defs)?;
 					}
 				},
 			}
