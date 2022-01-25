@@ -53,6 +53,7 @@ pub enum DataType {
 	Float32,
 	String,
 	Bool,
+	Untyped,
 }
 impl DataType {
 	pub fn parse(name: &NameToken) -> Result<Self, VarErr> {
@@ -71,6 +72,7 @@ impl std::fmt::Display for DataType {
 			DataType::Float32 => write!(f, "Float32"),
 			DataType::String => write!(f, "String"),
 			DataType::Bool => write!(f, "Bool"),
+			DataType::Untyped => write!(f, "Untyped"),
 		}
 	}
 }

@@ -9,7 +9,7 @@ mod func_data;
 use statement::{StatementsIter, Statement, WithVariable, FuncKind, Branching, StatementErr};
 use memory::*;
 use func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
-use var_data::{VarErr, Value};
+use var_data::{VarErr, Value, DataType};
 use string_char::CharPos;
 
 //------------------------ Interpreter --------------------
@@ -27,13 +27,13 @@ impl Interpreter {
 		builtin_func_defs.add(BuiltinFuncDef::new(
 			"print",
 			vec![
-				BuiltinFuncArg::new("value".to_string(), None),
+				BuiltinFuncArg::new("value".to_string(), DataType::Untyped),
 			],
 			Box::new(|args_values: Vec<Value>| -> Result<(), InterpErr> {
 				println!("{}", args_values[0]);
 				Ok(())
 			}) as BuiltinFuncBody,
-			None
+			DataType::Untyped
 		));
 		
 		builtin_func_defs.add(BuiltinFuncDef::new(
@@ -42,7 +42,7 @@ impl Interpreter {
 			Box::new(|_args_values: Vec<Value>| -> Result<(), InterpErr> {
 				Err( InterpErr::new_halt_request() )
 			}) as BuiltinFuncBody,
-			None
+			DataType::Untyped
 		));
 		
 		Self {

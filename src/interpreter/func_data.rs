@@ -43,11 +43,11 @@ pub struct BuiltinFuncDef {
 	name: &'static str,
 	args: Vec<BuiltinFuncArg>,
 	body: BuiltinFuncBody,
-	return_type: Option<DataType>,
+	return_type: DataType,
 }
 
 impl BuiltinFuncDef {
-	pub fn new(name: &'static str, args: Vec<BuiltinFuncArg>, body: BuiltinFuncBody, return_type: Option<DataType>) -> Self {
+	pub fn new(name: &'static str, args: Vec<BuiltinFuncArg>, body: BuiltinFuncBody, return_type: DataType) -> Self {
 		Self {
 			name,
 			args,
@@ -80,7 +80,7 @@ impl BuiltinFuncDef {
 		self.name
 	}
 	
-	pub fn return_type(&self) -> Option<DataType> {
+	pub fn return_type(&self) -> DataType {
 		self.return_type
 	}
 	
@@ -92,11 +92,11 @@ impl BuiltinFuncDef {
 pub struct BuiltinFuncArg {
 	#[allow(dead_code)]
 	name: String, // TODO: use token for func arg if function is user defined
-	data_type: Option<DataType>,
+	data_type: DataType,
 }
 
 impl BuiltinFuncArg {
-	pub fn new(name: String, data_type: Option<DataType>) -> Self {
+	pub fn new(name: String, data_type: DataType) -> Self {
 		Self {
 			name,
 			data_type,
@@ -105,8 +105,8 @@ impl BuiltinFuncArg {
 	
 	pub fn type_check(&self, data_type: DataType) -> bool {
 		match self.data_type {
-			Some(dt) => data_type == dt,
-			None => true,
+			DataType::Untyped => true,
+			_ => self.data_type == data_type,
 		}
 	}
 }
@@ -120,7 +120,7 @@ pub enum BuiltinFuncErr {
 		given_cnt: usize,
 	},
 	ArgType { // TODO: provide token to keep wrong argument position
-		actual_type: Option<DataType>,
+		actual_type: DataType,
 		given_type: DataType,
 	},
 	NotDefined,
