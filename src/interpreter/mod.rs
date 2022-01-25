@@ -8,7 +8,7 @@ mod func_data;
 
 use statement::{StatementsIter, NameToken, Statement, WithVariable, FuncKind, Branching, StatementErr};
 use memory::*;
-use func_data::{FuncsDefList, FuncDef, FuncArg, FuncErr};
+use func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncErr};
 use var_data::{VarErr, Value};
 use string_char::CharPos;
 
@@ -16,29 +16,24 @@ use string_char::CharPos;
 
 pub struct Interpreter {
 	memory: Memory,
-	builtin_func_defs: FuncsDefList,
+	builtin_func_defs: BuiltinFuncsDefList,
 	statements_iter: StatementsIter,
 }
 
 impl Interpreter {
 	pub fn new() -> Self {
-		let mut builtin_func_defs = FuncsDefList::new();
+		let mut builtin_func_defs = BuiltinFuncsDefList::new();
 		
-		builtin_func_defs.add(FuncDef::new(
+		builtin_func_defs.add(BuiltinFuncDef::new(
 			"print",
 			vec![
-				FuncArg::new("value".to_string(), None),
+				BuiltinFuncArg::new("value".to_string(), None),
 			]
 		)).unwrap();
 		
-		builtin_func_defs.add(FuncDef::new(
+		builtin_func_defs.add(BuiltinFuncDef::new(
 			"exit",
 			Vec::new()
-		)).unwrap();
-		
-		builtin_func_defs.add(FuncDef::new(
-			"to_str",
-			FuncArg::new("value".to_string(), None),
 		)).unwrap();
 		
 		Self {
@@ -150,6 +145,7 @@ impl Interpreter {
 				Err( InterpErr::new_halt_request() )
 			},
 			"to_str" => {
+				
 				Ok(())
 			},
 			// TODO: add @read() func to get input from console
@@ -173,7 +169,7 @@ pub enum InnerErr {
 	Token (TokenErr),
 	Expr (ExprErr),
 	Var (VarErr),
-	Func (FuncErr),
+	BuiltinFunc (BuiltinFuncErr),
 	Statement (StatementErr),
 	HaltRequest,
 }
@@ -316,7 +312,7 @@ impl From<StatementErr> for InterpErr {
 				pos_begin: name.tok().pos_begin(),
 				pos_end: name.tok().pos_end(),
 				descr,
-				inner: InnerErr::Func (ferr),
+				inner: InnerErr::BuiltinFunc (ferr),
 			},
 			StatementErr::UnfinishedBody (pos) => InterpErr {
 				pos_begin: pos,

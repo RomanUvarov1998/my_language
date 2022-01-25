@@ -3,7 +3,7 @@ use super::expr::{Expr, ExprContextKind};
 use super::{InterpErr};
 use super::string_char::CharPos;
 use super::var_data::{DataType, VarErr};
-use super::func_data::{FuncsDefList, FuncDef, FuncErr};
+use super::func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncErr};
 use super::memory::Memory;
 
 pub struct StatementsIter {
@@ -305,7 +305,7 @@ impl Statement {
 	pub fn check(
 		&self, 
 		check_memory: &mut Memory, 
-		builtin_func_defs: &FuncsDefList
+		builtin_func_defs: &BuiltinFuncsDefList
 	) -> Result<(), InterpErr> 
 	{
 		match self {
@@ -346,9 +346,9 @@ impl Statement {
 				match kind {
 					FuncKind::UserDefined => todo!(),
 					FuncKind::Builtin => {					
-						let func_def: &FuncDef = match builtin_func_defs.try_find(func_name.value()) {
+						let func_def: &BuiltinFuncDef = match builtin_func_defs.try_find(func_name.value()) {
 							Err(err) => match err {
-								FuncErr::NotDefined =>
+								BuiltinFuncErr::NotDefined =>
 									return Err(InterpErr::from(StatementErr::Func { err, name: func_name.clone() })),
 								_ => unreachable!(),
 							},
@@ -361,9 +361,9 @@ impl Statement {
 						
 						match func_def.check_args(args_data_types?) {
 							Err(err) => match err {
-								FuncErr::ArgsCnt { .. } => 
+								BuiltinFuncErr::ArgsCnt { .. } => 
 									return Err(InterpErr::from(StatementErr::Func { err, name: func_name.clone() })),
-								FuncErr::ArgType { .. } => {
+								BuiltinFuncErr::ArgType { .. } => {
 									return Err(InterpErr::from(StatementErr::Func { err, name: func_name.clone() }))
 								},
 								_ => unreachable!(),
@@ -496,7 +496,7 @@ impl UnconditionalBody {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatementErr {
-	Func { err: FuncErr, name: NameToken },
+	Func { err: BuiltinFuncErr, name: NameToken },
 	UnfinishedBody (CharPos),
 	IfConditionType { 
 		cond_expr_begin: CharPos,
@@ -508,13 +508,13 @@ impl std::fmt::Display for StatementErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			StatementErr::Func { err, name } => match err {
-				FuncErr::ArgsCnt { actual_cnt, given_cnt } => 
+				BuiltinFuncErr::ArgsCnt { actual_cnt, given_cnt } => 
 					write!(f, "Builtin function '{}' has {} argument(-s) but {} were given", &name, actual_cnt, given_cnt),
-				FuncErr::ArgType { actual_type, given_type } => 
+				BuiltinFuncErr::ArgType { actual_type, given_type } => 
 					write!(f, "Argument '{}' must have {:?} type but {:?} were given", &name, actual_type, given_type),
-				FuncErr::NotDefined => 
+				BuiltinFuncErr::NotDefined => 
 					write!(f, "Builtin function '{}' is not defined", &name),
-				FuncErr::AlreadyDefined => 
+				BuiltinFuncErr::AlreadyDefined => 
 					write!(f, "Builtin function '{}' already defined", &name),
 			},
 			StatementErr::UnfinishedBody (_) => 

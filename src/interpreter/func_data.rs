@@ -1,24 +1,24 @@
 use super::var_data::DataType;
 
-//------------------------- FuncsDefList -----------------------
+//------------------------- BuiltinFuncsDefList -----------------------
 
-pub struct FuncsDefList {
-	funcs: Vec<FuncDef>,
+pub struct BuiltinFuncsDefList {
+	funcs: Vec<BuiltinFuncDef>,
 }
 
-impl FuncsDefList {
+impl BuiltinFuncsDefList {
 	pub fn new() -> Self {
 		Self {
 			funcs: Vec::new(),
 		}
 	}
 	
-	pub fn add(&mut self, func_def: FuncDef) -> Result<(), FuncErr> {
+	pub fn add(&mut self, func_def: BuiltinFuncDef) -> Result<(), BuiltinFuncErr> {
 		let func_name: &str = func_def.get_name();
 		if let Some(..) =  self.funcs
 			.iter()
 			.find(|func| func.get_name() == func_name) {
-			return Err( FuncErr::AlreadyDefined );
+			return Err( BuiltinFuncErr::AlreadyDefined );
 		}
 		
 		self.funcs.push(func_def);
@@ -26,32 +26,32 @@ impl FuncsDefList {
 		Ok(())
 	}
 	
-	pub fn try_find<'mem>(&'mem self, name: &str) -> Result<&'mem FuncDef, FuncErr> {
+	pub fn try_find<'mem>(&'mem self, name: &str) -> Result<&'mem BuiltinFuncDef, BuiltinFuncErr> {
 		match self.funcs.iter().find(|func| func.get_name() == name) {
 			Some(func) => Ok(func),
-			None => Err( FuncErr::NotDefined ),
+			None => Err( BuiltinFuncErr::NotDefined ),
 		}
 	}
 }
 
-//------------------------- FuncDef -----------------------
+//------------------------- BuiltinFuncDef -----------------------
 
-pub struct FuncDef {
+pub struct BuiltinFuncDef {
 	name: &'static str,
-	args: Vec<FuncArg>,
+	args: Vec<BuiltinFuncArg>,
 }
 
-impl FuncDef {
-	pub fn new(name: &'static str, args: Vec<FuncArg>) -> Self {
+impl BuiltinFuncDef {
+	pub fn new(name: &'static str, args: Vec<BuiltinFuncArg>) -> Self {
 		Self {
 			name,
 			args,
 		}
 	}
 	
-	pub fn check_args(&self, args_data_types: Vec<DataType>) -> Result<(), FuncErr> {
+	pub fn check_args(&self, args_data_types: Vec<DataType>) -> Result<(), BuiltinFuncErr> {
 		if self.args.len() != args_data_types.len() {
-			return Err( FuncErr::ArgsCnt { 
+			return Err( BuiltinFuncErr::ArgsCnt { 
 				actual_cnt: self.args.len(),
 				given_cnt: args_data_types.len(),
 			} );
@@ -59,7 +59,7 @@ impl FuncDef {
 		
 		for i in 0..self.args.len() {
 			if !self.args[i].type_check(args_data_types[i]) {
-				return Err( FuncErr::ArgType { 
+				return Err( BuiltinFuncErr::ArgType { 
 					actual_type: self.args[i].data_type,
 					given_type: args_data_types[i],
 				} );
@@ -74,13 +74,13 @@ impl FuncDef {
 	}
 }
 
-pub struct FuncArg {
+pub struct BuiltinFuncArg {
 	#[allow(dead_code)]
 	name: String, // TODO: use token for func arg if function is user defined
 	data_type: Option<DataType>,
 }
 
-impl FuncArg {
+impl BuiltinFuncArg {
 	pub fn new(name: String, data_type: Option<DataType>) -> Self {
 		Self {
 			name,
@@ -96,10 +96,10 @@ impl FuncArg {
 	}
 }
 
-//------------------------- FuncErr -----------------------
+//------------------------- BuiltinFuncErr -----------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FuncErr {
+pub enum BuiltinFuncErr {
 	ArgsCnt {
 		actual_cnt: usize,
 		given_cnt: usize,
