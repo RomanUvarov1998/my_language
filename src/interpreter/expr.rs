@@ -32,7 +32,6 @@ impl Expr {
 	}
 	
 	pub fn calc(&self, memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<Value, InterpErr> {
-		// TODO: try ding it without copying all expr_stack, just by visiting each symbol by shared ref with for loop
 		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len());
 		
 		for Symbol { kind, pos } in self.expr_stack.iter() {

@@ -180,7 +180,7 @@ impl std::fmt::Display for VarErr {
 			VarErr::UnknownType { name } => 
 				write!(f, "Unknown type '{}'", &name),
 			VarErr::AlreadyExists { name } => 
-				write!(f, "Already exists '{}'", &name),
+				write!(f, "Variable already exists '{}'", &name),
 			VarErr::WrongValue { new_var_value, var_data_type, .. } =>
 				write!(f, "Wrong value '{:?}' for type '{:?}'", new_var_value, var_data_type),
 			VarErr::WrongType { value_data_type, var_data_type, .. } =>

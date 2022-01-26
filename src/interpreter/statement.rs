@@ -314,7 +314,7 @@ impl Statement {
 			}
 		
 			Statement::Branching (br) => match br {
-				Branching::IfElse { if_bodies, else_body } => {
+				Branching::IfElse { if_bodies, else_body } => {					
 					for body in if_bodies.iter() {
 						match body.condition_expr.check_and_calc_data_type(check_memory, builtin_func_defs)? {
 							DataType::Bool => {},
@@ -322,13 +322,19 @@ impl Statement {
 														pos: body.condition_expr().pos(),
 													} ) ),
 						}
+						
+						check_memory.push_scope();
 						for st_ref in body.statements.iter() {
 							st_ref.check(check_memory, builtin_func_defs)?;
 						}
+						check_memory.pop_scope();
 					}
+					
+					check_memory.push_scope();
 					for st_ref in else_body.statements.iter() {
 						st_ref.check(check_memory, builtin_func_defs)?;
 					}
+					check_memory.pop_scope();
 				},
 				Branching::While { body } => {
 					match body.condition_expr().check_and_calc_data_type(check_memory, builtin_func_defs)? {
@@ -337,9 +343,12 @@ impl Statement {
 													pos: body.condition_expr().pos(),
 												} ) ),
 					}
+					
+					check_memory.push_scope();
 					for st_ref in body.statements().iter() {
 						st_ref.check(check_memory, builtin_func_defs)?;
 					}
+					check_memory.pop_scope();
 				},
 			}
 		}

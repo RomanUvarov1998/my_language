@@ -143,16 +143,19 @@ impl Interpreter {
 			
 			Statement::Branching (br) => match br {
 				Branching::IfElse { if_bodies, else_body } => {
-					// TODO: make local variables to be kept in local scope memory of 'if' statement
-					
 					let mut got_true = false;
 					
 					'if_out: for body in if_bodies {
 						match body.condition_expr().calc(&self.memory, &self.builtin_func_defs)? {
 							Value::Bool(true) => {
+								self.memory.push_scope();
+								
 								for st_ref in body.statements() {
 									self.run_statement(st_ref)?;
 								}
+								
+								self.memory.pop_scope();
+								
 								got_true = true;
 								break 'if_out;
 							},
@@ -162,16 +165,24 @@ impl Interpreter {
 					}
 					
 					if !got_true {
+						self.memory.push_scope();
+								
 						for st_ref in else_body.statements() {
 							self.run_statement(st_ref)?;
 						}
+						
+						self.memory.pop_scope();
 					}
 				},
 				Branching::While { body } => {
 					while let Value::Bool(true) = body.condition_expr().calc(&self.memory, &self.builtin_func_defs)? {
+						self.memory.push_scope();
+						
 						for st_ref in body.statements() {
 							self.run_statement(st_ref)?;
 						}
+						
+						self.memory.pop_scope();
 					}
 				},
 			},
