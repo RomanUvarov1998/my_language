@@ -82,7 +82,7 @@ mod tests {
 	fn add_uninit_variable() {
 		let mut mem = Memory::new();
 		
-		let nt = NameToken::new("a");
+		let nt = new_name_token("a");
 		
 		mem.add_variable(nt.clone(), DataType::Float32, None).unwrap();
 		
@@ -97,7 +97,7 @@ mod tests {
 	fn add_variable_with_value() {
 		let mut mem = Memory::new();
 		
-		let nt = NameToken::new("a");
+		let nt = new_name_token("a");
 		
 		mem.add_variable(nt.clone(), DataType::Float32, Some(Value::Float32(2_f32))).unwrap();
 		
@@ -106,5 +106,10 @@ mod tests {
 		assert_eq!(mem.get_variable_value(&nt), Ok(&Value::Float32(2_f32)));
 		
 		assert_eq!(mem.get_variable_type(&nt), Ok(DataType::Float32));
+	}
+
+	fn new_name_token(name: &str) -> NameToken {
+		use super::super::utils::{CodePos, CharPos};
+		NameToken::new_with_pos(name, CodePos::from(CharPos::new()))
 	}
 }

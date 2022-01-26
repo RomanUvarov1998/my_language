@@ -471,7 +471,7 @@ mod tests {
 			Statement::Comment (String::from("var a: f32;")) 
 		);
 		
-		let nt = NameToken::new("a");
+		let nt = new_name_token("a");
 		
 		assert_eq!(
 			statements_iter.next().unwrap().unwrap(), 
@@ -495,7 +495,7 @@ mod tests {
 	fn can_make_variable_declare_statement() {
 		let mut statements_iter = StatementsIter::new();
 		
-		let nt = NameToken::new("a");
+		let nt = new_name_token("a");
 		
 		statements_iter.push_string("var a: f32;".to_string());		
 		let st = statements_iter.next().unwrap().unwrap();
@@ -536,7 +536,7 @@ mod tests {
 		let mut statements_iter = StatementsIter::new();
 		let mem = Memory::new();
 		
-		let nt = NameToken::new("a");
+		let nt = new_name_token("a");
 		let builtin_func_defs = BuiltinFuncsDefList::new();
 		
 		statements_iter.push_string("var a: f32 = 3;".to_string());
@@ -599,7 +599,7 @@ mod tests {
 		let mut st_iter = StatementsIter::new();
 		st_iter.push_string("@print(1.2 + 3.45);".to_string());
 		
-		let nt = NameToken::new("print");
+		let nt = new_name_token("print");
 		let builtin_func_defs = BuiltinFuncsDefList::new();
 		
 		match st_iter.next().unwrap().unwrap() {
@@ -635,7 +635,7 @@ mod tests {
 		let mut st_iter = StatementsIter::new();
 		st_iter.push_string("@print();".to_string());
 		
-		let nt = NameToken::new("print");
+		let nt = new_name_token("print");
 		
 		match st_iter.next().unwrap().unwrap() {
 			Statement::FuncCall {
@@ -860,7 +860,7 @@ mod tests {
 	}
 	
 	fn check_is_exit_call(st: &Statement) {
-		let nt_exit = NameToken::new("exit");
+		let nt_exit = new_name_token("exit");
 		
 		match st {
 			Statement::FuncCall { 
@@ -907,7 +907,7 @@ mod tests {
 	}
 	
 	fn check_statement(statement: &Statement, value: &Value) {
-		let nt_print = NameToken::new("print");
+		let nt_print = new_name_token("print");
 		
 		let types_memory = Memory::new();
 		let vars_memory = Memory::new();
@@ -957,5 +957,9 @@ mod tests {
 		check_end_reached("@f");
 		check_end_reached("@f(");
 		check_end_reached("@f()");
+	}
+
+	fn new_name_token(name: &str) -> NameToken {
+		NameToken::new_with_pos(name, CodePos::from(CharPos::new()))
 	}
 }

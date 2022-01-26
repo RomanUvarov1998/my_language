@@ -34,13 +34,6 @@ impl NameToken {
 		}
 	}
 	
-	pub fn new(name: &str) -> Self {
-		Self {
-			name: name.to_string(),
-			pos: CodePos::from(CharPos::new()),
-		}
-	}
-	
 	pub fn value(&self) -> &str { &self.name }
 	pub fn pos(&self) -> CodePos { self.pos }
 }

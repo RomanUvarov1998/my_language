@@ -382,7 +382,7 @@ mod tests {
 	fn check_err_if_set_var_to_data_of_wrong_type() {		
 		let mut int = Interpreter::new();
 		
-		let nt = NameToken::new("a");
+		let nt = new_name_token("a");
 		
 		match int.check_and_run("var a: f32 = \"hello\";") {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::WrongType { 
@@ -436,5 +436,9 @@ mod tests {
 			Err(InterpErr { inner: InnerErr::Statement(StatementErr::IfConditionType { .. }), .. } ) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
+	}
+
+	fn new_name_token(name: &str) -> NameToken {
+		NameToken::new_with_pos(name, CodePos::from(CharPos::new()))
 	}
 }
