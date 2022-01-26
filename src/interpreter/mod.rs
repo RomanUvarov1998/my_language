@@ -49,7 +49,7 @@ impl Interpreter {
 		builtin_func_defs.add(BuiltinFuncDef::new(
 			"input",
 			vec![
-				BuiltinFuncArg::new("prompt".to_string(), DataType::Untyped),
+				BuiltinFuncArg::new("prompt".to_string(), DataType::String),
 			],
 			Box::new(|args_values: Vec<Value>| -> Result<Option<Value>, InterpErr> {
 				use std::io::{self, Write};

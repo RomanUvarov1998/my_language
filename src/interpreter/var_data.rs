@@ -69,9 +69,9 @@ impl DataType {
 impl std::fmt::Display for DataType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			DataType::Float32 => write!(f, "Float32"),
-			DataType::String => write!(f, "String"),
-			DataType::Bool => write!(f, "Bool"),
+			DataType::Float32 => write!(f, "f32"),
+			DataType::String => write!(f, "str"),
+			DataType::Bool => write!(f, "bool"),
 			DataType::Untyped => write!(f, "Untyped"),
 		}
 	}

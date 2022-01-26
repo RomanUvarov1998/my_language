@@ -61,7 +61,8 @@ impl BuiltinFuncDef {
 	
 	pub fn check_args(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, check_memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() {
-			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt { 
+			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt {
+				func_signature: format!("{}", self),
 				func_name_pos: func_name.pos(),
 				actual_cnt: self.args.len(),
 				given_cnt: args_exprs.len(),
@@ -77,6 +78,8 @@ impl BuiltinFuncDef {
 		for i in 0..self.args.len() {
 			if !self.args[i].type_check(args_data_types[i]) {
 				return Err( InterpErr::from( BuiltinFuncErr::ArgType {
+					func_signature: format!("{}", self),
+					arg_name: self.args[i].name.clone(),
 					arg_expr_pos: args_exprs[i].pos(),
 					actual_type: self.args[i].data_type,
 					given_type: args_data_types[i],
@@ -100,8 +103,24 @@ impl BuiltinFuncDef {
 	}
 }
 
+impl std::fmt::Display for BuiltinFuncDef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "f {}(", self.name)?;
+		let mut need_comma_before = false;
+		for arg in self.args.iter() {
+			if need_comma_before {
+				write!(f, ", ")?; 
+			}
+			write!(f, "{}: {}", arg.name, arg.data_type)?; 
+			if !need_comma_before {
+				need_comma_before = true;
+			}
+		}
+		write!(f, ") -> {}", self.return_type)
+	}
+}
+
 pub struct BuiltinFuncArg {
-	#[allow(dead_code)]
 	name: String, // TODO: use token for func arg if function is user defined
 	data_type: DataType,
 }
@@ -127,11 +146,14 @@ impl BuiltinFuncArg {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BuiltinFuncErr {
 	ArgsCnt {
+		func_signature: String,
 		func_name_pos: CodePos,
 		actual_cnt: usize,
 		given_cnt: usize,
 	},
 	ArgType {
+		func_signature: String,
+		arg_name: String,
 		arg_expr_pos: CodePos,
 		actual_type: DataType,
 		given_type: DataType,
@@ -144,10 +166,10 @@ pub enum BuiltinFuncErr {
 impl std::fmt::Display for BuiltinFuncErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			BuiltinFuncErr::ArgsCnt { actual_cnt, given_cnt, .. } =>
-				write!(f, "Wrong arguments count for builtin function: {} expected but {} found", actual_cnt, given_cnt),
-			BuiltinFuncErr::ArgType { actual_type, given_type, .. } =>
-				write!(f, "Wrong argument type for builtin function: {} expected but {} found", actual_type, given_type),
+			BuiltinFuncErr::ArgsCnt { func_signature, actual_cnt, given_cnt, .. } =>
+				write!(f, "Wrong arguments count for builtin function:\n{}\n{} expected but {} found", func_signature, actual_cnt, given_cnt),
+			BuiltinFuncErr::ArgType { func_signature, arg_name, actual_type, given_type, .. } =>
+				write!(f, "Wrong type of argument '{}' for builtin function:\n{}\n'{}' expected but '{}' found", arg_name, func_signature, actual_type, given_type),
 			BuiltinFuncErr::NotDefined { .. } =>
 				write!(f, "Builtin function is not defined"),
 		}
