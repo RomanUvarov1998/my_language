@@ -2,16 +2,14 @@ use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, Statement
 use super::InterpErr;
 use super::memory::Memory;
 use super::var_data::{Value, DataType};
-use super::statement::NameToken;
-use super::string_char::CharPos;
+use super::func_data::BuiltinFuncsDefList;
+use super::utils::{CharPos, CodePos, NameToken};
 
-type TokSym = (Token, Symbol);
-
-#[derive(Debug, PartialEq, Eq)]
+// TODO: make Expr not clonable
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Expr {
-	expr_stack: Vec<TokSym>,
-	pos_begin: CharPos,
-	pos_end: CharPos,
+	expr_stack: Vec<Symbol>,
+	pos: CodePos,
 }
 
 impl Expr {	
@@ -19,42 +17,51 @@ impl Expr {
 		let context = ExprContext::new(context_kind);
 		let expr_stack = Self::create_stack(tokens_iter, context)?;
 		
-		let mut pos_begin: CharPos = expr_stack[0].0.pos_begin();
-		let mut pos_end: CharPos = expr_stack[0].0.pos_end();
+		let mut pos_begin: CharPos = expr_stack[0].pos().begin();
+		let mut pos_end: CharPos = expr_stack[0].pos().end();
 		
-		for (tok_ref, _) in &expr_stack {
-			pos_begin = std::cmp::min(tok_ref.pos_begin(), pos_begin);
-			pos_end = std::cmp::max(tok_ref.pos_end(), pos_end);
+		for sym_ref in &expr_stack {
+			pos_begin = std::cmp::min(sym_ref.pos().begin(), pos_begin);
+			pos_end = std::cmp::max(sym_ref.pos().end(), pos_end);
 		}
 		
 		Ok( Self { 
 			expr_stack,
-			pos_begin,
-			pos_end,
+			pos: CodePos::new(pos_begin, pos_end),
 		} )
 	}
 	
-	pub fn calc(&self, memory: &Memory) -> Result<Value, InterpErr> {
+	pub fn calc(&self, memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<Value, InterpErr> {
 		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len());
-		let mut expr = self.expr_stack.clone();
+		let mut expr = self.expr_stack.clone(); // TODO: try ding it without copying all expr_stack, just by visiting each symbol by shared ref with for loop
 		expr.reverse();
 		
-		while let Some((tok, sym)) = expr.pop() {
-			match sym {
-				Symbol::Operand (opnd) => {
+		while let Some(sym) = expr.pop() {
+			match sym.kind {
+				SymbolKind::Operand (opnd) => {
 					let value: Value = match opnd {
-						Operand::Value (val) => val,
-						Operand::Name (name) => memory.get_variable_value(&name)?.clone(),
-						Operand::BuiltinName (_name) => todo!(),
+						Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
+						Operand::Name (name) => memory.get_variable_value(&NameToken::new_with_pos(&name, sym.pos))?.clone(),
+						Operand::BuiltinFuncCall { func_name, arg_exprs } => {
+							let f = builtin_func_defs.find(&NameToken::new_with_pos(&func_name, sym.pos)).unwrap();
+							
+							let mut arg_vals = Vec::<Value>::with_capacity(arg_exprs.len());
+							
+							for expr in arg_exprs {
+								arg_vals.push(expr.calc(&memory, builtin_func_defs)?);
+							}
+							
+							f.call(arg_vals).unwrap().unwrap()
+						},
 					};
 					calc_stack.push(value);
 				},
 				
-				Symbol::LeftBracket => unreachable!(),
+				SymbolKind::LeftBracket => unreachable!(),
 				
-				Symbol::ExprOperator (op) => {
+				SymbolKind::ExprOperator (op) => {
 					let value: Value = match op.apply(&mut calc_stack) {
-						Err( err ) => return Err( InterpErr::from(ExprErr::Operator { err, tok }) ),
+						Err( err ) => return Err( InterpErr::from(ExprErr::Operator { err, pos: sym.pos }) ),
 						Ok(val) => val,
 					};
 					calc_stack.push(value);
@@ -68,27 +75,32 @@ impl Expr {
 		Ok(result)
 	}
 	
-	pub fn check_and_calc_data_type(&self, check_memory: &Memory) -> Result<DataType, InterpErr> {		
+	pub fn check_and_calc_data_type(&self, check_memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<DataType, InterpErr> {		
 		assert!(self.expr_stack.len() > 0);
 		let mut type_calc_stack = Vec::<DataType>::with_capacity(self.expr_stack.len());
 		
 		let mut ind: usize = 0_usize;
 		while ind < self.expr_stack.len() {
-			match &self.expr_stack[ind] {
-				(.., Symbol::Operand (ref opnd)) => {
+			match &self.expr_stack[ind].kind {
+				SymbolKind::Operand (ref opnd) => {
 					let opnd_dt: DataType = match opnd {
 						Operand::Value (val) => val.get_type(),
-						Operand::Name (name) => check_memory.get_variable_type(&name)?,
-						Operand::BuiltinName (_name) => todo!(),
+						Operand::Name (name) => check_memory.get_variable_type(&NameToken::new_with_pos(&name, self.expr_stack[ind].pos))?,
+						Operand::BuiltinFuncCall { func_name, arg_exprs } => {
+							let f = builtin_func_defs.find(&NameToken::new_with_pos(&func_name, self.expr_stack[ind].pos)).unwrap(); // TODO: avoid creation of extra NameToken's
+							
+							f.check_args(&NameToken::new_with_pos(&func_name, self.expr_stack[ind].pos), arg_exprs, check_memory, builtin_func_defs)?;
+							f.return_type()
+						},
 					};
 					type_calc_stack.push(opnd_dt);
 				},
 				
-				(.., Symbol::LeftBracket) => unreachable!(),
+				SymbolKind::LeftBracket => unreachable!(),
 				
-				(tok, Symbol::ExprOperator (op)) => {
+				SymbolKind::ExprOperator (op) => {
 					match op.get_result_data_type(&mut type_calc_stack) {
-						Err(err) => return Err( InterpErr::from(ExprErr::Operator { err, tok: tok.clone() }) ),
+						Err(err) => return Err( InterpErr::from(ExprErr::Operator { err, pos: self.expr_stack[ind].pos() }) ),
 						Ok(dt) => type_calc_stack.push(dt),
 					}
 				}, 
@@ -102,17 +114,13 @@ impl Expr {
 		Ok(result)
 	}
 
-	pub fn pos_begin(&self) -> CharPos {
-		self.pos_begin
+	pub fn pos(&self) -> CodePos {
+		self.pos
 	}
 	
-	pub fn pos_end(&self) -> CharPos {
-		self.pos_end
-	}
-
-	fn create_stack(tokens_iter: &mut TokensIter, mut context: ExprContext) -> Result<Vec<TokSym>, InterpErr> {
-		let mut tmp_stack = Vec::<TokSym>::new();
-		let mut expr_stack = Vec::<TokSym>::new();
+	fn create_stack(tokens_iter: &mut TokensIter, mut context: ExprContext) -> Result<Vec<Symbol>, InterpErr> {
+		let mut tmp_stack = Vec::<Symbol>::new();
+		let mut expr_stack = Vec::<Symbol>::new();
 		let mut prev_is_operand = false;
 		
 		loop {
@@ -121,54 +129,54 @@ impl Expr {
 			if context.check_expr_end(next_token_ref)? {		
 				if expr_stack.len() == 0 {
 					let found_token = tokens_iter.next_or_end_reached_err()?;
-					return Err( InterpErr::from(ExprErr::ExpectedExprButFound(found_token)) );
+					return Err( InterpErr::from(ExprErr::ExpectedExprButFound(found_token.pos())) );
 				}
 				break;
 			}
 			
 			let token = tokens_iter.next().unwrap()?;
 			
-			match token.content() {	
+			let Token { pos, content } = token;
+			
+			match content {	
 				TokenContent::Number (num) => {
 					if prev_is_operand {
-						return Err(unexpected(token));
+						return Err(unexpected(pos));
 					}
 					
-					let sym = Symbol::new_number(*num);
-					expr_stack.push( (token, sym) );
+					let sym = Symbol::new_number(num, pos);
+					expr_stack.push(sym);
 					
 					prev_is_operand = true;
 				},
-				TokenContent::Name (_) | TokenContent::BuiltinName (_) => {
+				TokenContent::Name (name) | TokenContent::BuiltinName (name) => {
 					if prev_is_operand {
-						return Err(unexpected(token));
+						return Err(unexpected(pos));
 					}
 					
-					let sym = Symbol::new_name(NameToken::from(token.clone()).unwrap());
-					expr_stack.push((token, sym));
+					let sym = Symbol::new_name(name, pos);
+					expr_stack.push(sym);
 					
 					prev_is_operand = true;
 				},
 				TokenContent::StringLiteral (s) => {
 					if prev_is_operand {
-						return Err(unexpected(token));
+						return Err(unexpected(pos));
 					}
 					
-					let sym = Symbol::new_string_literal(s.clone());
-					expr_stack.push((token, sym));
+					let sym = Symbol::new_string_literal(s, pos);
+					expr_stack.push(sym);
 					
 					prev_is_operand = true;					
 				},
 				
-				TokenContent::Operator (op) => {
-					let tok_op: Operator = *op;
-					
+				TokenContent::Operator (tok_op) => {					
 					match tok_op {
 						Operator::Plus | Operator::Minus => {
 							if prev_is_operand {
-								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, token, tok_op)?;
+								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, pos, tok_op)?;
 							} else {
-								tmp_stack.push( (token, Symbol::new_un_pref_op(tok_op)) );
+								tmp_stack.push(Symbol::new_un_pref_op(tok_op, pos));
 							}
 						},
 						Operator::Mul 
@@ -185,31 +193,29 @@ impl Expr {
 							| Operator::LogicalOr
 							| Operator::LogicalXor
 							=> {
-								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, token, tok_op)?;
+								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, pos, tok_op)?;
 						},
-						Operator::Assign => return Err(unexpected(token)),
+						Operator::Assign => return Err(unexpected(pos)),
 					};
 					
 					prev_is_operand = false;
 				},
 				
-				TokenContent::Bracket (br) => {
-					let tok_br: Bracket = *br;
-					
+				TokenContent::Bracket (tok_br) => {					
 					prev_is_operand = match tok_br {
 						Bracket::Right => true,
 						Bracket::Left => false,
-						Bracket::LeftCurly | Bracket::RightCurly => return Err(unexpected(token)),
+						Bracket::LeftCurly | Bracket::RightCurly => return Err(unexpected(pos)),
 					};
 					
-					Self::add_bracket(&mut expr_stack, &mut tmp_stack, token, tok_br)?;
+					Self::add_bracket(&mut expr_stack, &mut tmp_stack, pos, tok_br)?;
 				},
 				
 				TokenContent::Keyword (kw) => match kw {
-					Keyword::Var | Keyword::If | Keyword::Else | Keyword::While => return Err(unexpected(token)),
+					Keyword::Var | Keyword::If | Keyword::Else | Keyword::While => return Err(unexpected(pos)),
 					Keyword::True | Keyword::False => {
-						let sym = Symbol::new_bool_literal(*kw);
-						expr_stack.push((token, sym));
+						let sym = Symbol::new_bool_literal(kw, pos);
+						expr_stack.push(sym);
 						prev_is_operand = true;
 					},
 				},
@@ -218,11 +224,11 @@ impl Expr {
 			}
 		}
 		
-		while let Some(top_tok_sym) = tmp_stack.pop() {
-			match top_tok_sym.1 {
-				Symbol::Operand (..) => expr_stack.push(top_tok_sym),
-				Symbol::LeftBracket => return Err( unpaired_bracket(top_tok_sym.0) ),
-				Symbol::ExprOperator (..) => expr_stack.push(top_tok_sym),
+		while let Some(top_sym) = tmp_stack.pop() {
+			match top_sym.kind {
+				SymbolKind::Operand (..) => expr_stack.push(top_sym),
+				SymbolKind::LeftBracket => return Err( unpaired_bracket(top_sym.pos) ),
+				SymbolKind::ExprOperator (..) => expr_stack.push(top_sym),
 			}
 		}
 				
@@ -230,28 +236,28 @@ impl Expr {
 	}
 	
 	fn add_bin_op(
-		expr_stack: &mut Vec<TokSym>, 
-		tmp_stack: &mut Vec<TokSym>, 
-		tok: Token, op: Operator
+		expr_stack: &mut Vec<Symbol>, 
+		tmp_stack: &mut Vec<Symbol>, 
+		pos: CodePos, op: Operator
 		) -> Result<(), InterpErr> 
 	{
-		let next = ExprOperator::new_bin(op);
+		let next_kind = ExprOperator::new_bin(op);
 		
 		use std::cmp::Ordering;
 		
 		loop {
-			let top_tok_sym: TokSym = 
+			let top_tok_sym: Symbol = 
 				match tmp_stack.last() {
 					Some(top_ref) => 
-						match &top_ref.1 {
-							Symbol::Operand (..) => return Err(unexpected(tmp_stack.pop().unwrap().0)),
+						match &top_ref.kind {
+							SymbolKind::Operand (..) => return Err(unexpected(tmp_stack.pop().unwrap().pos())),
 								
-							Symbol::LeftBracket => break,
+							SymbolKind::LeftBracket => break,
 							
-							Symbol::ExprOperator ( top_ref ) => {
-								match next.rank().cmp(&top_ref.rank()) {
+							SymbolKind::ExprOperator ( top_ref ) => {
+								match next_kind.rank().cmp(&top_ref.rank()) {
 									Ordering::Less => tmp_stack.pop().unwrap(),
-									Ordering::Equal => match (top_ref.assot(), next.assot()) {
+									Ordering::Equal => match (top_ref.assot(), next_kind.assot()) {
 										(OpAssot::Right, OpAssot::Right) => break,
 										_ => tmp_stack.pop().unwrap(),
 									},
@@ -266,34 +272,34 @@ impl Expr {
 			expr_stack.push(top_tok_sym);
 		}
 			
-		tmp_stack.push((tok, Symbol::ExprOperator (next) ));
+		tmp_stack.push(Symbol { kind: SymbolKind::ExprOperator (next_kind), pos });
 		
 		Ok(())
 	}
 	
 	fn add_bracket(
-		expr_stack: &mut Vec<TokSym>, 
-		tmp_stack: &mut Vec<TokSym>, 
-		tok: Token, br: Bracket
+		expr_stack: &mut Vec<Symbol>, 
+		tmp_stack: &mut Vec<Symbol>, 
+		pos: CodePos, br: Bracket
 	) -> Result<(), InterpErr> 
 	{
 		match br {
 			Bracket::Left => {
-				tmp_stack.push( (tok, Symbol::new_left_bracket()) );
+				tmp_stack.push(Symbol::new_left_bracket(pos));
 			},
 			Bracket::Right => {
 				'out: loop {
 					match tmp_stack.pop() {
-						Some( tok_sym ) => match tok_sym.1 {
-								Symbol::LeftBracket => break 'out,
-								Symbol::Operand (..) | Symbol::ExprOperator (..) => expr_stack.push(tok_sym),
+						Some( sym ) => match sym.kind {
+								SymbolKind::LeftBracket => break 'out,
+								SymbolKind::Operand (..) | SymbolKind::ExprOperator (..) => expr_stack.push(sym),
 							},
-						None => return Err( InterpErr::from( ExprErr::UnpairedBracket (tok) ) ),
+						None => return Err( InterpErr::from( ExprErr::UnpairedBracket (pos) ) ),
 					};
 				};
 			},
-			Bracket::LeftCurly => return Err(unexpected(tok)),
-			Bracket::RightCurly => return Err(unexpected(tok)),
+			Bracket::LeftCurly => return Err(unexpected(pos)),
+			Bracket::RightCurly => return Err(unexpected(pos)),
 		};
 		
 		Ok(())
@@ -333,15 +339,15 @@ impl ExprContext {
 			TokenContent::Bracket (_) 
 				=> self.check_brackets(tok),
 			TokenContent::StatementOp (st_op) => match st_op {
-				StatementOp::Colon | StatementOp::Comment (_) => Err(unexpected(tok.clone())),
+				StatementOp::Colon | StatementOp::Comment (_) => Err(unexpected(tok.pos())),
 				StatementOp::Comma => match self.kind {
-					ExprContextKind::ValueToAssign | ExprContextKind::IfCondition => Err(unexpected(tok.clone())),
+					ExprContextKind::ValueToAssign | ExprContextKind::IfCondition => Err(unexpected(tok.pos())),
 					ExprContextKind::FunctionArg => Ok(true),
 				},
 				StatementOp::Semicolon => Ok(true),
 			},
 			TokenContent::Keyword (kw) => match kw {
-				Keyword::Var | Keyword::If | Keyword::Else | Keyword::While => Err(unexpected(tok.clone())),
+				Keyword::Var | Keyword::If | Keyword::Else | Keyword::While => Err(unexpected(tok.pos())),
 				Keyword::True | Keyword::False => Ok(false),
 			},
 		}
@@ -360,16 +366,16 @@ impl ExprContext {
 						Ok(false)
 					} else {
 						match self.kind {
-							ExprContextKind::ValueToAssign | ExprContextKind::IfCondition => Err( unpaired_bracket(br_tok.clone()) ),
+							ExprContextKind::ValueToAssign | ExprContextKind::IfCondition => Err( unpaired_bracket(br_tok.pos()) ),
 							ExprContextKind::FunctionArg => Ok(true),
 						}
 					}
 				},
 				Bracket::LeftCurly => match self.kind {
 					ExprContextKind::IfCondition => Ok(true),
-					ExprContextKind::ValueToAssign | ExprContextKind::FunctionArg => Err( unpaired_bracket(br_tok.clone()) ),
+					ExprContextKind::ValueToAssign | ExprContextKind::FunctionArg => Err( unpaired_bracket(br_tok.pos()) ),
 				},
-				_ => Err( unexpected(br_tok.clone()) ),
+				_ => Err( unexpected(br_tok.pos()) ),
 			},
 			_ => unreachable!(),
 		}
@@ -379,47 +385,81 @@ impl ExprContext {
 //------------------------------- Symbol ----------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Symbol {
+struct Symbol {
+	kind: SymbolKind,
+	pos: CodePos,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SymbolKind {
 	Operand (Operand),
 	LeftBracket,
 	ExprOperator (ExprOperator),
 }
 
 impl Symbol {
-	fn new_number(num: f32) -> Self {
-		Symbol::Operand( Operand::Value (Value::Float32(num)) )
-	}
-	fn new_name(name: NameToken) -> Self {
-		Symbol::Operand( Operand::Name (name) )
-	}
-	#[allow(unused)]
-	fn new_builtin_name(name: String) -> Self {
-		Symbol::Operand( Operand::BuiltinName (name) )
-	}
-	fn new_string_literal(content: String) -> Self {
-		Symbol::Operand( Operand::Value (Value::String(content)) )
-	}
-	fn new_bool_literal(kw: Keyword) -> Self {
-		match kw {
-			Keyword::True => Symbol::Operand (Operand::Value (Value::Bool (true))),
-			Keyword::False => Symbol::Operand (Operand::Value (Value::Bool (false))),
-			_ => panic!("Unexpected input: {:?}", kw),
+	fn new_number(num: f32, pos: CodePos) -> Self {
+		Self {
+			kind: SymbolKind::Operand( Operand::Value (Value::from(num)) ),
+			pos,
 		}
 	}
-	fn new_left_bracket() -> Self {
-		Symbol::LeftBracket
+	fn new_name(name: String, pos: CodePos) -> Self {
+		Self {
+			kind: SymbolKind::Operand( Operand::Name (name) ),
+			pos,
+		}
 	}
-	fn new_un_pref_op(op: Operator) -> Self {
-		Symbol::ExprOperator( ExprOperator::new_un_pref(op) )
+	fn new_builtin_func_call(func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
+		let NameToken { name, pos } = func_name;
+		Self {
+			kind: SymbolKind::Operand( Operand::BuiltinFuncCall { 
+				func_name: name, 
+				arg_exprs,
+			} ),
+			pos,
+		}
+	}
+	fn new_string_literal(content: String, pos: CodePos) -> Self {
+		Self {
+			kind: SymbolKind::Operand( Operand::Value (Value::from(content)) ),
+			pos,
+		}
+	}
+	fn new_bool_literal(kw: Keyword, pos: CodePos) -> Self {
+		let kind: SymbolKind = match kw {
+			Keyword::True => SymbolKind::Operand (Operand::Value (Value::from(true))),
+			Keyword::False => SymbolKind::Operand (Operand::Value (Value::from(false))),
+			_ => panic!("Unexpected input: {:?}", kw),
+		};
+		Self { kind, pos }
+	}
+	fn new_left_bracket(pos: CodePos) -> Self {
+		Self { 
+			kind: SymbolKind::LeftBracket, 
+			pos,
+		}
+	}
+	fn new_un_pref_op(op: Operator, pos: CodePos) -> Self {
+		Self { 
+			kind: SymbolKind::ExprOperator( ExprOperator::new_un_pref(op) ), 
+			pos,
+		}
+	}
+
+	fn pos(&self) -> CodePos {
+		self.pos
 	}
 }
 
 #[derive(Debug, Clone)]
 enum Operand {
 	Value (Value),
-	Name (NameToken),
-	#[allow(unused)]
-	BuiltinName (String),
+	Name (String),
+	BuiltinFuncCall {
+		func_name: String, 
+		arg_exprs: Vec<Expr>,
+	},
 }
 impl Eq for Operand {}
 impl PartialEq for Operand {
@@ -433,8 +473,8 @@ impl PartialEq for Operand {
 				Operand::Name (op2) => op1 == op2,
 				_ => false,
 			},
-			Operand::BuiltinName (op1) => match other {
-				Operand::BuiltinName (op2) => op1 == op2,
+			Operand::BuiltinFuncCall { func_name: fn1, arg_exprs: ae1 } => match other {
+				Operand::BuiltinFuncCall { func_name: fn2, arg_exprs: ae2 } => fn1 == fn2 && ae1 == ae2,
 				_ => false,
 			},
 		}
@@ -974,36 +1014,36 @@ pub enum OperatorErr {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ExprErr {
-	UnexpectedToken (Token),
-	UnpairedBracket (Token),
-	ExpectedExprButFound (Token),
+	UnexpectedToken (CodePos),
+	UnpairedBracket (CodePos),
+	ExpectedExprButFound (CodePos),
 	Operator { 
 		err: OperatorErr, 
-		tok: Token 
+		pos: CodePos, 
 	},
 }
 
 impl std::fmt::Display for ExprErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			ExprErr::UnexpectedToken (token) => write!(f, "Unexpected token {}", token),
-			ExprErr::UnpairedBracket (token) => write!(f, "Unpaired bracket {}", token),
-			ExprErr::ExpectedExprButFound (token) => write!(f, "Expected arithmetical expression, but found {}", token),
-			ExprErr::Operator { err, tok } => match err {
+			ExprErr::UnexpectedToken (_) => write!(f, "Unexpected token"),
+			ExprErr::UnpairedBracket (_) => write!(f, "Unpaired bracket"),
+			ExprErr::ExpectedExprButFound (_) => write!(f, "Expected arithmetical expression, but found"),
+			ExprErr::Operator { err, .. } => match err {
 				OperatorErr::WrongType { descr } => write!(f, "{}", descr),
 				OperatorErr::NotEnoughOperands { provided_cnt, required_cnt } => 
-					write!(f, "Expected {} operand(-s) for operator {}, but found {}", required_cnt, tok, provided_cnt),
+					write!(f, "Expected {} operand(-s) for operator, but found {}", required_cnt, provided_cnt),
 			},
 		}
 	}
 }
 
-fn unexpected(token: Token) -> InterpErr {
-	InterpErr::from (ExprErr::UnexpectedToken (token))
+fn unexpected(pos: CodePos) -> InterpErr {
+	InterpErr::from (ExprErr::UnexpectedToken (pos))
 }
 
-fn unpaired_bracket(token: Token) -> InterpErr {
-	InterpErr::from (ExprErr::UnpairedBracket (token))
+fn unpaired_bracket(pos: CodePos) -> InterpErr {
+	InterpErr::from (ExprErr::UnpairedBracket (pos))
 }
 
 //------------------------------- Tests ----------------------------------
@@ -1077,148 +1117,148 @@ mod tests {
 	#[test]
 	fn check_stack_creation_and_arithmetic_calc() {
 		test_expr_and_its_stack_eq("3.125;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 		],
 		Value::Float32(3.125_f32));
 		
 		test_expr_and_its_stack_eq("3.125 + 5.4;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (5.4_f32))),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (5.4_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::Float32(3.125_f32 + 5.4_f32));
 		
 		test_expr_and_its_stack_eq("3.125 + 5.4 * 2.46;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (5.4_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (2.46_f32))),
-			Symbol::ExprOperator (ExprOperator::Mul),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (5.4_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2.46_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Mul),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::Float32(3.125_f32 + 5.4_f32 * 2.46_f32));
 		
 		test_expr_and_its_stack_eq("3.125 + 0 + 5.25 * 2.25 - 3.25 / 2 * 4.25;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (0_f32))),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::Operand (Operand::Value (Value::Float32 (5.25_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (2.25_f32))),
-			Symbol::ExprOperator (ExprOperator::Mul),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::Operand (Operand::Value (Value::Float32 (3.25_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::ExprOperator (ExprOperator::Div),
-			Symbol::Operand (Operand::Value (Value::Float32 (4.25_f32))),
-			Symbol::ExprOperator (ExprOperator::Mul),
-			Symbol::ExprOperator (ExprOperator::BinMinus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (0_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (5.25_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2.25_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Mul),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3.25_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Div),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (4.25_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Mul),
+			SymbolKind::ExprOperator (ExprOperator::BinMinus),
 		],
 		Value::Float32(3.125_f32 + 0.0_f32 + 5.25_f32 * 2.25_f32 - 3.25_f32 / 2.0_f32 * 4.25_f32));
 		
 		test_expr_and_its_stack_eq("3.125 + -5.25 * 2.25;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (5.25_f32))),
-			Symbol::ExprOperator (ExprOperator::UnMinus),
-			Symbol::Operand (Operand::Value (Value::Float32 (2.25_f32))),
-			Symbol::ExprOperator (ExprOperator::Mul),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (5.25_f32))),
+			SymbolKind::ExprOperator (ExprOperator::UnMinus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2.25_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Mul),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::Float32(3.125_f32 + -5.25_f32 * 2.25_f32));
 		
 		test_expr_and_its_stack_eq("2.5 * ---5.5;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (2.5_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (5.5_f32))),
-			Symbol::ExprOperator (ExprOperator::UnMinus),
-			Symbol::ExprOperator (ExprOperator::UnMinus),
-			Symbol::ExprOperator (ExprOperator::UnMinus),
-			Symbol::ExprOperator (ExprOperator::Mul),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2.5_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (5.5_f32))),
+			SymbolKind::ExprOperator (ExprOperator::UnMinus),
+			SymbolKind::ExprOperator (ExprOperator::UnMinus),
+			SymbolKind::ExprOperator (ExprOperator::UnMinus),
+			SymbolKind::ExprOperator (ExprOperator::Mul),
 		],
 		Value::Float32(2.5_f32 * ---5.5_f32));
 		
 		test_expr_and_its_stack_eq("1.125 * (3.125 + 2.125);", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (1.125_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (2.125_f32))),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::ExprOperator (ExprOperator::Mul),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (1.125_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2.125_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::ExprOperator (ExprOperator::Mul),
 		],
 		Value::Float32(1.125_f32 * (3.125_f32 + 2.125_f32)));
 		
 		test_expr_and_its_stack_eq("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (33_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (1_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (4_f32))),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::ExprOperator (ExprOperator::Mul),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::Operand (Operand::Value (Value::Float32 (5_f32))),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::Operand (Operand::Value (Value::Float32 (10_f32))),
-			Symbol::ExprOperator (ExprOperator::Div),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::Operand (Operand::Value (Value::Float32 (30_f32))),
-			Symbol::ExprOperator (ExprOperator::BinMinus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (33_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (4_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::ExprOperator (ExprOperator::Mul),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (5_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (10_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Div),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (30_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinMinus),
 		],
 		Value::Float32(33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32));
 		
 		test_expr_and_its_stack_eq("-(8 - 2.125 * 5.125 + 4.125) / -3.125;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (8_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (2.125_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (5.125_f32))),
-			Symbol::ExprOperator (ExprOperator::Mul),
-			Symbol::ExprOperator (ExprOperator::BinMinus),
-			Symbol::Operand (Operand::Value (Value::Float32 (4.125_f32))),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::ExprOperator (ExprOperator::UnMinus),
-			Symbol::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			Symbol::ExprOperator (ExprOperator::UnMinus),
-			Symbol::ExprOperator (ExprOperator::Div),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (8_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2.125_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (5.125_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Mul),
+			SymbolKind::ExprOperator (ExprOperator::BinMinus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (4.125_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::ExprOperator (ExprOperator::UnMinus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
+			SymbolKind::ExprOperator (ExprOperator::UnMinus),
+			SymbolKind::ExprOperator (ExprOperator::Div),
 		],
 		Value::Float32(-(8_f32 - 2.125_f32 * 5.125_f32 + 4.125_f32) / -3.125_f32));
 		
 		test_expr_and_its_stack_eq("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (33_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (1_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (4_f32))),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::ExprOperator (ExprOperator::Mul),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::Operand (Operand::Value (Value::Float32 (5_f32))),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::Operand (Operand::Value (Value::Float32 (10_f32))),
-			Symbol::ExprOperator (ExprOperator::Div),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::Operand (Operand::Value (Value::Float32 (30_f32))),
-			Symbol::ExprOperator (ExprOperator::BinMinus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (33_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (4_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::ExprOperator (ExprOperator::Mul),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (5_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (10_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Div),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (30_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinMinus),
 		],
 		Value::Float32(33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32));
 		
 		test_expr_and_its_stack_eq("2^2;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::ExprOperator (ExprOperator::Pow),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Pow),
 		],
 		Value::Float32(2_f32.powf(2_f32)));
 		
 		test_expr_and_its_stack_eq("-2^2+4;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::ExprOperator (ExprOperator::Pow),
-			Symbol::ExprOperator (ExprOperator::UnMinus),
-			Symbol::Operand (Operand::Value (Value::Float32 (4_f32))),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Pow),
+			SymbolKind::ExprOperator (ExprOperator::UnMinus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (4_f32))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::Float32(-2_f32.powf(2_f32) + 4_f32));
 		
 		test_expr_and_its_stack_eq("3^1^2;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (1_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::ExprOperator (ExprOperator::Pow),
-			Symbol::ExprOperator (ExprOperator::Pow),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Pow),
+			SymbolKind::ExprOperator (ExprOperator::Pow),
 		],
 		Value::Float32(3_f32.powf(1_f32.powf(2_f32))));
 	}
@@ -1226,132 +1266,132 @@ mod tests {
 	#[test]
 	fn check_stack_creation_and_bool_calc() {
 		test_expr_and_its_stack_eq("False;", vec![
-			Symbol::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
 		],
 		Value::Bool(false));
 		
 		test_expr_and_its_stack_eq("True;", vec![
-			Symbol::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("!True;", vec![
-			Symbol::Operand (Operand::Value (Value::Bool (true))),
-			Symbol::ExprOperator (ExprOperator::Not),
+			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::ExprOperator (ExprOperator::Not),
 		],
 		Value::Bool(false));
 		
 		test_expr_and_its_stack_eq("!False;", vec![
-			Symbol::Operand (Operand::Value (Value::Bool (false))),
-			Symbol::ExprOperator (ExprOperator::Not),
+			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::ExprOperator (ExprOperator::Not),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("True == True;", vec![
-			Symbol::Operand (Operand::Value (Value::Bool (true))),
-			Symbol::Operand (Operand::Value (Value::Bool (true))),
-			Symbol::ExprOperator (ExprOperator::Equal),
+			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::ExprOperator (ExprOperator::Equal),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("False == False;", vec![
-			Symbol::Operand (Operand::Value (Value::Bool (false))),
-			Symbol::Operand (Operand::Value (Value::Bool (false))),
-			Symbol::ExprOperator (ExprOperator::Equal),
+			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::ExprOperator (ExprOperator::Equal),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("True != False;", vec![
-			Symbol::Operand (Operand::Value (Value::Bool (true))),
-			Symbol::Operand (Operand::Value (Value::Bool (false))),
-			Symbol::ExprOperator (ExprOperator::NotEqual),
+			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::ExprOperator (ExprOperator::NotEqual),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("True land False;", vec![
-			Symbol::Operand (Operand::Value (Value::Bool (true))),
-			Symbol::Operand (Operand::Value (Value::Bool (false))),
-			Symbol::ExprOperator (ExprOperator::LogicalAnd),
+			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::ExprOperator (ExprOperator::LogicalAnd),
 		],
 		Value::Bool(false));
 		
 		test_expr_and_its_stack_eq("True lor False;", vec![
-			Symbol::Operand (Operand::Value (Value::Bool (true))),
-			Symbol::Operand (Operand::Value (Value::Bool (false))),
-			Symbol::ExprOperator (ExprOperator::LogicalOr),
+			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::ExprOperator (ExprOperator::LogicalOr),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("True lxor False;", vec![
-			Symbol::Operand (Operand::Value (Value::Bool (true))),
-			Symbol::Operand (Operand::Value (Value::Bool (false))),
-			Symbol::ExprOperator (ExprOperator::LogicalXor),
+			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::ExprOperator (ExprOperator::LogicalXor),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("2 > 3;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
-			Symbol::ExprOperator (ExprOperator::Greater),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Greater),
 		],
 		Value::Bool(false));
 		
 		test_expr_and_its_stack_eq("!(2 > 3);", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
-			Symbol::ExprOperator (ExprOperator::Greater),
-			Symbol::ExprOperator (ExprOperator::Not),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Greater),
+			SymbolKind::ExprOperator (ExprOperator::Not),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("2 >= 3;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
-			Symbol::ExprOperator (ExprOperator::GreaterEqual),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::ExprOperator (ExprOperator::GreaterEqual),
 		],
 		Value::Bool(false));
 		
 		test_expr_and_its_stack_eq("2 < 3;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
-			Symbol::ExprOperator (ExprOperator::Less),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Less),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("2 <= 3;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (2_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (3_f32))),
-			Symbol::ExprOperator (ExprOperator::LessEqual),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::ExprOperator (ExprOperator::LessEqual),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq("1 + 1 ^ 10 <= 27 / 9;", vec![
-			Symbol::Operand (Operand::Value (Value::Float32 (1_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (1_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (10_f32))),
-			Symbol::ExprOperator (ExprOperator::Pow),
-			Symbol::ExprOperator (ExprOperator::BinPlus),
-			Symbol::Operand (Operand::Value (Value::Float32 (27_f32))),
-			Symbol::Operand (Operand::Value (Value::Float32 (9_f32))),
-			Symbol::ExprOperator (ExprOperator::Div),
-			Symbol::ExprOperator (ExprOperator::LessEqual),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (10_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Pow),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (27_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (9_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Div),
+			SymbolKind::ExprOperator (ExprOperator::LessEqual),
 		],
 		Value::Bool(true));
 	}
 	
 	fn test_expr_and_its_stack_eq(
 		expr_str: &str, 
-		correct_expr_stack: Vec<Symbol>,
+		correct_expr_stack: Vec<SymbolKind>,
 		result: Value
 	) {
 		let mut tokens_iter = TokensIter::new();	
 		tokens_iter.push_string(expr_str.to_string());
 		
-		let expr_stack: Vec<(Token, Symbol)> = Expr::create_stack(
+		let expr_stack: Vec<Symbol> = Expr::create_stack(
 			&mut tokens_iter, 
 			ExprContext::new(ExprContextKind::ValueToAssign)).unwrap();
 		
-		let syms_expr_stack: Vec<Symbol> = expr_stack.iter().map(|(_tok, sym)| sym.clone()).collect();
+		let syms_expr_stack: Vec<SymbolKind> = expr_stack.iter().map(|Symbol { kind, .. }| kind.clone()).collect();
 		
 		if syms_expr_stack == correct_expr_stack { 
 			let mut tokens_iter = TokensIter::new();	
@@ -1360,8 +1400,9 @@ mod tests {
 			let expr = Expr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
 			
 			let memory = Memory::new();
+			let builtin_funcs_def_list = BuiltinFuncsDefList::new();
 			
-			let ans = expr.calc(&memory).unwrap();
+			let ans = expr.calc(&memory, &builtin_funcs_def_list).unwrap();
 			
 			if ans != result {
 				panic!("Wrong result for code '{}': {:?} != {:?}", expr_str, ans, result);

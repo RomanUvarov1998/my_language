@@ -1,10 +1,10 @@
 use super::token::*;
 use super::expr::{Expr, ExprContextKind};
 use super::{InterpErr};
-use super::string_char::CharPos;
 use super::var_data::{DataType, VarErr};
-use super::func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncErr};
+use super::func_data::{BuiltinFuncsDefList, BuiltinFuncDef};
 use super::memory::Memory;
+use super::utils::{CharPos, CodePos, NameToken};
 
 pub struct StatementsIter {
 	tokens_iter: TokensIter,
@@ -42,11 +42,11 @@ impl StatementsIter {
 	}
 	
 	fn parse_varable_declaration(&mut self) -> Result<Statement, InterpErr> {	
-		let var_name: NameToken = NameToken::from(self.tokens_iter.next_or_end_reached_err()?)?;
+		let var_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 		
 		self.tokens_iter.next_expect_colon()?;
 		
-		let type_name: NameToken = NameToken::from(self.tokens_iter.next_or_end_reached_err()?)?;
+		let type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 		let data_type = DataType::parse(&type_name)?;
 		
 		let tok_assign = self.tokens_iter.next_or_end_reached_err()?;
@@ -220,10 +220,10 @@ impl StatementsIter {
 				self.parse_while_statement(),	
 			
 			Token { content: TokenContent::Name(_), .. } => 
-				self.parse_variable_set_or_func_call(NameToken::from(first).unwrap(), false),
+				self.parse_variable_set_or_func_call(NameToken::from_or_err(first).unwrap(), false),
 			
 			Token { content: TokenContent::BuiltinName(_), .. } =>
-				self.parse_variable_set_or_func_call(NameToken::from(first).unwrap(), true),
+				self.parse_variable_set_or_func_call(NameToken::from_or_err(first).unwrap(), true),
 				
 			found @ _ => 
 				Err( InterpErr::from( TokenErr::ExpectedButFound { 
@@ -246,46 +246,6 @@ impl Iterator for StatementsIter {
 		self.parse_next_statement()
 	}	
 }
-
-//--------------------- NameToken --------------------------
-
-#[derive(Debug, Clone)]
-pub struct NameToken {
-	name: String,
-	tok: Token, // // TODO: use more lightweigt struct to keep Name position
-}
-
-impl NameToken {
-	pub fn from(tok: Token) -> Result<Self, InterpErr> {
-		match tok {
-			Token { content: TokenContent::Name (ref name), .. }
-				| Token { content: TokenContent::BuiltinName (ref name), .. } => Ok( NameToken {
-				name: name.clone(),
-				tok,
-			} ),
-			found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound {
-							expected: vec![TokenContent::Name ("<name>".to_string())], 
-							found,
-						} ) ),
-		}
-	}
-	
-	pub fn value(&self) -> &str { &self.name }
-	pub fn tok(&self) -> &Token { &self.tok }
-}
-
-impl std::fmt::Display for NameToken {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}", self.value())
-	}
-}
-
-impl PartialEq for NameToken {
-	fn eq(&self, other: &Self) -> bool {
-		self.value() == other.value()
-	}
-}
-impl Eq for NameToken {}
 
 //------------------- Statement --------------------
 
@@ -319,7 +279,7 @@ impl Statement {
 				WithVariable::DeclareSet { var_name, data_type, value_expr } => {
 					check_memory.add_variable(var_name.clone(), *data_type, None)?;
 					
-					let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_memory)?;
+					let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_memory, builtin_func_defs)?;
 					if *data_type != expr_data_type {
 						return Err(InterpErr::from(VarErr::WrongType { 
 							value_data_type: expr_data_type, 
@@ -331,7 +291,7 @@ impl Statement {
 				
 				WithVariable::Set { var_name, value_expr } => {
 					let var_data_type: DataType = check_memory.get_variable_type(var_name)?;
-					let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_memory)?;
+					let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_memory, builtin_func_defs)?;
 					if var_data_type != expr_data_type {
 						return Err(InterpErr::from(VarErr::WrongType { 
 							value_data_type: expr_data_type, 
@@ -346,30 +306,9 @@ impl Statement {
 				match kind {
 					FuncKind::UserDefined => todo!(),
 					FuncKind::Builtin => {					
-						let func_def: &BuiltinFuncDef = match builtin_func_defs.find(func_name.value()) {
-							Err(err) => match err {
-								BuiltinFuncErr::NotDefined =>
-									return Err(InterpErr::from(StatementErr::Func { err, name: func_name.clone() })),
-								_ => unreachable!(),
-							},
-							Ok(fd) => fd,
-						};
+						let func_def: &BuiltinFuncDef = builtin_func_defs.find(func_name)?;
 						
-						let args_data_types: Result<Vec<DataType>, InterpErr> = arg_exprs.iter()
-							.map(|expr| expr.check_and_calc_data_type(check_memory))
-							.collect();
-						
-						match func_def.check_args(args_data_types?) {
-							Err(err) => match err {
-								BuiltinFuncErr::ArgsCnt { .. } => 
-									return Err(InterpErr::from(StatementErr::Func { err, name: func_name.clone() })),
-								BuiltinFuncErr::ArgType { .. } => {
-									return Err(InterpErr::from(StatementErr::Func { err, name: func_name.clone() }))
-								},
-								_ => unreachable!(),
-							},
-							Ok(()) => {},
-						}
+						func_def.check_args(func_name, arg_exprs, check_memory, builtin_func_defs)?;
 					},
 				}
 			}
@@ -377,11 +316,10 @@ impl Statement {
 			Statement::Branching (br) => match br {
 				Branching::IfElse { if_bodies, else_body } => {
 					for body in if_bodies.iter() {
-						match body.condition_expr.check_and_calc_data_type(check_memory)? {
+						match body.condition_expr.check_and_calc_data_type(check_memory, builtin_func_defs)? {
 							DataType::Bool => {},
 							_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
-														cond_expr_begin: body.condition_expr.pos_begin(),
-														cond_expr_end: body.condition_expr.pos_end(),
+														pos: body.condition_expr().pos(),
 													} ) ),
 						}
 						for st_ref in body.statements.iter() {
@@ -393,11 +331,10 @@ impl Statement {
 					}
 				},
 				Branching::While { body } => {
-					match body.condition_expr().check_and_calc_data_type(check_memory)? {
+					match body.condition_expr().check_and_calc_data_type(check_memory, builtin_func_defs)? {
 						DataType::Bool => {},
 						_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
-													cond_expr_begin: body.condition_expr.pos_begin(),
-													cond_expr_end: body.condition_expr.pos_end(),
+													pos: body.condition_expr().pos(),
 												} ) ),
 					}
 					for st_ref in body.statements().iter() {
@@ -496,25 +433,15 @@ impl UnconditionalBody {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatementErr {
-	Func { err: BuiltinFuncErr, name: NameToken },
 	UnfinishedBody (CharPos),
 	IfConditionType { 
-		cond_expr_begin: CharPos,
-		cond_expr_end: CharPos,
+		pos: CodePos,
 	},
 }
 
 impl std::fmt::Display for StatementErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			StatementErr::Func { err, name } => match err {
-				BuiltinFuncErr::ArgsCnt { actual_cnt, given_cnt } => 
-					write!(f, "Builtin function '{}' has {} argument(-s) but {} were given", &name, actual_cnt, given_cnt),
-				BuiltinFuncErr::ArgType { actual_type, given_type } => 
-					write!(f, "Argument '{}' must have {:?} type but {:?} were given", &name, actual_type, given_type),
-				BuiltinFuncErr::NotDefined => 
-					write!(f, "Builtin function '{}' is not defined", &name),
-			},
 			StatementErr::UnfinishedBody (_) => 
 				write!(f, "Unfinished body"),
 			StatementErr::IfConditionType { .. } => 
@@ -531,9 +458,7 @@ mod tests {
 	use super::super::*;
 	use super::super::var_data::Value;
 	use super::super::memory::Memory;
-	use super::super::token::{Token, TokenContent};
-	use super::super::string_char::CharPos;
-	use super::super::statement::NameToken;
+	use super::super::utils::NameToken;
 	
 	#[test]
 	fn can_parse_comment() {
@@ -546,7 +471,7 @@ mod tests {
 			Statement::Comment (String::from("var a: f32;")) 
 		);
 		
-		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
+		let nt = NameToken::new("a");
 		
 		assert_eq!(
 			statements_iter.next().unwrap().unwrap(), 
@@ -570,7 +495,7 @@ mod tests {
 	fn can_make_variable_declare_statement() {
 		let mut statements_iter = StatementsIter::new();
 		
-		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
+		let nt = NameToken::new("a");
 		
 		statements_iter.push_string("var a: f32;".to_string());		
 		let st = statements_iter.next().unwrap().unwrap();
@@ -611,7 +536,8 @@ mod tests {
 		let mut statements_iter = StatementsIter::new();
 		let mem = Memory::new();
 		
-		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
+		let nt = NameToken::new("a");
+		let builtin_func_defs = BuiltinFuncsDefList::new();
 		
 		statements_iter.push_string("var a: f32 = 3;".to_string());
 		let st = statements_iter.next().unwrap().unwrap();
@@ -624,7 +550,7 @@ mod tests {
 				} 
 			) 
 			if 
-				(value_expr.calc(&mem).unwrap() == Value::from(3_f32) &&
+				(value_expr.calc(&mem, &builtin_func_defs).unwrap() == Value::from(3_f32) &&
 				var_name == nt)
 				=> {},
 			_ => panic!("wrong statement: {:?}", st),
@@ -642,7 +568,7 @@ mod tests {
 				} 
 			) 
 			if 
-				(value_expr.calc(&mem).unwrap() == Value::from("hello") &&
+				(value_expr.calc(&mem, &builtin_func_defs).unwrap() == Value::from("hello") &&
 				var_name == nt)
 				=> {},
 			_ => panic!("wrong statement: {:?}", st),
@@ -660,7 +586,7 @@ mod tests {
 				} 
 			) 
 			if 
-				(value_expr.calc(&mem).unwrap() == Value::from(true) &&
+				(value_expr.calc(&mem, &builtin_func_defs).unwrap() == Value::from(true) &&
 				var_name == nt)
 				=> {},
 			_ => panic!("wrong statement: {:?}", st),
@@ -673,7 +599,8 @@ mod tests {
 		let mut st_iter = StatementsIter::new();
 		st_iter.push_string("@print(1.2 + 3.45);".to_string());
 		
-		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::BuiltinName(String::from("print")))).unwrap();
+		let nt = NameToken::new("print");
+		let builtin_func_defs = BuiltinFuncsDefList::new();
 		
 		match st_iter.next().unwrap().unwrap() {
 			Statement::FuncCall {
@@ -687,7 +614,7 @@ mod tests {
 				
 				let mem = Memory::new();
 				
-				match arg_exprs[0].calc(&mem).unwrap() {
+				match arg_exprs[0].calc(&mem, &builtin_func_defs).unwrap() {
 					Value::Float32 (val) => if (val - (1.2_f32 + 3.45_f32)).abs() > std::f32::EPSILON * 2.0 {
 						panic!("{} != {}", (1.2_f32 + 3.45_f32), val);
 					},
@@ -708,7 +635,7 @@ mod tests {
 		let mut st_iter = StatementsIter::new();
 		st_iter.push_string("@print();".to_string());
 		
-		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::BuiltinName(String::from("print")))).unwrap();
+		let nt = NameToken::new("print");
 		
 		match st_iter.next().unwrap().unwrap() {
 			Statement::FuncCall {
@@ -898,6 +825,7 @@ mod tests {
 			
 		let types_memory = Memory::new();
 		let vars_memory = Memory::new();
+		let builtin_func_defs = BuiltinFuncsDefList::new();
 		
 		let st = statements_iter.next().unwrap().unwrap();
 		if let Statement::WithVariable (WithVariable::DeclareSet {
@@ -909,11 +837,11 @@ mod tests {
 			assert_eq!(data_type, DataType::Float32);
 		
 			assert_eq!(
-				value_expr.check_and_calc_data_type(&types_memory).unwrap(), 
+				value_expr.check_and_calc_data_type(&types_memory, &builtin_func_defs).unwrap(), 
 				DataType::Float32);
 						
 			assert_eq!(
-				value_expr.calc(&vars_memory).unwrap(), 
+				value_expr.calc(&vars_memory, &builtin_func_defs).unwrap(), 
 				Value::from(3_f32));
 		} else {
 			panic!("Wrong statement: {:?}", st);
@@ -931,8 +859,8 @@ mod tests {
 		check_is_exit_call(&st);
 	}
 	
-	fn check_is_exit_call(st: &Statement) {		
-		let nt_exit = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("exit")))).unwrap();
+	fn check_is_exit_call(st: &Statement) {
+		let nt_exit = NameToken::new("exit");
 		
 		match st {
 			Statement::FuncCall { 
@@ -953,13 +881,14 @@ mod tests {
 		
 		let types_memory = Memory::new();
 		let vars_memory = Memory::new();
+		let builtin_func_defs = BuiltinFuncsDefList::new();
 		
 		assert_eq!(
-			condition_expr.check_and_calc_data_type(&types_memory).unwrap(), 
+			condition_expr.check_and_calc_data_type(&types_memory, &builtin_func_defs).unwrap(), 
 			DataType::Bool);
 					
 		assert_eq!(
-			condition_expr.calc(&vars_memory).unwrap(), 
+			condition_expr.calc(&vars_memory, &builtin_func_defs).unwrap(), 
 			Value::Bool(conditional_result));
 		
 		assert_eq!(statements.len(), 2);
@@ -978,10 +907,11 @@ mod tests {
 	}
 	
 	fn check_statement(statement: &Statement, value: &Value) {
-		let nt_print = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("print")))).unwrap();
+		let nt_print = NameToken::new("print");
 		
 		let types_memory = Memory::new();
 		let vars_memory = Memory::new();
+		let builtin_func_defs = BuiltinFuncsDefList::new();
 		
 		match statement {
 			Statement::FuncCall { kind: FuncKind::Builtin, func_name, arg_exprs } => {
@@ -990,11 +920,11 @@ mod tests {
 				assert_eq!(arg_exprs.len(), 1);
 				
 				assert_eq!(
-					arg_exprs[0].check_and_calc_data_type(&types_memory).unwrap(), 
+					arg_exprs[0].check_and_calc_data_type(&types_memory, &builtin_func_defs).unwrap(), 
 					DataType::String);
 					
 				assert_eq!(
-					arg_exprs[0].calc(&vars_memory).unwrap(), 
+					arg_exprs[0].calc(&vars_memory, &builtin_func_defs).unwrap(), 
 					*value);
 			},
 			_ => panic!("Wrong statement: {:?}", statement),

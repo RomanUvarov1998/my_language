@@ -1,0 +1,3 @@
+var name: str = @input("Enter your name: ");
+@print("Hi,")
+@print(name)

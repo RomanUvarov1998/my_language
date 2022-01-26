@@ -20,12 +20,12 @@ fn main() {
 					}
 					
 					println!("ERROR: {}:{} - {}:{}", 
-						err.pos_begin().line() + 1, err.pos_begin().col(),
-						err.pos_end().line() + 1, err.pos_end().col());
+						err.pos().begin().line() + 1, err.pos().begin().col(),
+						err.pos().end().line() + 1, err.pos().end().col());
 			
 					let code_lines: Vec<&str> = code.lines().collect();
 					
-					for line_num in err.pos_begin().line()..=err.pos_end().line() {
+					for line_num in err.pos().begin().line()..=err.pos().end().line() {
 						println!("{}", code_lines[line_num]);
 					}
 					

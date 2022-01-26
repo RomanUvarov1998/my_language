@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use super::utils::CharPos;
 
 //------------------------------ CharsIter ----------------------------
 
@@ -108,58 +109,6 @@ impl std::fmt::Display for ParsedChar {
 				Punctuation::Comma => write!(f, ","),
 			},
 			CharKind::Invalid => write!(f, "{}", self.ch()),
-		}
-	}
-}
-
-//------------------------------ CharPos ----------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CharPos {
-	line: usize,
-	col: usize,
-}
-
-impl CharPos {
-	pub fn new() -> Self {
-		Self {
-			line: 0,
-			col: 0,
-		}
-	}
-	
-	#[allow(dead_code)]
-	pub fn line(&self) -> usize { self.line }
-	pub fn col(&self) -> usize { self.col }
-	
-	fn advance(&mut self, ch_kind: CharKind) {
-		match ch_kind {
-			CharKind::NewLine => {
-				self.col = 0;
-				self.line += 1;
-			},
-			_ => {
-				self.col += 1;
-			},
-		}
-	}
-}
-
-use std::cmp::Ordering;
-impl std::cmp::PartialOrd for CharPos {
-	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-		Some(self.cmp(other))
-	}
-}
-
-impl std::cmp::Ord for CharPos {
-	fn cmp(&self, other: &Self) -> Ordering {
-		if self.line < other.line {
-			Ordering::Less
-		} else if self.line > other.line {
-			Ordering::Greater
-		} else {
-			self.col.cmp(&other.col)
 		}
 	}
 }

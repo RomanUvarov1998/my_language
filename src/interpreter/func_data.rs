@@ -2,6 +2,9 @@
 
 use super::var_data::{DataType, Value};
 use super::InterpErr;
+use super::utils::{CodePos, NameToken};
+use super::expr::Expr;
+use super::memory::Memory;
 
 //------------------------- BuiltinFuncsDefList -----------------------
 
@@ -27,17 +30,17 @@ impl BuiltinFuncsDefList {
 		self.funcs.push(func_def);
 	}
 	
-	pub fn find<'mem>(&'mem self, name: &str) -> Result<&'mem BuiltinFuncDef, BuiltinFuncErr> {
-		match self.funcs.iter().find(|func| func.get_name() == name) {
+	pub fn find<'mem>(&'mem self, name: &NameToken) -> Result<&'mem BuiltinFuncDef, BuiltinFuncErr> {
+		match self.funcs.iter().find(|func| func.get_name() == name.value()) {
 			Some(func) => Ok(func),
-			None => Err( BuiltinFuncErr::NotDefined ),
+			None => Err( BuiltinFuncErr::NotDefined { name_pos: name.pos() } ),
 		}
 	}
 }
 
 //------------------------- BuiltinFuncDef -----------------------
 
-pub type BuiltinFuncBody = Box<dyn Fn(Vec<Value>) -> Result<(), InterpErr>>;
+pub type BuiltinFuncBody = Box<dyn Fn(Vec<Value>) -> Result<Option<Value>, InterpErr>>;
 
 pub struct BuiltinFuncDef {
 	name: &'static str,
@@ -56,20 +59,28 @@ impl BuiltinFuncDef {
 		}
 	}
 	
-	pub fn check_args(&self, args_data_types: Vec<DataType>) -> Result<(), BuiltinFuncErr> {
-		if self.args.len() != args_data_types.len() {
-			return Err( BuiltinFuncErr::ArgsCnt { 
+	pub fn check_args(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, check_memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<(), InterpErr> {
+		if self.args.len() != args_exprs.len() {
+			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt { 
+				func_name_pos: func_name.pos(),
 				actual_cnt: self.args.len(),
-				given_cnt: args_data_types.len(),
-			} );
+				given_cnt: args_exprs.len(),
+			} ) );
 		}
+						
+		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
+			.map(|expr| expr.check_and_calc_data_type(check_memory, builtin_func_defs))
+			.collect();
+			
+		let args_data_types: Vec<DataType> = args_data_types_result?;
 		
 		for i in 0..self.args.len() {
 			if !self.args[i].type_check(args_data_types[i]) {
-				return Err( BuiltinFuncErr::ArgType { 
+				return Err( InterpErr::from( BuiltinFuncErr::ArgType {
+					arg_expr_pos: args_exprs[i].pos(),
 					actual_type: self.args[i].data_type,
 					given_type: args_data_types[i],
-				} );
+				} ) );
 			}
 		}
 		
@@ -84,7 +95,7 @@ impl BuiltinFuncDef {
 		self.return_type
 	}
 	
-	pub fn call(&self, args_values: Vec<Value>) -> Result<(), InterpErr> {
+	pub fn call(&self, args_values: Vec<Value>) -> Result<Option<Value>, InterpErr> {
 		(self.body)(args_values)
 	}
 }
@@ -116,12 +127,29 @@ impl BuiltinFuncArg {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BuiltinFuncErr {
 	ArgsCnt {
+		func_name_pos: CodePos,
 		actual_cnt: usize,
 		given_cnt: usize,
 	},
-	ArgType { // TODO: provide token to keep wrong argument position
+	ArgType {
+		arg_expr_pos: CodePos,
 		actual_type: DataType,
 		given_type: DataType,
 	},
-	NotDefined,
+	NotDefined {
+		name_pos: CodePos,
+	},
+}
+
+impl std::fmt::Display for BuiltinFuncErr {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			BuiltinFuncErr::ArgsCnt { actual_cnt, given_cnt, .. } =>
+				write!(f, "Wrong arguments count for builtin function: {} expected but {} found", actual_cnt, given_cnt),
+			BuiltinFuncErr::ArgType { actual_type, given_type, .. } =>
+				write!(f, "Wrong argument type for builtin function: {} expected but {} found", actual_type, given_type),
+			BuiltinFuncErr::NotDefined { .. } =>
+				write!(f, "Builtin function is not defined"),
+		}
+	}
 }

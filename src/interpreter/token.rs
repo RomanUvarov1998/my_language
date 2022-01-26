@@ -1,4 +1,5 @@
-use super::string_char::{ CharsIter, CharPos, CharKind, Punctuation, ParsedChar };
+use super::string_char::{ CharsIter, CharKind, Punctuation, ParsedChar };
+use super::utils::{CharPos, CodePos};
 use std::collections::VecDeque;
 
 //---------------------------- TokensIter --------------------------------
@@ -155,7 +156,7 @@ impl TokensIter {
 					
 					CharKind::DoubleQuote => {
 						self.iter.next().unwrap();
-						return Ok( Token::new(pos_begin, parsed_char.pos(), TokenContent::StringLiteral (string_content.trim_end().to_string())) );
+						return Ok( Token::new(pos_begin, parsed_char.pos(), TokenContent::StringLiteral (string_content)) );
 					},
 					
 					CharKind::NewLine => return Err( TokenErr::Construct (parsed_char) ),
@@ -388,18 +389,16 @@ impl Iterator for TokensIter {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
-	pub pos_begin: CharPos,
-	pub pos_end: CharPos,
+	pub pos: CodePos,
 	pub content: TokenContent,
 }
 
 impl Token {
-	pub fn new(pos_begin: CharPos, pos_end: CharPos, content: TokenContent) -> Self {
-		Self { pos_begin, pos_end, content }
+	pub fn new(begin: CharPos, end: CharPos, content: TokenContent) -> Self {
+		Self { pos: CodePos::new(begin, end), content }
 	}
 	
-	pub fn pos_begin(&self) -> CharPos { self.pos_begin }
-	pub fn pos_end(&self) -> CharPos { self.pos_end }
+	pub fn pos(&self) -> CodePos { self.pos }
 	
 	pub fn content(&self) -> &TokenContent {
 		&self.content

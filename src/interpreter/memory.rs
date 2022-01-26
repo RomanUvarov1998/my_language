@@ -4,7 +4,7 @@ use super::var_data::{VarData, DataType, VarErr, Value};
 use super::expr::Expr;
 use super::InterpErr;
 //use super::func_data::FuncsDefList;
-use super::statement::NameToken;
+use super::utils::NameToken;
 
 pub struct Memory {
 	vars: Vec<VarData>,
@@ -76,15 +76,13 @@ impl Memory {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use super::super::token::{Token, TokenContent};
-	use super::super::string_char::CharPos;
-	use super::super::statement::NameToken;
+	use super::super::utils::NameToken;
 	
 	#[test]
 	fn add_uninit_variable() {
 		let mut mem = Memory::new();
 		
-		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
+		let nt = NameToken::new("a");
 		
 		mem.add_variable(nt.clone(), DataType::Float32, None).unwrap();
 		
@@ -99,7 +97,7 @@ mod tests {
 	fn add_variable_with_value() {
 		let mut mem = Memory::new();
 		
-		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
+		let nt = NameToken::new("a");
 		
 		mem.add_variable(nt.clone(), DataType::Float32, Some(Value::Float32(2_f32))).unwrap();
 		

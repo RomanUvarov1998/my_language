@@ -5,12 +5,13 @@ mod token;
 mod statement;
 mod var_data;
 mod func_data;
+mod utils;
 
 use statement::{StatementsIter, Statement, WithVariable, FuncKind, Branching, StatementErr};
 use memory::*;
 use func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
 use var_data::{VarErr, Value, DataType};
-use string_char::CharPos;
+use utils::{CharPos, CodePos};
 
 //------------------------ Interpreter --------------------
 
@@ -29,9 +30,9 @@ impl Interpreter {
 			vec![
 				BuiltinFuncArg::new("value".to_string(), DataType::Untyped),
 			],
-			Box::new(|args_values: Vec<Value>| -> Result<(), InterpErr> {
+			Box::new(|args_values: Vec<Value>| -> Result<Option<Value>, InterpErr> {
 				println!("{}", args_values[0]);
-				Ok(())
+				Ok(None)
 			}) as BuiltinFuncBody,
 			DataType::Untyped
 		));
@@ -39,10 +40,29 @@ impl Interpreter {
 		builtin_func_defs.add(BuiltinFuncDef::new(
 			"exit",
 			Vec::new(),
-			Box::new(|_args_values: Vec<Value>| -> Result<(), InterpErr> {
+			Box::new(|_args_values: Vec<Value>| -> Result<Option<Value>, InterpErr> {
 				Err( InterpErr::new_halt_request() )
 			}) as BuiltinFuncBody,
 			DataType::Untyped
+		));
+		
+		builtin_func_defs.add(BuiltinFuncDef::new(
+			"input",
+			vec![
+				BuiltinFuncArg::new("prompt".to_string(), DataType::Untyped),
+			],
+			Box::new(|args_values: Vec<Value>| -> Result<Option<Value>, InterpErr> {
+				use std::io::{self, Write};
+				
+				print!("{}", args_values[0]);
+				io::stdout().flush().unwrap();
+				
+				let mut input = String::new();
+				io::stdin().read_line(&mut input).unwrap();
+				
+				Ok(Some(Value::from(input)))
+			}) as BuiltinFuncBody,
+			DataType::String
 		));
 		
 		Self {
@@ -83,28 +103,25 @@ impl Interpreter {
 					self.memory.add_variable(
 						var_name.clone(), 
 						*data_type,
-						Some(value_expr.calc(&self.memory)?))?,
+						Some(value_expr.calc(&self.memory, &self.builtin_func_defs)?))?,
 				
 				WithVariable::Set { var_name, value_expr } => 
-					self.memory.set_variable(&var_name, value_expr.calc(&self.memory)?)?,
+					self.memory.set_variable(&var_name, value_expr.calc(&self.memory, &self.builtin_func_defs)?)?,
 			},
 			
 			Statement::FuncCall { kind, func_name, arg_exprs } => {
 				match kind {
 					FuncKind::Builtin => {
-						let f = self.builtin_func_defs.find(func_name.value()).unwrap();
+						let f = self.builtin_func_defs.find(func_name).unwrap();
 						
 						let mut arg_vals = Vec::<Value>::with_capacity(arg_exprs.len());
 						for expr in arg_exprs {
-							arg_vals.push(expr.calc(&self.memory)?);
+							arg_vals.push(expr.calc(&self.memory, &self.builtin_func_defs)?);
 						}
 						
-						return f.call(arg_vals);
+						f.call(arg_vals)?;
 					},
-					FuncKind::UserDefined => {
-						todo!();
-						//self.memory.call_func(name, args)?;
-					},
+					FuncKind::UserDefined => todo!(),
 				}
 			},
 			
@@ -115,7 +132,7 @@ impl Interpreter {
 					let mut got_true = false;
 					
 					'if_out: for body in if_bodies {
-						match body.condition_expr().calc(&self.memory)? {
+						match body.condition_expr().calc(&self.memory, &self.builtin_func_defs)? {
 							Value::Bool(true) => {
 								for st_ref in body.statements() {
 									self.run_statement(st_ref)?;
@@ -135,7 +152,7 @@ impl Interpreter {
 					}
 				},
 				Branching::While { body } => {
-					while let Value::Bool(true) = body.condition_expr().calc(&self.memory)? {
+					while let Value::Bool(true) = body.condition_expr().calc(&self.memory, &self.builtin_func_defs)? {
 						for st_ref in body.statements() {
 							self.run_statement(st_ref)?;
 						}
@@ -151,8 +168,7 @@ impl Interpreter {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct InterpErr {
-	pos_begin: CharPos,
-	pos_end: CharPos,
+	pos: CodePos,
 	descr: String,
 	inner: InnerErr,
 }
@@ -170,24 +186,22 @@ pub enum InnerErr {
 impl InterpErr {
 	fn new_halt_request() -> Self {
 		InterpErr {
-			pos_begin: CharPos::new(),
-			pos_end: CharPos::new(),
+			pos: CodePos::from(CharPos::new()), // TODO: do not use error to halt program execution from the middle
 			descr: String::new(),
 			inner: InnerErr::HaltRequest,
 		}
 	}
-	pub fn pos_begin(&self) -> CharPos { self.pos_begin }
-	pub fn pos_end(&self) -> CharPos { self.pos_end }
+	pub fn pos(&self) -> CodePos { self.pos }
 	pub fn descr(&self) -> &str { &self.descr }
 	pub fn inner(&self) -> &InnerErr { &self.inner }
 }
 
 impl std::fmt::Display for InterpErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {		
-		for _ in 0..self.pos_begin.col() {
+		for _ in 0..self.pos.begin().col() {
 			write!(f, "_")?;
 		}
-		for _ in self.pos_begin.col()..=self.pos_end.col() {
+		for _ in self.pos.begin().col()..=self.pos.end().col() {
 			write!(f, "^")?;
 		}
 		writeln!(f, "")?;
@@ -201,20 +215,17 @@ impl From<TokenErr> for InterpErr {
 	fn from(err: TokenErr) -> InterpErr {
 		match err {
 			TokenErr::Construct (ch) => InterpErr {
-				pos_begin: ch.pos(),
-				pos_end: ch.pos(),
+				pos: CodePos::from(ch.pos()),
 				descr: format!("{}", err),
 				inner: InnerErr::Token (err),
 			},
 			TokenErr::ExpectedButFound { ref found, .. } => InterpErr {
-				pos_begin: found.pos_begin(),
-				pos_end: found.pos_end(),
+				pos: found.pos(),
 				descr: format!("{}", err),
 				inner: InnerErr::Token (err),
 			},
 			TokenErr::EndReached { pos } => InterpErr {
-				pos_begin: pos,
-				pos_end: pos,
+				pos: CodePos::from(pos),
 				descr: format!("{}", err),
 				inner: InnerErr::Token (err),
 			},
@@ -226,27 +237,23 @@ use expr::ExprErr;
 impl From<ExprErr> for InterpErr {
 	fn from(err: ExprErr) -> InterpErr {
 		match err {
-			ExprErr::UnexpectedToken (ref tok) => InterpErr {
-				pos_begin: tok.pos_begin(),
-				pos_end: tok.pos_end(),
+			ExprErr::UnexpectedToken (pos) => InterpErr {
+				pos,
 				descr: format!("{}", err),
 				inner: InnerErr::Expr (err),
 			},
-			ExprErr::UnpairedBracket (ref tok) => InterpErr {
-				pos_begin: tok.pos_begin(),
-				pos_end: tok.pos_end(),
+			ExprErr::UnpairedBracket (pos) => InterpErr {
+				pos,
 				descr: format!("{}", err),
 				inner: InnerErr::Expr (err),
 			},
-			ExprErr::ExpectedExprButFound (ref tok) => InterpErr {
-				pos_begin: tok.pos_begin(),
-				pos_end: tok.pos_end(),
+			ExprErr::ExpectedExprButFound (pos) => InterpErr {
+				pos,
 				descr: format!("{}", err),
 				inner: InnerErr::Expr (err),
 			},
-			ExprErr::Operator { ref tok, .. } => InterpErr {
-				pos_begin: tok.pos_begin(),
-				pos_end: tok.pos_end(),
+			ExprErr::Operator { pos, .. } => InterpErr {
+				pos,
 				descr: format!("{}", err),
 				inner: InnerErr::Expr (err),
 			},
@@ -258,38 +265,32 @@ impl From<VarErr> for InterpErr {
 	fn from(err: VarErr) -> InterpErr {
 		match err {		
 			VarErr::NotDefined { ref name } => InterpErr {
-				pos_begin: name.tok().pos_begin(),
-				pos_end: name.tok().pos_end(),
+				pos: name.pos(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
 			VarErr::NotSet { ref name } => InterpErr {
-				pos_begin: name.tok().pos_begin(),
-				pos_end: name.tok().pos_end(),
+				pos: name.pos(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
 			VarErr::UnknownType { ref name } => InterpErr {
-				pos_begin: name.tok().pos_begin(),
-				pos_end: name.tok().pos_end(),
+				pos: name.pos(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
 			VarErr::AlreadyExists { ref name } => InterpErr {
-				pos_begin: name.tok().pos_begin(),
-				pos_end: name.tok().pos_end(),
+				pos: name.pos(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
 			VarErr::WrongValue { ref var_name, .. } => InterpErr {
-				pos_begin: var_name.tok().pos_begin(),
-				pos_end: var_name.tok().pos_end(),
+				pos: var_name.pos(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
 			VarErr::WrongType { ref var_name, .. } => InterpErr {
-				pos_begin: var_name.tok().pos_begin(),
-				pos_end: var_name.tok().pos_end(),
+				pos: var_name.pos(),
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
@@ -301,23 +302,38 @@ impl From<StatementErr> for InterpErr {
 	fn from(err: StatementErr) -> InterpErr {
 		let descr: String = format!("{}", err);
 		match err {
-			StatementErr::Func { err: ferr, ref name } => InterpErr {
-				pos_begin: name.tok().pos_begin(),
-				pos_end: name.tok().pos_end(),
-				descr,
-				inner: InnerErr::BuiltinFunc (ferr),
-			},
 			StatementErr::UnfinishedBody (pos) => InterpErr {
-				pos_begin: pos,
-				pos_end: pos,
+				pos: CodePos::from(pos),
 				descr,
 				inner: InnerErr::Statement (err),
 			},
-			StatementErr::IfConditionType { cond_expr_begin, cond_expr_end, } => InterpErr {
-				pos_begin: cond_expr_begin,
-				pos_end: cond_expr_end,
+			StatementErr::IfConditionType { pos } => InterpErr {
+				pos,
 				descr,
 				inner: InnerErr::Statement (err),
+			},
+		}
+	}
+}
+
+impl From<BuiltinFuncErr> for InterpErr {
+	fn from(err: BuiltinFuncErr) -> InterpErr {
+		let descr: String = format!("{}", err);
+		match err {
+			BuiltinFuncErr::ArgsCnt { func_name_pos, .. } => InterpErr {
+				pos: func_name_pos,
+				descr,
+				inner: InnerErr::BuiltinFunc (err),
+			},
+			BuiltinFuncErr::ArgType { arg_expr_pos, .. } => InterpErr {
+				pos: arg_expr_pos,
+				descr,
+				inner: InnerErr::BuiltinFunc (err),
+			},
+			BuiltinFuncErr::NotDefined { name_pos } => InterpErr {
+				pos: name_pos,
+				descr,
+				inner: InnerErr::BuiltinFunc (err),
 			},
 		}
 	}
@@ -328,9 +344,7 @@ impl From<StatementErr> for InterpErr {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use super::token::{Token, TokenContent};
-	use super::string_char::CharPos;
-	use super::statement::NameToken;
+	use super::utils::NameToken;
 	use super::var_data::DataType;
 	
 	#[test]
@@ -352,7 +366,7 @@ mod tests {
 	fn check_err_if_set_var_to_data_of_wrong_type() {		
 		let mut int = Interpreter::new();
 		
-		let nt = NameToken::from(Token::new(CharPos::new(), CharPos::new(), TokenContent::Name(String::from("a")))).unwrap();
+		let nt = NameToken::new("a");
 		
 		match int.check_and_run("var a: f32 = \"hello\";") {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::WrongType { 

@@ -1,4 +1,4 @@
-use super::statement::NameToken;
+use super::utils::NameToken;
 
 //-------------------- VarData --------------
 
