@@ -60,9 +60,25 @@ impl Interpreter {
 				let mut input = String::new();
 				io::stdin().read_line(&mut input).unwrap();
 				
-				Ok(Some(Value::from(input)))
+				Ok(Some(Value::from(input.trim_end().clone())))
 			}) as BuiltinFuncBody,
 			DataType::String
+		));
+		
+		builtin_func_defs.add(BuiltinFuncDef::new(
+			"str_to_f32",
+			vec![
+				BuiltinFuncArg::new("value".to_string(), DataType::String),
+			],
+			Box::new(|args_values: Vec<Value>| -> Result<Option<Value>, InterpErr> {
+				let str_value: String = match &args_values[0] {
+					Value::String(val) => val.clone(),
+					_ => unreachable!(),
+				};
+				let result: f32 = str_value.parse::<f32>().unwrap();
+				Ok(Some(Value::from(result)))
+			}) as BuiltinFuncBody,
+			DataType::Float32
 		));
 		
 		Self {

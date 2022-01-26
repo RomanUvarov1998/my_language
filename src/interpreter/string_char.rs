@@ -100,6 +100,7 @@ impl std::fmt::Display for ParsedChar {
 			CharKind::RightCurlyBracket => write!(f, "}}"),
 			CharKind::Eq => write!(f, "="),
 			CharKind::Letter => write!(f, "{}", self.ch()),
+			CharKind::Underscore => write!(f, "{}", self.ch()),
 			CharKind::Whitespace => write!(f, "Whitespace"),
 			CharKind::NewLine => write!(f, "NewLine"),
 			CharKind::Control => write!(f, "Control"),
@@ -135,6 +136,7 @@ pub enum CharKind {
 	RightCurlyBracket,
 	Eq,
 	Letter,
+	Underscore,
 	Punctuation (Punctuation),
 	Whitespace,
 	NewLine,
@@ -167,6 +169,7 @@ impl From<char> for CharKind {
 			':' => CharKind::Punctuation (Punctuation::Colon),
 			';' => CharKind::Punctuation (Punctuation::Semicolon),
 			',' => CharKind::Punctuation (Punctuation::Comma),
+			'_' => CharKind::Underscore,
 			_ => if ch.is_alphabetic() {
 				CharKind::Letter
 			} else if let Some(value) = ch.to_digit(RADIX) {

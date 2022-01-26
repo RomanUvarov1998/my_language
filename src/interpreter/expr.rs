@@ -1,4 +1,4 @@
-use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp, Keyword};
+use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp, Keyword, TokenErr};
 use super::InterpErr;
 use super::memory::Memory;
 use super::var_data::{Value, DataType};
@@ -154,8 +154,48 @@ impl Expr {
 						return Err(unexpected(pos));
 					}
 					
-					let sym = Symbol::new_name(name, pos);
-					expr_stack.push(sym);
+					match tokens_iter.peek_or_end_reached_err()?.content() {
+						TokenContent::Bracket (Bracket::Left) => {
+							tokens_iter.next_or_end_reached_err().unwrap();
+							
+							let mut arg_exprs = Vec::<Expr>::new();
+							
+							// TODO: move this code to Func::parse self because it duplicates the one from Statement::parse_func_call(...)
+							if let TokenContent::Bracket (Bracket::Right) = tokens_iter.peek_or_end_reached_err()?.content() {
+								tokens_iter.next_or_end_reached_err().unwrap();
+							} else {
+								loop {			
+									arg_exprs.push(Expr::new(
+										tokens_iter,
+										ExprContextKind::FunctionArg)?);
+										
+									match tokens_iter.next_or_end_reached_err()? {
+										Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
+										
+										Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
+										
+										found @ _ => 
+											return Err( InterpErr::from( TokenErr::ExpectedButFound { 
+												expected: vec![
+													TokenContent::StatementOp(StatementOp::Comma),
+													TokenContent::Bracket ( Bracket::Right ),
+												], 
+												found
+											} ) ),
+									}
+								}
+							}
+							
+							let func_name = NameToken::new_with_pos(&name, pos);
+							
+							let sym = Symbol::new_builtin_func_call(func_name, arg_exprs);
+							expr_stack.push(sym);
+						},
+						_ => {
+							let sym = Symbol::new_name(name, pos);
+							expr_stack.push(sym);
+						},
+					}
 					
 					prev_is_operand = true;
 				},

@@ -145,6 +145,7 @@ impl TokensIter {
 					CharKind::RightCurlyBracket |
 					CharKind::Eq |
 					CharKind::Letter |
+					CharKind::Underscore |
 					CharKind::Punctuation (_) |
 					CharKind::Whitespace |
 					CharKind::Invalid => { // TODO: somehow \r includes into string literal and fails the output
@@ -182,11 +183,7 @@ impl TokensIter {
 			match self.iter.peek() {
 				Some(parsed_char) => {
 					match parsed_char.kind() {
-						CharKind::Digit (_) => {
-							name.push(parsed_char.ch());
-							self.iter.next(); 
-						},
-						CharKind::Letter => {
+						CharKind::Digit (_) | CharKind::Letter | CharKind::Underscore => {
 							name.push(parsed_char.ch());
 							self.iter.next(); 
 						},
@@ -361,6 +358,7 @@ impl Iterator for TokensIter {
 				CharKind::RightCurlyBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::RightCurly )) ),
 				
 				CharKind::Letter 
+					| CharKind::Underscore 
 					| CharKind::Dog 
 						=> self.parse_name_or_keyword_or_operator(ch),
 				
@@ -645,7 +643,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 var1var\"vasya\">>=<<===!=!land lor lxor:;,(){}if else while//sdsdfd".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 var_1var\"vasya\">>=<<===!=!land lor lxor:;,(){}if else while//sdsdfd".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -656,7 +654,7 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var1var")));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var_1var")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEqual));
@@ -685,7 +683,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t (  \n\t ) \n\t { \n\t } \n\t if \n\t else \n\t while \n\t // sdfsdfs \n\t ".to_string());
+		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var_1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t (  \n\t ) \n\t { \n\t } \n\t if \n\t else \n\t while \n\t // sdfsdfs \n\t ".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -696,7 +694,7 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var1")));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var_1")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));

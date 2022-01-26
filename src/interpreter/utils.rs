@@ -1,43 +1,6 @@
 use super::token::{Token, TokenContent, TokenErr};
 use super::string_char::CharKind;
 use super::InterpErr;
-use super::var_data::Value;
-
-//--------------------- ValueToken --------------------------
-
-#[derive(Debug, Clone)]
-pub struct ValueToken {
-	value: Value,
-	pos: CodePos,
-}
-
-impl ValueToken {
-	pub fn new<T>(value: T, pos: CodePos) -> Self 
-	where
-		Value: From<T>
-	{
-		ValueToken {
-			value: Value::from(value),
-			pos,
-		}
-	}
-	
-	pub fn value(&self) -> &Value { &self.value }
-	pub fn pos(&self) -> CodePos { self.pos }
-}
-
-impl std::fmt::Display for ValueToken {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{}", self.value())
-	}
-}
-
-impl PartialEq for ValueToken {
-	fn eq(&self, other: &Self) -> bool {
-		self.value() == other.value()
-	}
-}
-impl Eq for ValueToken {}
 
 //--------------------- NameToken --------------------------
 

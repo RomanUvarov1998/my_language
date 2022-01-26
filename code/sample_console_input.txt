@@ -1,3 +1,5 @@
 var name: str = @input("Enter your name: ");
-@print("Hi,")
-@print(name)
+var age_str: str = @input("Enter your age: ");
+var age: f32 = @str_to_f32(age_str);
+@print("Hi, " + name + "!");
+@print("You are " + age_str + " years old!");
