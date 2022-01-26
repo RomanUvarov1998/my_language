@@ -97,7 +97,6 @@ impl CharPos {
 		}
 	}
 	
-	#[allow(dead_code)]
 	pub fn line(&self) -> usize { self.line }
 	pub fn col(&self) -> usize { self.col }
 	
