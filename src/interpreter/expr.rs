@@ -32,18 +32,18 @@ impl Expr {
 	}
 	
 	pub fn calc(&self, memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<Value, InterpErr> {
+		// TODO: try ding it without copying all expr_stack, just by visiting each symbol by shared ref with for loop
 		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len());
-		let mut expr = self.expr_stack.clone(); // TODO: try ding it without copying all expr_stack, just by visiting each symbol by shared ref with for loop
-		expr.reverse();
 		
-		while let Some(sym) = expr.pop() {
-			match sym.kind {
+		for Symbol { kind, pos } in self.expr_stack.iter() {
+			let pos = *pos;
+			match kind {
 				SymbolKind::Operand (opnd) => {
 					let value: Value = match opnd {
 						Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
-						Operand::Name (name) => memory.get_variable_value(&NameToken::new_with_pos(&name, sym.pos))?.clone(),
+						Operand::Name (name) => memory.get_variable_value(&NameToken::new_with_pos(&name, pos))?.clone(),
 						Operand::BuiltinFuncCall { func_name, arg_exprs } => {
-							let f = builtin_func_defs.find(&NameToken::new_with_pos(&func_name, sym.pos)).unwrap();
+							let f = builtin_func_defs.find(&NameToken::new_with_pos(&func_name, pos)).unwrap();
 							
 							let mut arg_vals = Vec::<Value>::with_capacity(arg_exprs.len());
 							
@@ -61,7 +61,7 @@ impl Expr {
 				
 				SymbolKind::ExprOperator (op) => {
 					let value: Value = match op.apply(&mut calc_stack) {
-						Err( err ) => return Err( InterpErr::from(ExprErr::Operator { err, pos: sym.pos }) ),
+						Err( err ) => return Err( InterpErr::from(ExprErr::Operator { err, pos }) ),
 						Ok(val) => val,
 					};
 					calc_stack.push(value);
@@ -79,17 +79,17 @@ impl Expr {
 		assert!(self.expr_stack.len() > 0);
 		let mut type_calc_stack = Vec::<DataType>::with_capacity(self.expr_stack.len());
 		
-		let mut ind: usize = 0_usize;
-		while ind < self.expr_stack.len() {
-			match &self.expr_stack[ind].kind {
+		for Symbol { kind, pos } in self.expr_stack.iter() {
+			let pos = *pos;
+			match kind {
 				SymbolKind::Operand (ref opnd) => {
 					let opnd_dt: DataType = match opnd {
 						Operand::Value (val) => val.get_type(),
-						Operand::Name (name) => check_memory.get_variable_type(&NameToken::new_with_pos(&name, self.expr_stack[ind].pos))?,
+						Operand::Name (name) => check_memory.get_variable_type(&NameToken::new_with_pos(&name, pos))?,
 						Operand::BuiltinFuncCall { func_name, arg_exprs } => {
-							let f = builtin_func_defs.find(&NameToken::new_with_pos(&func_name, self.expr_stack[ind].pos)).unwrap(); // TODO: avoid creation of extra NameToken's
+							let f = builtin_func_defs.find(&NameToken::new_with_pos(&func_name, pos)).unwrap(); // TODO: avoid creation of extra NameToken's
 							
-							f.check_args(&NameToken::new_with_pos(&func_name, self.expr_stack[ind].pos), arg_exprs, check_memory, builtin_func_defs)?;
+							f.check_args(&NameToken::new_with_pos(&func_name, pos), arg_exprs, check_memory, builtin_func_defs)?;
 							f.return_type()
 						},
 					};
@@ -100,12 +100,11 @@ impl Expr {
 				
 				SymbolKind::ExprOperator (op) => {
 					match op.get_result_data_type(&mut type_calc_stack) {
-						Err(err) => return Err( InterpErr::from(ExprErr::Operator { err, pos: self.expr_stack[ind].pos() }) ),
+						Err(err) => return Err( InterpErr::from(ExprErr::Operator { err, pos }) ),
 						Ok(dt) => type_calc_stack.push(dt),
 					}
 				}, 
 			}
-			ind += 1;
 		}
 		
 		let result: DataType = type_calc_stack.pop().unwrap();
