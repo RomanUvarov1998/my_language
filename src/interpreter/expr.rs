@@ -377,7 +377,7 @@ impl ExprContext {
 			TokenContent::Bracket (_) 
 				=> self.check_brackets(tok),
 			TokenContent::StatementOp (st_op) => match st_op {
-				StatementOp::Colon | StatementOp::Comment (_) => Err(unexpected(tok.pos())),
+				StatementOp::Colon | StatementOp::Comment (_) | StatementOp::ThinArrow => Err(unexpected(tok.pos())),
 				StatementOp::Comma => match self.kind {
 					ExprContextKind::ValueToAssign | ExprContextKind::IfCondition => Err(unexpected(tok.pos())),
 					ExprContextKind::FunctionArg => Ok(true),

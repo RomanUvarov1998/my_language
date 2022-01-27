@@ -1,0 +1,8 @@
+f add(a: f32, b: f32) -> {
+	return a + b;
+}
+
+var a: f32 = @str_to_f32(@input("Input a: "));
+
+@print("a + 5 == ");
+@print(add(a, 5));

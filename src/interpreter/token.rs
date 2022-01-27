@@ -215,10 +215,21 @@ impl TokensIter {
 		Ok( token )
 	}
 
-	fn parse_operator_or_comment(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
+	fn parse_operator_or_comment_or_thin_arrow(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
 		match first_char.kind() {
 			CharKind::Plus => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Plus )) ),
-			CharKind::Minus => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Minus )) ),
+
+			CharKind::Minus => match self.iter.peek() {
+				Some(second_char) => match second_char.kind() {
+					CharKind::Greater => {
+						let second_char: ParsedChar = self.iter.next().unwrap();
+						Ok( Token::new(first_char.pos(), second_char.pos(), TokenContent::StatementOp ( StatementOp::ThinArrow )) )
+					},
+					_ => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Minus )) ),
+				},
+				None => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Minus )) ),
+			},
+			
 			CharKind::Asterisk => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Mul )) ),
 			CharKind::Circumflex => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Pow )) ),
 
@@ -347,7 +358,7 @@ impl Iterator for TokensIter {
 					| CharKind::LeftSlash
 					| CharKind::Eq
 					| CharKind::Exclamation
-						=> self.parse_operator_or_comment(ch),
+						=> self.parse_operator_or_comment_or_thin_arrow(ch),
 						
 				CharKind::DoubleQuote => self.parse_string_literal(ch.pos()),
 				
@@ -459,6 +470,7 @@ impl std::fmt::Display for TokenContent {
 				StatementOp::Semicolon => write!(f, "'{}'", ";"),
 				StatementOp::Comma => write!(f, "'{}'", ","),
 				StatementOp::Comment (content) => write!(f, "Comment //'{}'", content),
+				StatementOp::ThinArrow => write!(f, "->"),
 			},
 			TokenContent::Keyword (kw) => match kw {
 				Keyword::Var => write!(f, "'{}'", "var"),
@@ -548,6 +560,7 @@ pub enum StatementOp {
 	Semicolon,
 	Comma,
 	Comment (String),
+	ThinArrow,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -623,6 +636,7 @@ mod tests {
 		test_token_content_detection(";", TokenContent::StatementOp (StatementOp::Semicolon));
 		test_token_content_detection(",", TokenContent::StatementOp (StatementOp::Comma));
 		test_token_content_detection("//23rwrer2", TokenContent::StatementOp (StatementOp::Comment (String::from("23rwrer2"))));
+		test_token_content_detection("->", TokenContent::StatementOp (StatementOp::ThinArrow));
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
 		test_token_content_detection("if", TokenContent::Keyword ( Keyword::If ));
 		test_token_content_detection("else", TokenContent::Keyword ( Keyword::Else ));
@@ -643,7 +657,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 var_1var\"vasya\">>=<<===!=!land lor lxor:;,(){}if else while//sdsdfd".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 var_1var\"vasya\">>=<<===!=!land lor lxor:;,->(){}if else while//sdsdfd".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -669,6 +683,7 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Colon));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Semicolon));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comma));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::ThinArrow));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Left));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Right));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftCurly));
@@ -683,7 +698,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var_1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t (  \n\t ) \n\t { \n\t } \n\t if \n\t else \n\t while \n\t // sdfsdfs \n\t ".to_string());
+		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var_1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t -> \n\t (  \n\t ) \n\t { \n\t } \n\t if \n\t else \n\t while \n\t // sdfsdfs \n\t ".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -710,6 +725,7 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Colon));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Semicolon));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comma));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::ThinArrow));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Left));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Right));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftCurly));
