@@ -314,42 +314,14 @@ impl Statement {
 			}
 		
 			Statement::Branching (br) => match br {
-				Branching::IfElse { if_bodies, else_body } => {					
+				Branching::IfElse { if_bodies, else_body } => {
 					for body in if_bodies.iter() {
-						match body.condition_expr.check_and_calc_data_type(check_memory, builtin_func_defs)? {
-							DataType::Bool => {},
-							_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
-														pos: body.condition_expr().pos(),
-													} ) ),
-						}
-						
-						check_memory.push_scope();
-						for st_ref in body.statements.iter() {
-							st_ref.check(check_memory, builtin_func_defs)?;
-						}
-						check_memory.pop_scope();
+						body.check(check_memory, builtin_func_defs)?;
 					}
 					
-					check_memory.push_scope();
-					for st_ref in else_body.statements.iter() {
-						st_ref.check(check_memory, builtin_func_defs)?;
-					}
-					check_memory.pop_scope();
+					else_body.check(check_memory, builtin_func_defs)?;
 				},
-				Branching::While { body } => {
-					match body.condition_expr().check_and_calc_data_type(check_memory, builtin_func_defs)? {
-						DataType::Bool => {},
-						_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
-													pos: body.condition_expr().pos(),
-												} ) ),
-					}
-					
-					check_memory.push_scope();
-					for st_ref in body.statements().iter() {
-						st_ref.check(check_memory, builtin_func_defs)?;
-					}
-					check_memory.pop_scope();
-				},
+				Branching::While { body } => body.check(check_memory, builtin_func_defs)?,
 			}
 		}
 		Ok(())
@@ -394,44 +366,18 @@ impl Statement {
 					let mut got_true = false;
 					
 					'if_out: for body in if_bodies {
-						match body.condition_expr().calc(memory, builtin_func_defs)? {
-							Value::Bool(true) => {
-								memory.push_scope();
-								
-								for st_ref in body.statements() {
-									st_ref.run(memory, builtin_func_defs)?;
-								}
-								
-								memory.pop_scope();
-								
-								got_true = true;
-								break 'if_out;
-							},
-							Value::Bool(false) => {},
-							result @ _ => panic!("Wrong condition expr data type: {:?}", result.get_type()),
+						if body.run_if_true(memory, builtin_func_defs)? {
+							got_true = true;
+							break 'if_out;
 						}
 					}
 					
 					if !got_true {
-						memory.push_scope();
-								
-						for st_ref in else_body.statements() {
-							st_ref.run(memory, builtin_func_defs)?;
-						}
-						
-						memory.pop_scope();
+						else_body.run(memory, builtin_func_defs)?;
 					}
 				},
 				Branching::While { body } => {
-					while let Value::Bool(true) = body.condition_expr().calc(memory, builtin_func_defs)? {
-						memory.push_scope();
-						
-						for st_ref in body.statements() {
-							st_ref.run(memory, builtin_func_defs)?;
-						}
-						
-						memory.pop_scope();
-					}
+					while body.run_if_true(memory, builtin_func_defs)? {}
 				},
 			},
 		}
@@ -505,8 +451,44 @@ impl ConditionalBody {
 	pub fn condition_expr(&self) -> &Expr {
 		&self.condition_expr
 	}
+	
 	pub fn statements(&self) -> &Vec<Statement> {
 		&self.statements
+	}
+	
+	pub fn check(&self, check_memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<(), InterpErr> {
+		match self.condition_expr.check_and_calc_data_type(check_memory, builtin_func_defs)? {
+			DataType::Bool => {},
+			_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
+										pos: self.condition_expr().pos(),
+									} ) ),
+		}
+		
+		check_memory.push_scope();
+		for st_ref in self.statements.iter() {
+			st_ref.check(check_memory, builtin_func_defs)?;
+		}
+		check_memory.pop_scope();
+		
+		Ok(())
+	}
+	
+	pub fn run_if_true(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<bool, InterpErr> {
+		match self.condition_expr().calc(memory, builtin_func_defs)? {
+			Value::Bool(true) => {
+				memory.push_scope();
+				
+				for st_ref in self.statements() {
+					st_ref.run(memory, builtin_func_defs)?;
+				}
+				
+				memory.pop_scope();
+				
+				Ok(true)
+			},
+			Value::Bool(false) => Ok(false),
+			result @ _ => panic!("Wrong condition expr data type: {:?}", result.get_type()),
+		}
 	}
 }
 
@@ -518,6 +500,28 @@ pub struct UnconditionalBody {
 impl UnconditionalBody {
 	pub fn statements(&self) -> &Vec<Statement> {
 		&self.statements
+	}
+	
+	pub fn check(&self, check_memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<(), InterpErr> {					
+		check_memory.push_scope();
+		for st_ref in self.statements.iter() {
+			st_ref.check(check_memory, builtin_func_defs)?;
+		}
+		check_memory.pop_scope();
+		
+		Ok(())
+	}
+	
+	pub fn run(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<(), InterpErr> {
+		memory.push_scope();
+		
+		for st_ref in self.statements() {
+			st_ref.run(memory, builtin_func_defs)?;
+		}
+		
+		memory.pop_scope();
+		
+		Ok(())
 	}
 }
 

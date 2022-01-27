@@ -7,7 +7,7 @@ mod var_data;
 mod func_data;
 mod utils;
 
-use statement::{StatementsIter, Statement, WithVariable, FuncKind, Branching, StatementErr};
+use statement::{StatementsIter, Statement, StatementErr};
 use memory::*;
 use func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
 use var_data::{VarErr, Value, DataType};
