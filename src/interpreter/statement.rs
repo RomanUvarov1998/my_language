@@ -1,7 +1,7 @@
 use super::token::*;
 use super::expr::{Expr, ExprContextKind};
 use super::{InterpErr};
-use super::var_data::{DataType, VarErr};
+use super::var_data::{DataType, VarErr, Value};
 use super::func_data::{BuiltinFuncsDefList, BuiltinFuncDef};
 use super::memory::Memory;
 use super::utils::{CharPos, CodePos, NameToken};
@@ -351,6 +351,89 @@ impl Statement {
 					check_memory.pop_scope();
 				},
 			}
+		}
+		Ok(())
+	}
+	
+	pub fn run(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<(), InterpErr> {
+		match self {
+			Statement::Comment (_) => {},
+			
+			Statement::WithVariable (st) => match st {
+				WithVariable::Declare { var_name, data_type } => 
+					memory.add_variable(var_name.clone(), *data_type, None)?,
+					
+				WithVariable::DeclareSet { var_name, data_type, value_expr } =>
+					memory.add_variable(
+						var_name.clone(), 
+						*data_type,
+						Some(value_expr.calc(memory, builtin_func_defs)?))?,
+				
+				WithVariable::Set { var_name, value_expr } => 
+					memory.set_variable(&var_name, value_expr.calc(memory, builtin_func_defs)?)?,
+			},
+			
+			Statement::FuncCall { kind, func_name, arg_exprs } => {
+				match kind {
+					FuncKind::Builtin => {
+						let f = builtin_func_defs.find(func_name).unwrap();
+						
+						let mut arg_vals = Vec::<Value>::with_capacity(arg_exprs.len());
+						for expr in arg_exprs {
+							arg_vals.push(expr.calc(memory, builtin_func_defs)?);
+						}
+						
+						f.call(arg_vals)?;
+					},
+					FuncKind::UserDefined => todo!(),
+				}
+			},
+			
+			Statement::Branching (br) => match br {
+				Branching::IfElse { if_bodies, else_body } => {
+					let mut got_true = false;
+					
+					'if_out: for body in if_bodies {
+						match body.condition_expr().calc(memory, builtin_func_defs)? {
+							Value::Bool(true) => {
+								memory.push_scope();
+								
+								for st_ref in body.statements() {
+									st_ref.run(memory, builtin_func_defs)?;
+								}
+								
+								memory.pop_scope();
+								
+								got_true = true;
+								break 'if_out;
+							},
+							Value::Bool(false) => {},
+							result @ _ => panic!("Wrong condition expr data type: {:?}", result.get_type()),
+						}
+					}
+					
+					if !got_true {
+						memory.push_scope();
+								
+						for st_ref in else_body.statements() {
+							st_ref.run(memory, builtin_func_defs)?;
+						}
+						
+						memory.pop_scope();
+					}
+				},
+				Branching::While { body } => {
+					while let Value::Bool(true) = body.condition_expr().calc(memory, builtin_func_defs)? {
+						memory.push_scope();
+						
+						for st_ref in body.statements() {
+							st_ref.run(memory, builtin_func_defs)?;
+						}
+						
+						memory.pop_scope();
+					}
+				},
+			},
 		}
 		Ok(())
 	}

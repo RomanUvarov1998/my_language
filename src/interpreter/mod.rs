@@ -101,92 +101,9 @@ impl Interpreter {
 		}
 		
 		for st_ref in &statements {
-			self.run_statement(st_ref)?;
+			st_ref.run(&mut self.memory, &self.builtin_func_defs)?;
 		}
 		
-		Ok(())
-	}
-	
-	fn run_statement(&mut self, statement: &Statement) -> Result<(), InterpErr> {
-		match statement {
-			Statement::Comment (_) => {},
-			
-			Statement::WithVariable (st) => match st {
-				WithVariable::Declare { var_name, data_type } => 
-					self.memory.add_variable(var_name.clone(), *data_type, None)?,
-					
-				WithVariable::DeclareSet { var_name, data_type, value_expr } =>
-					self.memory.add_variable(
-						var_name.clone(), 
-						*data_type,
-						Some(value_expr.calc(&self.memory, &self.builtin_func_defs)?))?,
-				
-				WithVariable::Set { var_name, value_expr } => 
-					self.memory.set_variable(&var_name, value_expr.calc(&self.memory, &self.builtin_func_defs)?)?,
-			},
-			
-			Statement::FuncCall { kind, func_name, arg_exprs } => {
-				match kind {
-					FuncKind::Builtin => {
-						let f = self.builtin_func_defs.find(func_name).unwrap();
-						
-						let mut arg_vals = Vec::<Value>::with_capacity(arg_exprs.len());
-						for expr in arg_exprs {
-							arg_vals.push(expr.calc(&self.memory, &self.builtin_func_defs)?);
-						}
-						
-						f.call(arg_vals)?;
-					},
-					FuncKind::UserDefined => todo!(),
-				}
-			},
-			
-			Statement::Branching (br) => match br {
-				Branching::IfElse { if_bodies, else_body } => {
-					let mut got_true = false;
-					
-					'if_out: for body in if_bodies {
-						match body.condition_expr().calc(&self.memory, &self.builtin_func_defs)? {
-							Value::Bool(true) => {
-								self.memory.push_scope();
-								
-								for st_ref in body.statements() {
-									self.run_statement(st_ref)?;
-								}
-								
-								self.memory.pop_scope();
-								
-								got_true = true;
-								break 'if_out;
-							},
-							Value::Bool(false) => {},
-							result @ _ => panic!("Wrong condition expr data type: {:?}", result.get_type()),
-						}
-					}
-					
-					if !got_true {
-						self.memory.push_scope();
-								
-						for st_ref in else_body.statements() {
-							self.run_statement(st_ref)?;
-						}
-						
-						self.memory.pop_scope();
-					}
-				},
-				Branching::While { body } => {
-					while let Value::Bool(true) = body.condition_expr().calc(&self.memory, &self.builtin_func_defs)? {
-						self.memory.push_scope();
-						
-						for st_ref in body.statements() {
-							self.run_statement(st_ref)?;
-						}
-						
-						self.memory.pop_scope();
-					}
-				},
-			},
-		}
 		Ok(())
 	}
 }
