@@ -250,7 +250,12 @@ impl Expr {
 				},
 				
 				TokenContent::Keyword (kw) => match kw {
-					Keyword::Var | Keyword::If | Keyword::Else | Keyword::While => return Err(unexpected(pos)),
+					Keyword::Var | 
+						Keyword::If | 
+						Keyword::Else | 
+						Keyword::While | 
+						Keyword::F | 
+						Keyword::Return => return Err(unexpected(pos)),
 					Keyword::True | Keyword::False => {
 						let sym = Symbol::new_bool_literal(kw, pos);
 						expr_stack.push(sym);
@@ -349,6 +354,7 @@ impl Expr {
 #[derive(Debug, Clone, Copy)]
 pub enum ExprContextKind {
 	ValueToAssign,
+	ToReturn,
 	FunctionArg,
 	IfCondition,
 }
@@ -379,13 +385,18 @@ impl ExprContext {
 			TokenContent::StatementOp (st_op) => match st_op {
 				StatementOp::Colon | StatementOp::Comment (_) | StatementOp::ThinArrow => Err(unexpected(tok.pos())),
 				StatementOp::Comma => match self.kind {
-					ExprContextKind::ValueToAssign | ExprContextKind::IfCondition => Err(unexpected(tok.pos())),
+					ExprContextKind::ValueToAssign | ExprContextKind::IfCondition | ExprContextKind::ToReturn => Err(unexpected(tok.pos())),
 					ExprContextKind::FunctionArg => Ok(true),
 				},
 				StatementOp::Semicolon => Ok(true),
 			},
 			TokenContent::Keyword (kw) => match kw {
-				Keyword::Var | Keyword::If | Keyword::Else | Keyword::While => Err(unexpected(tok.pos())),
+				Keyword::Var | 
+					Keyword::If | 
+					Keyword::Else | 
+					Keyword::While | 
+					Keyword::F | 
+					Keyword::Return => Err(unexpected(tok.pos())),
 				Keyword::True | Keyword::False => Ok(false),
 			},
 		}
@@ -404,14 +415,14 @@ impl ExprContext {
 						Ok(false)
 					} else {
 						match self.kind {
-							ExprContextKind::ValueToAssign | ExprContextKind::IfCondition => Err( unpaired_bracket(br_tok.pos()) ),
+							ExprContextKind::ValueToAssign | ExprContextKind::IfCondition | ExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
 							ExprContextKind::FunctionArg => Ok(true),
 						}
 					}
 				},
 				Bracket::LeftCurly => match self.kind {
 					ExprContextKind::IfCondition => Ok(true),
-					ExprContextKind::ValueToAssign | ExprContextKind::FunctionArg => Err( unpaired_bracket(br_tok.pos()) ),
+					ExprContextKind::ValueToAssign | ExprContextKind::FunctionArg | ExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
 				},
 				_ => Err( unexpected(br_tok.pos()) ),
 			},

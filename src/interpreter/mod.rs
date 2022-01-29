@@ -9,7 +9,7 @@ mod utils;
 
 use statement::{StatementsIter, Statement, StatementErr};
 use memory::*;
-use func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
+use func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr, UserFuncErr};
 use var_data::{VarErr, Value, DataType};
 use utils::{CharPos, CodePos};
 
@@ -112,7 +112,7 @@ impl Interpreter {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct InterpErr {
-	pos: CodePos,
+	pos: CodePos, // TODO: add many position-descrioption pairs
 	descr: String,
 	inner: InnerErr,
 }
@@ -123,6 +123,7 @@ pub enum InnerErr {
 	Expr (ExprErr),
 	Var (VarErr),
 	BuiltinFunc (BuiltinFuncErr),
+	UserFunc (UserFuncErr),
 	Statement (StatementErr),
 	HaltRequest,
 }
@@ -242,9 +243,37 @@ impl From<VarErr> for InterpErr {
 	}
 }
 
+impl From<UserFuncErr> for InterpErr {
+	fn from(err: UserFuncErr) -> InterpErr {
+		match err {	
+			UserFuncErr::ArgsCnt { func_name_pos, .. } => InterpErr {
+				pos: func_name_pos,
+				descr: format!("{}", err),
+				inner: InnerErr::UserFunc (err),
+			},
+			UserFuncErr::ArgType { arg_expr_pos, .. } => InterpErr {
+				pos: arg_expr_pos,
+				descr: format!("{}", err),
+				inner: InnerErr::UserFunc (err),
+			},	
+			UserFuncErr::NotDefined { ref name } => InterpErr {
+				pos: name.pos(),
+				descr: format!("{}", err),
+				inner: InnerErr::UserFunc (err),
+			},
+			UserFuncErr::AlreadyExists { ref name } => InterpErr {
+				pos: name.pos(),
+				descr: format!("{}", err),
+				inner: InnerErr::UserFunc (err),
+			},
+		}
+	}
+}
+
 impl From<StatementErr> for InterpErr {
 	fn from(err: StatementErr) -> InterpErr {
 		let descr: String = format!("{}", err);
+
 		match err {
 			StatementErr::UnfinishedBody (pos) => InterpErr {
 				pos: CodePos::from(pos),
@@ -253,6 +282,11 @@ impl From<StatementErr> for InterpErr {
 			},
 			StatementErr::IfConditionType { pos } => InterpErr {
 				pos,
+				descr,
+				inner: InnerErr::Statement (err),
+			},
+			StatementErr::UserFuncReturnType { return_expr_pos, .. } => InterpErr {
+				pos: return_expr_pos,
 				descr,
 				inner: InnerErr::Statement (err),
 			},

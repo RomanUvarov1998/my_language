@@ -77,6 +77,24 @@ impl TokensIter {
 			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 		}
 	}
+		
+	pub fn next_expect_left_bracket(&mut self) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::Bracket (Bracket::Left)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
+	}
+		
+	pub fn next_expect_thin_arrow(&mut self) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::StatementOp (StatementOp::ThinArrow)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
+	}
 	
 	fn parse_number(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
 		let mut has_dot = false;
@@ -200,6 +218,8 @@ impl TokensIter {
 			"if" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::If )),
 			"else" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::Else )),
 			"while" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::While )),
+			"f" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::F )),
+			"return" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::Return )),
 			"True" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::True )),
 			"False" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::False )),
 			"land" => Token::new(first_char.pos(), pos_end, TokenContent::Operator ( Operator::LogicalAnd )),
@@ -477,6 +497,8 @@ impl std::fmt::Display for TokenContent {
 				Keyword::If => write!(f, "'{}'", "if"),
 				Keyword::Else => write!(f, "'{}'", "else"),
 				Keyword::While => write!(f, "'{}'", "while"),
+				Keyword::F => write!(f, "'{}'", "f"),
+				Keyword::Return => write!(f, "'{}'", "return"),
 				Keyword::True => write!(f, "'{}'", "True"),
 				Keyword::False => write!(f, "'{}'", "False"),
 			},
@@ -569,6 +591,8 @@ pub enum Keyword {
 	If,
 	Else,
 	While,
+	F,
+	Return,
 	True,
 	False,
 }
@@ -641,6 +665,8 @@ mod tests {
 		test_token_content_detection("if", TokenContent::Keyword ( Keyword::If ));
 		test_token_content_detection("else", TokenContent::Keyword ( Keyword::Else ));
 		test_token_content_detection("while", TokenContent::Keyword ( Keyword::While ));
+		test_token_content_detection("f", TokenContent::Keyword ( Keyword::F ));
+		test_token_content_detection("return", TokenContent::Keyword ( Keyword::Return ));
 		test_token_content_detection("@print", TokenContent::BuiltinName (String::from("print")));
 		test_token_content_detection("\"vasya\"", TokenContent::StringLiteral (String::from("vasya")));
 		test_token_content_detection(">", TokenContent::Operator (Operator::Greater));
@@ -657,7 +683,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 var_1var\"vasya\">>=<<===!=!land lor lxor:;,->(){}if else while//sdsdfd".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 f return var_1var\"vasya\">>=<<===!=!land lor lxor:;,->(){}if else while//sdsdfd".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -668,6 +694,8 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword (Keyword::F));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword (Keyword::Return));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var_1var")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
@@ -698,7 +726,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t var_1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t -> \n\t (  \n\t ) \n\t { \n\t } \n\t if \n\t else \n\t while \n\t // sdfsdfs \n\t ".to_string());
+		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t f \n\t return \n\t var_1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t -> \n\t (  \n\t ) \n\t { \n\t } \n\t if \n\t else \n\t while \n\t // sdfsdfs \n\t ".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -709,6 +737,8 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (7.8_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Div));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword (Keyword::F));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword (Keyword::Return));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var_1")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
