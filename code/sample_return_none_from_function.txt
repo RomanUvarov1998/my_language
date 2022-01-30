@@ -1,0 +1,22 @@
+f print(a: f32) {
+	if a < 5 {
+		@println("a < 5");
+		return;
+	}
+	
+	if a > 10 {
+		@println("a < 10!");
+		if a > 20 {
+			@println("a < 20!");
+			if a > 30 {
+				@println("a < 30!");
+				return;
+			}
+		}
+	}
+	
+	@print(a);
+}
+
+var a: f32 = @str_to_f32(@input("Give a: "));
+print(a);

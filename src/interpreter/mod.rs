@@ -28,25 +28,25 @@ impl Interpreter {
 		builtin_func_defs.add(BuiltinFuncDef::new(
 			"print",
 			vec![
-				BuiltinFuncArg::new("value".to_string(), DataType::Untyped),
+				BuiltinFuncArg::new("value".to_string(), DataType::Any),
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				print!("{}", args_values[0]);
 				None
 			}) as BuiltinFuncBody,
-			DataType::Untyped
+			DataType::Any
 		));
 		
 		builtin_func_defs.add(BuiltinFuncDef::new(
 			"println",
 			vec![
-				BuiltinFuncArg::new("value".to_string(), DataType::Untyped),
+				BuiltinFuncArg::new("value".to_string(), DataType::Any),
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				println!("{}", args_values[0]);
 				None
 			}) as BuiltinFuncBody,
-			DataType::Untyped
+			DataType::Any
 		));
 		
 		builtin_func_defs.add(BuiltinFuncDef::new(
@@ -55,7 +55,7 @@ impl Interpreter {
 			Box::new(|_args_values: Vec<Value>| -> Option<Value> {
 				std::process::exit(0)
 			}) as BuiltinFuncBody,
-			DataType::Untyped
+			DataType::Any
 		));
 		
 		builtin_func_defs.add(BuiltinFuncDef::new(

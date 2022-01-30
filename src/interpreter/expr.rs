@@ -73,7 +73,7 @@ impl Expr {
 									Some(args_values[i].clone())).unwrap();
 							}
 							
-							let value: Value = f.call(memory, builtin_func_defs);
+							let value: Value = f.call(memory, builtin_func_defs).unwrap();
 							
 							memory.pop_frame();
 							

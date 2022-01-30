@@ -134,7 +134,7 @@ impl BuiltinFuncArg {
 	
 	pub fn type_check(&self, data_type: DataType) -> bool {
 		match self.data_type {
-			DataType::Untyped => true,
+			DataType::Any => true,
 			_ => self.data_type == data_type,
 		}
 	}
@@ -181,7 +181,7 @@ impl std::fmt::Display for BuiltinFuncErr {
 pub struct UserFuncDef {
 	name: NameToken,
 	args: Vec<UserFuncArg>,
-	return_type: DataType, // TODO: make function be able to not to return anything by definition and use 'return;' statement
+	return_type: DataType,
 	body: ReturningBody,
 }
 
@@ -226,7 +226,7 @@ impl UserFuncDef {
 		Ok(())
 	}
 	
-	pub fn call(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Value {
+	pub fn call(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Option<Value> {
 		self.body.run(memory, builtin_func_defs)
 	}
 	
@@ -246,6 +246,7 @@ impl UserFuncDef {
 impl std::fmt::Display for UserFuncDef {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "f {}(", self.name)?;
+		
 		let mut need_comma_before = false;
 		for arg in self.args.iter() {
 			if need_comma_before {
@@ -256,7 +257,11 @@ impl std::fmt::Display for UserFuncDef {
 				need_comma_before = true;
 			}
 		}
-		write!(f, ") -> {}", self.return_type)
+		
+		match self.return_type {
+			DataType::None => write!(f, ")"),
+			dt @ _ => write!(f, ") -> {}", dt),
+		}
 	}
 }
 
@@ -286,7 +291,7 @@ impl UserFuncArg {
 
 	pub fn type_check(&self, data_type: DataType) -> bool {
 		match self.data_type {
-			DataType::Untyped => true,
+			DataType::Any => true,
 			_ => self.data_type == data_type,
 		}
 	}

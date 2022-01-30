@@ -87,15 +87,6 @@ impl TokensIter {
 		}
 	}
 		
-	pub fn next_expect_thin_arrow(&mut self) -> Result<(), TokenErr> {
-		match self.next() {
-			Some(token_result) => Self::expect(
-				token_result?, 
-				TokenContent::StatementOp (StatementOp::ThinArrow)),
-			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
-		}
-	}
-	
 	fn parse_number(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
 		let mut has_dot = false;
 		let mut value: f32 = match first_char.kind() {
@@ -596,6 +587,8 @@ pub enum Keyword {
 	True,
 	False,
 }
+
+//---------------------------- TokenErr --------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenErr {

@@ -268,9 +268,23 @@ impl StatementsIter {
 			}
 		}
 		
-		self.tokens_iter.next_expect_thin_arrow()?;
-		let return_type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
-		let return_type: DataType = DataType::parse(&return_type_name)?;
+		let return_type: DataType = match self.tokens_iter.peek_or_end_reached_err()? {
+			Token { content: TokenContent::StatementOp (StatementOp::ThinArrow), .. } => { // function returns value
+				self.tokens_iter.next_or_end_reached_err().unwrap(); // skip ThinArrow
+				let return_type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
+				DataType::parse(&return_type_name)?
+			},
+			Token { content: TokenContent::Bracket (Bracket::LeftCurly), .. } => { // function doesn't return value
+				DataType::None
+			},
+			found @ _ => return Err( InterpErr::from(TokenErr::ExpectedButFound {
+				expected: vec![
+					TokenContent::StatementOp (StatementOp::ThinArrow),
+					TokenContent::Bracket (Bracket::LeftCurly),
+				], 
+				found: found.clone(),
+			} ) ),
+		};
 		
 		let mut statements = Vec::<Statement>::new();
 		self.parse_body(&mut statements)?;
@@ -291,14 +305,22 @@ impl StatementsIter {
 		} )
 	}
 
-	fn parse_return_statement(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {
-		let return_expr: Expr = Expr::new(
-			&mut self.tokens_iter, 
-			ExprContextKind::ToReturn)?;
+	fn parse_return_statement(&mut self, return_keyword_pos: CodePos) -> Result<Statement, InterpErr> {
+		let (return_expr, pos): (Option<Expr>, CodePos) = 
+			if let TokenContent::StatementOp (StatementOp::Semicolon) = 
+				self.tokens_iter.peek_or_end_reached_err()?.content() 
+			{
+				self.tokens_iter.next_or_end_reached_err().unwrap(); // skip semicolon
+				(None, return_keyword_pos)
+			} else {
+				let expr: Expr = Expr::new(
+					&mut self.tokens_iter, 
+					ExprContextKind::ToReturn)?;
+				self.tokens_iter.next_expect_semicolon()?;
+				let pos_end: CharPos = expr.pos().end();
+				(Some(expr), CodePos::new(return_keyword_pos.begin(), pos_end))
+			};
 		
-		self.tokens_iter.next_expect_semicolon()?;
-		
-		let pos = CodePos::new(begin_pos, return_expr.pos().end());
 		Ok ( Statement {
 			kind: StatementKind::UserDefinedFuncReturn { return_expr },
 			pos,
@@ -329,8 +351,8 @@ impl StatementsIter {
 			Token { content: TokenContent::Keyword ( Keyword::F ), .. } =>
 				self.parse_user_func_def(begin_pos),	
 				
-			Token { content: TokenContent::Keyword ( Keyword::Return ), .. } =>
-				self.parse_return_statement(begin_pos),	
+			Token { content: TokenContent::Keyword ( Keyword::Return ), pos } =>
+				self.parse_return_statement(pos),	
 			
 			Token { content: TokenContent::Name(_), .. } => 
 				self.parse_variable_set_or_func_call(NameToken::from_or_err(first).unwrap(), false),
@@ -375,7 +397,7 @@ pub enum StatementKind {
 	VariableDeclareSet { var_name: NameToken, data_type: DataType, value_expr: Expr },
 	VariableSet { var_name: NameToken, value_expr: Expr },
 	UserDefinedFuncReturn { 
-		return_expr: Expr,
+		return_expr: Option<Expr>,
 	},
 	UserDefinedFuncDeclare {
 		name: NameToken,
@@ -483,7 +505,9 @@ impl Statement {
 			},
 			
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
-				return_expr.check_and_calc_data_type(check_memory, builtin_func_defs)?;
+				if let Some(ref expr) = return_expr {
+					expr.check_and_calc_data_type(check_memory, builtin_func_defs)?;
+				}
 			},
 		
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
@@ -565,8 +589,13 @@ impl Statement {
 			},
 				
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
-				let value: Value = return_expr.calc(memory, builtin_func_defs);
-				return Some(value)
+				return match return_expr {
+					Some(expr) => {
+						let value: Value = expr.calc(memory, builtin_func_defs);
+						Some(value)
+					},
+					None => Some(Value::None),
+				}
 			},
 			
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
@@ -613,10 +642,17 @@ impl std::fmt::Display for Statement {
 			StatementKind::FuncCall { kind, func_name, .. } => writeln!(f, "call {} func {}(...)", kind, func_name),
 				
 			StatementKind::UserDefinedFuncDeclare { name, return_type, body, .. } => {
-				writeln!(f, "define user func {}(...) -> {}", name, return_type)?;
+				write!(f, "define user func {}(...)", name)?;
+				
+				match return_type {
+					DataType::None => writeln!(f, " ")?,
+					dt @ _ => writeln!(f, " -> {}", dt)?,
+				}
+				
 				for st_ref in body.statements().iter() {
 					writeln!(f, "\t{}", st_ref)?;
 				}
+				
 				writeln!(f, "------------------")
 			},
 			
@@ -812,7 +848,13 @@ impl ReturningBody {
 			=> Ok(false),
 			
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
-				let returned_type: DataType = return_expr.check_and_calc_data_type(check_memory, builtin_func_defs)?;
+				let returned_type: DataType = match return_expr {
+					Some(expr) => {
+						let dt: DataType = expr.check_and_calc_data_type(check_memory, builtin_func_defs)?;
+						dt
+					},
+					None => DataType::None,
+				};
 				if returned_type != declared_return_type {
 					Err( InterpErr::from(StatementErr::UserFuncReturnType {
 						return_expr_pos: statement.pos(),
@@ -849,7 +891,11 @@ impl ReturningBody {
 					all_bodies_return = false;
 				}
 				
-				return Ok(all_bodies_return);
+				return if let DataType::None = declared_return_type {
+					Ok(true)
+				} else {
+					Ok(all_bodies_return)
+				};
 			},
 				
 			StatementKind::BranchingWhile { body } => {
@@ -860,20 +906,24 @@ impl ReturningBody {
 					}
 				}
 				
-				return Ok(body_returns);
+				return if let DataType::None = declared_return_type {
+					Ok(true)
+				} else {
+					Ok(body_returns)
+				};
 			},
 		}
 	}
 	
-	pub fn run(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Value {
+	pub fn run(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Option<Value> {
 		for st_ref in self.statements.iter() {
 			match st_ref.run(memory, builtin_func_defs) {
-				Some(value) => return value,
+				Some(value) => return Some(value),
 				None => {},
 			}
 		}
 		
-		unreachable!();
+		None
 	}
 	
 	pub fn statements(&self) -> &Vec<Statement> {
@@ -906,7 +956,7 @@ impl std::fmt::Display for StatementErr {
 				write!(f, "Unfinished body"),
 			StatementErr::IfConditionType { .. } => 
 				write!(f, "'If' condition expression data type must be bool"),
-			StatementErr::UserFuncReturnType { declared_return_type, returned_type, .. } => 
+			StatementErr::UserFuncReturnType { declared_return_type, returned_type, .. } =>
 				write!(f, "User-defined function return type must be '{}', but found '{}'", declared_return_type, returned_type),
 			StatementErr::UserFuncNotAllFuncPathsReturn { .. } =>
 				write!(f, "Not all user-defined function paths return"),
@@ -1457,12 +1507,117 @@ mod tests {
 				
 				match &body.statements()[2].kind {
 					StatementKind::UserDefinedFuncReturn { return_expr } => {
-						let dt: DataType = return_expr.check_and_calc_data_type(&mem, &builtin_func_defs).unwrap();
+						let dt: Option<DataType> = return_expr.as_ref()
+							.map(|expr| expr.check_and_calc_data_type(&mem, &builtin_func_defs).unwrap());
+							
+						assert_eq!(dt, Some(DataType::Float32));
+					},
+					_ => {
+						println!("Wrong statement:");
+						dbg!(&body.statements()[2]);
+						panic!("Err!");
+					},
+				}
+			},
+			_ => {
+				println!("Wrong statement:");
+				dbg!(st);
+				panic!("Err!");
+			},
+		}
+	}
+	
+	#[test]
+	fn can_parse_user_func_def_statement_that_returns_nothing() {
+		let mut statements_iter = StatementsIter::new();
+		let mut mem = Memory::new();
+		
+		let builtin_func_defs = BuiltinFuncsDefList::new();
+		
+		statements_iter.push_string(r#"
+		f add_squared(a: f32, b: f32) {
+			var a2: f32 = a ^ 2;
+			var b2: f32 = b ^ 2;
+			@println(a2 + b2);
+			return;
+		}
+		"#.to_string());
+		
+		let st = statements_iter.next().unwrap().unwrap();
+		match st.kind {
+			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
+				assert_eq!(name, new_name_token("add_squared"));
+				assert_eq!(
+					args,
+					vec![
+						UserFuncArg::new(new_name_token("a"), DataType::Float32),
+						UserFuncArg::new(new_name_token("b"), DataType::Float32),
+					]);
+				assert_eq!(return_type, DataType::None);
+				
+				assert_eq!(body.statements().len(), 4);
+				
+				mem.push_frame();
+				mem.add_variable(new_name_token("a"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				mem.add_variable(new_name_token("b"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				
+				match &body.statements()[0].kind {
+					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+						assert_eq!(*var_name, new_name_token("a2"));
+						assert_eq!(*data_type, DataType::Float32);
+						let dt: DataType = value_expr.check_and_calc_data_type(&mem, &builtin_func_defs).unwrap();
+						assert_eq!(dt, DataType::Float32);
+					},
+					_ => {
+						println!("Wrong statement:");
+						dbg!(&body.statements()[0]);
+						panic!("Err!");
+					},
+				}
+				
+				mem.add_variable(new_name_token("a2"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				
+				match &body.statements()[1].kind {
+					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+						assert_eq!(*var_name, new_name_token("b2"));
+						assert_eq!(*data_type, DataType::Float32);
+						let dt: DataType = value_expr.check_and_calc_data_type(&mem, &builtin_func_defs).unwrap();
+						assert_eq!(dt, DataType::Float32);
+					},
+					_ => {
+						println!("Wrong statement:");
+						dbg!(&body.statements()[1]);
+						panic!("Err!");
+					},
+				}
+				
+				mem.add_variable(new_name_token("b2"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				
+				match &body.statements()[2].kind {
+					StatementKind::FuncCall { kind, func_name, arg_exprs } => {
+						assert_eq!(*kind, FuncKind::Builtin);
+						assert_eq!(*func_name, new_name_token("println"));
+						assert_eq!(arg_exprs.len(), 1);
+						let dt: DataType = arg_exprs[0].check_and_calc_data_type(&mem, &builtin_func_defs).unwrap();
 						assert_eq!(dt, DataType::Float32);
 					},
 					_ => {
 						println!("Wrong statement:");
 						dbg!(&body.statements()[2]);
+						panic!("Err!");
+					},
+				}
+				
+				match &body.statements()[3].kind {
+					StatementKind::UserDefinedFuncReturn { return_expr } => {
+						let dt: Option<DataType> = return_expr.as_ref()
+							.map(|expr| expr.check_and_calc_data_type(&mem, &builtin_func_defs).unwrap());
+							
+						assert_eq!(dt, None);
+					},
+					_ => {
+						println!("Wrong statement:");
+						dbg!(&body.statements()[3]);
 						panic!("Err!");
 					},
 				}

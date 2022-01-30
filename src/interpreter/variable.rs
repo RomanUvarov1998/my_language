@@ -53,7 +53,8 @@ pub enum DataType {
 	Float32,
 	String,
 	Bool,
-	Untyped,
+	Any,
+	None,
 }
 impl DataType {
 	pub fn parse(name: &NameToken) -> Result<Self, VarErr> {
@@ -69,7 +70,8 @@ impl DataType {
 			DataType::Float32 => Value::from(0_f32),
 			DataType::String => Value::from(String::new()),
 			DataType::Bool => Value::from(false),
-			DataType::Untyped => unreachable!(),
+			DataType::Any => unreachable!(),
+			DataType::None => unreachable!(),
 		}
 	}
 }
@@ -80,7 +82,8 @@ impl std::fmt::Display for DataType {
 			DataType::Float32 => write!(f, "f32"),
 			DataType::String => write!(f, "str"),
 			DataType::Bool => write!(f, "bool"),
-			DataType::Untyped => write!(f, "Untyped"),
+			DataType::Any => write!(f, "Any"),
+			DataType::None => write!(f, "None"),
 		}
 	}
 }
@@ -92,6 +95,7 @@ pub enum Value {
 	Float32 (f32),
 	String (String),
 	Bool (bool),
+	None,
 	// TODO: add struct
 }
 impl Eq for Value {}
@@ -110,6 +114,10 @@ impl PartialEq for Value {
 				Value::Bool (b2) => b1 == b2,
 				_ => false,
 			},
+			Value::None => match other {
+				Value::None => true,
+				_ => false,
+			},
 		}
 	}
 }
@@ -123,6 +131,7 @@ impl std::fmt::Display for Value {
 			} else {
 				write!(f, "False")
 			},
+			Value::None => write!(f, "None"),
 		}
 	}
 }
@@ -132,6 +141,7 @@ impl Value {
 			Value::Float32 (_) => DataType::Float32,
 			Value::String (_) => DataType::String,		
 			Value::Bool (_) => DataType::Bool,		
+			Value::None => DataType::None,		
 		}
 	}
 }
