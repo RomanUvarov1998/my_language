@@ -3,14 +3,14 @@ mod expr;
 mod string_char;
 mod token;
 mod statement;
-mod var_data;
+mod variable;
 mod function;
 mod utils;
 
 use statement::{StatementsIter, Statement, StatementErr};
 use memory::*;
 use function::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr, UserFuncErr};
-use var_data::{VarErr, Value, DataType};
+use variable::{VarErr, Value, DataType};
 use utils::CodePos;
 
 //------------------------ Interpreter --------------------
@@ -331,7 +331,7 @@ impl From<BuiltinFuncErr> for InterpErr {
 mod tests {
 	use super::*;
 	use super::utils::NameToken;
-	use super::var_data::DataType;
+	use super::variable::DataType;
 	use super::utils::CharPos;
 	
 	#[test]
@@ -357,7 +357,7 @@ mod tests {
 		match int.check_and_run("var a: f32 = \"hello\";") {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::WrongType { 
 				value_data_type: DataType::String, 
-				var_data_type: DataType::Float32,
+				variable_type: DataType::Float32,
 				var_name,
 			}), .. } ) if var_name == nt => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
@@ -366,7 +366,7 @@ mod tests {
 		match int.check_and_run("var a: str = 4;") {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::WrongType { 
 				value_data_type: DataType::Float32, 
-				var_data_type: DataType::String,
+				variable_type: DataType::String,
 				var_name,
 			}), .. } ) if var_name == nt => {},
 			res @ _ => panic!("Wrong result: {:?}", res),

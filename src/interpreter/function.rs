@@ -1,4 +1,4 @@
-use super::var_data::{DataType, Value};
+use super::variable::{DataType, Value};
 use super::InterpErr;
 use super::utils::{CodePos, NameToken};
 use super::expr::Expr;

@@ -1,7 +1,7 @@
 use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp, Keyword, TokenErr};
 use super::InterpErr;
 use super::memory::Memory;
-use super::var_data::{Value, DataType};
+use super::variable::{Value, DataType};
 use super::function::{BuiltinFuncsDefList, UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
 

@@ -2,7 +2,7 @@ mod call_stack_frame;
 
 use call_stack_frame::CallStackFrame;
 
-use super::var_data::{VarData, DataType, VarErr, Value};
+use super::variable::{VarData, DataType, VarErr, Value};
 use super::utils::NameToken;
 use super::function::{UserFuncErr, UserFuncArg, UserFuncDef};
 use super::statement::ReturningBody;

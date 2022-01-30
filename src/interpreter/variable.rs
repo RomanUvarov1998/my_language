@@ -27,7 +27,7 @@ impl VarData {
 		} else {
 			Err( VarErr::WrongValue { 
 					new_var_value, 
-					var_data_type: self.data_type,
+					variable_type: self.data_type,
 					var_name: self.name.clone(),
 				} )
 		}
@@ -170,12 +170,12 @@ pub enum VarErr {
 	AlreadyExists { name: NameToken },
 	WrongValue { 
 		new_var_value: Value, 
-		var_data_type: DataType,
+		variable_type: DataType,
 		var_name: NameToken,
 	},
 	WrongType { 
 		value_data_type: DataType, 
-		var_data_type: DataType,
+		variable_type: DataType,
 		var_name: NameToken,
 	},
 }
@@ -190,10 +190,10 @@ impl std::fmt::Display for VarErr {
 				write!(f, "Unknown type '{}'", &name),
 			VarErr::AlreadyExists { name } => 
 				write!(f, "Variable already exists '{}'", &name),
-			VarErr::WrongValue { new_var_value, var_data_type, .. } =>
-				write!(f, "Wrong value '{:?}' for type '{:?}'", new_var_value, var_data_type),
-			VarErr::WrongType { value_data_type, var_data_type, .. } =>
-				write!(f, "Incompatible types: '{:?}' and '{:?}'", var_data_type, value_data_type),
+			VarErr::WrongValue { new_var_value, variable_type, .. } =>
+				write!(f, "Wrong value '{:?}' for type '{:?}'", new_var_value, variable_type),
+			VarErr::WrongType { value_data_type, variable_type, .. } =>
+				write!(f, "Incompatible types: '{:?}' and '{:?}'", variable_type, value_data_type),
 		}
 	}
 }

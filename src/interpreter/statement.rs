@@ -1,7 +1,7 @@
 use super::token::*;
 use super::expr::{Expr, ExprContextKind};
 use super::{InterpErr};
-use super::var_data::{VarData, DataType, VarErr, Value};
+use super::variable::{VarData, DataType, VarErr, Value};
 use super::function::{BuiltinFuncsDefList, BuiltinFuncDef, UserFuncArg, UserFuncDef};
 use super::memory::Memory;
 use super::utils::{CharPos, CodePos, NameToken};
@@ -418,7 +418,7 @@ impl Statement {
 				if *data_type != expr_data_type {
 					return Err(InterpErr::from(VarErr::WrongType { 
 						value_data_type: expr_data_type, 
-						var_data_type: *data_type,
+						variable_type: *data_type,
 						var_name: var_name.clone(),
 					}));
 				}
@@ -429,12 +429,12 @@ impl Statement {
 				let var_def: &mut VarData = check_memory.get_variable_mut(var_name)?;
 				var_def.set(expr_data_type.default_value())?;
 				
-				let var_data_type: DataType = var_def.get_type();
+				let variable_type: DataType = var_def.get_type();
 				
-				if var_data_type != expr_data_type {
+				if variable_type != expr_data_type {
 					return Err(InterpErr::from(VarErr::WrongType { 
 						value_data_type: expr_data_type, 
-						var_data_type,
+						variable_type,
 						var_name: var_name.clone(),
 					}));
 				}
@@ -920,7 +920,7 @@ impl std::fmt::Display for StatementErr {
 mod tests {
 	use super::*;
 	use super::super::*;
-	use super::super::var_data::Value;
+	use super::super::variable::Value;
 	use super::super::memory::Memory;
 	use super::super::utils::NameToken;
 	

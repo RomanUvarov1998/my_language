@@ -1,4 +1,4 @@
-use super::super::super::var_data::{VarData, Value, VarErr, DataType};
+use super::super::super::variable::{VarData, Value, VarErr, DataType};
 use super::super::super::function::{UserFuncErr, UserFuncDef, UserFuncArg};
 use super::super::super::utils::NameToken;
 use super::super::super::statement::ReturningBody;
