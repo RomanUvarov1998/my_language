@@ -72,8 +72,13 @@ impl Memory {
 	}
 	
 	pub fn find_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, UserFuncErr> {
-		let frame: &CallStackFrame = self.call_stack.last().unwrap();
-		frame.find_func_def(name)
+		for frame_ref in self.call_stack.iter().rev() {
+			match frame_ref.find_func_def(name) {
+				res @ Ok(_) => return res,
+				Err(_) => {},
+			}
+		}
+		Err( UserFuncErr::NotDefined { name: name.clone() } )
 	}
 	
 	fn get_upper_frame_mut(&mut self) -> &mut CallStackFrame {

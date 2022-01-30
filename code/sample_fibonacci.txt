@@ -1,0 +1,21 @@
+f fib(n: f32) -> f32 {
+	if n == 0 {
+		return 0;
+	} else if n == 1 {
+		return 1;
+	} else {
+		return fib(n - 1) + fib(n - 2);
+	}
+}
+
+var i: f32 = 0;
+
+var max: f32 = @str_to_f32(@input("How many to print? "));
+
+while i < max {
+	@print("n = ");
+	@print(i);
+	@print(", fib(n) = ");
+	@println(fib(i));
+	i = i + 1;
+}
