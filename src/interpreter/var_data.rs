@@ -84,6 +84,7 @@ pub enum Value {
 	Float32 (f32),
 	String (String),
 	Bool (bool),
+	// TODO: add struct
 }
 impl Eq for Value {}
 impl PartialEq for Value {
