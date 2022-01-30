@@ -181,7 +181,7 @@ impl std::fmt::Display for BuiltinFuncErr {
 pub struct UserFuncDef {
 	name: NameToken,
 	args: Vec<UserFuncArg>,
-	return_type: DataType,
+	return_type: DataType, // TODO: make function be able to not to return anything by definition and use 'return;' statement
 	body: ReturningBody,
 }
 
