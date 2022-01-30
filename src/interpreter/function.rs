@@ -1,5 +1,3 @@
-// TODO: rename module to 'func'
-
 use super::var_data::{DataType, Value};
 use super::InterpErr;
 use super::utils::{CodePos, NameToken};
@@ -122,7 +120,7 @@ impl std::fmt::Display for BuiltinFuncDef {
 }
 
 pub struct BuiltinFuncArg {
-	name: String, // TODO: use token for func arg if function is user defined
+	name: String,
 	data_type: DataType,
 }
 
@@ -184,7 +182,7 @@ pub struct UserFuncDef {
 	name: NameToken,
 	args: Vec<UserFuncArg>,
 	return_type: DataType,
-	body: ReturningBody, // TODO: make struct ReturningBody which checks all return paths in its 'new()' constructor
+	body: ReturningBody,
 }
 
 impl UserFuncDef {

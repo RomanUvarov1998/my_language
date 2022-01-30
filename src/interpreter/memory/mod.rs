@@ -4,7 +4,7 @@ use call_stack_frame::CallStackFrame;
 
 use super::var_data::{VarData, DataType, VarErr, Value};
 use super::utils::NameToken;
-use super::func_data::{UserFuncErr, UserFuncArg, UserFuncDef};
+use super::function::{UserFuncErr, UserFuncArg, UserFuncDef};
 use super::statement::ReturningBody;
 
 //----------------------------------- Memory -----------------------

@@ -2,7 +2,7 @@ mod scope;
 
 use scope::Scope;
 use super::super::var_data::{VarData, VarErr};
-use super::super::func_data::{UserFuncDef, UserFuncErr};
+use super::super::function::{UserFuncDef, UserFuncErr};
 use super::super::utils::NameToken;
 
 #[derive(Debug)]

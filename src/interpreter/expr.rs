@@ -2,7 +2,7 @@ use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, Statement
 use super::InterpErr;
 use super::memory::Memory;
 use super::var_data::{Value, DataType};
-use super::func_data::{BuiltinFuncsDefList, UserFuncArg, UserFuncDef};
+use super::function::{BuiltinFuncsDefList, UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
 
 // TODO: make Expr not clonable
@@ -42,7 +42,7 @@ impl Expr {
 						Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
 						Operand::Name (name) => memory.get_variable_value(&NameToken::new_with_pos(&name, pos)).unwrap().clone(),
 						Operand::BuiltinFuncCall { func_name, arg_exprs } => {
-							let f = builtin_func_defs.find(&NameToken::new_with_pos(&func_name, pos)).unwrap();
+							let f = builtin_func_defs.find(&func_name).unwrap();
 							
 							let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
 							
@@ -110,9 +110,9 @@ impl Expr {
 						Operand::Value (val) => val.get_type(),
 						Operand::Name (name) => check_memory.get_variable_type(&NameToken::new_with_pos(&name, pos))?,
 						Operand::BuiltinFuncCall { func_name, arg_exprs } => {
-							let f = builtin_func_defs.find(&NameToken::new_with_pos(&func_name, pos)).unwrap(); // TODO: avoid creation of extra NameToken's
+							let f = builtin_func_defs.find(&func_name).unwrap();
 							
-							f.check_args(&NameToken::new_with_pos(&func_name, pos), arg_exprs, check_memory, builtin_func_defs)?;
+							f.check_args(&func_name, arg_exprs, check_memory, builtin_func_defs)?;
 							f.return_type()
 						},
 						Operand::UserDefinedFuncCall { func_name, arg_exprs } => {
@@ -542,10 +542,10 @@ impl Symbol {
 		}
 	}
 	fn new_builtin_func_call(func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
-		let NameToken { name, pos } = func_name;
+		let pos = func_name.pos();
 		Self {
 			kind: SymbolKind::Operand( Operand::BuiltinFuncCall { 
-				func_name: name, 
+				func_name, 
 				arg_exprs,
 			} ),
 			pos,
@@ -598,7 +598,7 @@ enum Operand {
 	Value (Value),
 	Name (String),
 	BuiltinFuncCall {
-		func_name: String, 
+		func_name: NameToken, 
 		arg_exprs: Vec<Expr>,
 	},
 	UserDefinedFuncCall {

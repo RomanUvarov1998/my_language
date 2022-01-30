@@ -4,12 +4,12 @@ mod string_char;
 mod token;
 mod statement;
 mod var_data;
-mod func_data;
+mod function;
 mod utils;
 
 use statement::{StatementsIter, Statement, StatementErr};
 use memory::*;
-use func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr, UserFuncErr};
+use function::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr, UserFuncErr};
 use var_data::{VarErr, Value, DataType};
 use utils::CodePos;
 

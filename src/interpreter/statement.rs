@@ -2,7 +2,7 @@ use super::token::*;
 use super::expr::{Expr, ExprContextKind};
 use super::{InterpErr};
 use super::var_data::{DataType, VarErr, Value};
-use super::func_data::{BuiltinFuncsDefList, BuiltinFuncDef, UserFuncArg, UserFuncDef};
+use super::function::{BuiltinFuncsDefList, BuiltinFuncDef, UserFuncArg, UserFuncDef};
 use super::memory::Memory;
 use super::utils::{CharPos, CodePos, NameToken};
 
@@ -356,12 +356,7 @@ impl Iterator for StatementsIter {
 	type Item = Result<Statement, InterpErr>;
 	
 	fn next(&mut self) -> Option<Self::Item> {
-		let st = self.parse_next_statement();
-		match st {
-			Some(Ok(ref st)) => println!("{}", st),
-			_ => {},
-		}
-		st
+		self.parse_next_statement()
 	}	
 }
 
