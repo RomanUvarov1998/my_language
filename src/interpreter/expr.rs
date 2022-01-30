@@ -2,7 +2,7 @@ use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, Statement
 use super::InterpErr;
 use super::memory::Memory;
 use super::var_data::{Value, DataType};
-use super::func_data::BuiltinFuncsDefList;
+use super::func_data::{BuiltinFuncsDefList, UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
 
 // TODO: make Expr not clonable
@@ -31,7 +31,7 @@ impl Expr {
 		} )
 	}
 	
-	pub fn calc(&self, memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<Value, InterpErr> {
+	pub fn calc(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Value {
 		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len());
 		
 		for Symbol { kind, pos } in self.expr_stack.iter() {
@@ -40,17 +40,44 @@ impl Expr {
 				SymbolKind::Operand (opnd) => {
 					let value: Value = match opnd {
 						Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
-						Operand::Name (name) => memory.get_variable_value(&NameToken::new_with_pos(&name, pos))?.clone(),
+						Operand::Name (name) => memory.get_variable_value(&NameToken::new_with_pos(&name, pos)).unwrap().clone(),
 						Operand::BuiltinFuncCall { func_name, arg_exprs } => {
 							let f = builtin_func_defs.find(&NameToken::new_with_pos(&func_name, pos)).unwrap();
 							
-							let mut arg_vals = Vec::<Value>::with_capacity(arg_exprs.len());
+							let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
 							
 							for expr in arg_exprs {
-								arg_vals.push(expr.calc(&memory, builtin_func_defs)?);
+								let value: Value = expr.calc(memory, builtin_func_defs);
+								args_values.push(value);
 							}
 							
-							f.call(arg_vals).unwrap().unwrap()
+							f.call(args_values).unwrap()
+						},
+						Operand::UserDefinedFuncCall { func_name, arg_exprs } => {
+							let f: UserFuncDef = (*memory.find_func_def(&func_name).unwrap()).clone(); // TODO: Do not clone UserFuncDef
+							
+							let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
+							
+							for expr in arg_exprs {
+								let value: Value = expr.calc(memory, builtin_func_defs);
+								args_values.push(value);
+							}
+							
+							memory.push_frame();
+							
+							let func_args: &Vec<UserFuncArg> = f.args();
+							for i in 0..args_values.len() {
+								memory.add_variable(
+									func_args[i].name().clone(),
+									func_args[i].data_type(),
+									Some(args_values[i].clone())).unwrap();
+							}
+							
+							let value: Value = f.call(memory, builtin_func_defs);
+							
+							memory.pop_frame();
+							
+							value
 						},
 					};
 					calc_stack.push(value);
@@ -59,10 +86,7 @@ impl Expr {
 				SymbolKind::LeftBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => {
-					let value: Value = match op.apply(&mut calc_stack) {
-						Err( err ) => return Err( InterpErr::from(ExprErr::Operator { err, pos }) ),
-						Ok(val) => val,
-					};
+					let value: Value = op.apply(&mut calc_stack).unwrap();
 					calc_stack.push(value);
 				},
 			}
@@ -71,7 +95,7 @@ impl Expr {
 		let result: Value = calc_stack.pop().unwrap();
 		assert_eq!(calc_stack.pop(), None);
 		
-		Ok(result)
+		result
 	}
 	
 	pub fn check_and_calc_data_type(&self, check_memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<DataType, InterpErr> {		
@@ -89,6 +113,12 @@ impl Expr {
 							let f = builtin_func_defs.find(&NameToken::new_with_pos(&func_name, pos)).unwrap(); // TODO: avoid creation of extra NameToken's
 							
 							f.check_args(&NameToken::new_with_pos(&func_name, pos), arg_exprs, check_memory, builtin_func_defs)?;
+							f.return_type()
+						},
+						Operand::UserDefinedFuncCall { func_name, arg_exprs } => {
+							let f = check_memory.find_func_def(&func_name).unwrap();
+							
+							f.check_args(arg_exprs, check_memory, builtin_func_defs)?;
 							f.return_type()
 						},
 					};
@@ -147,7 +177,7 @@ impl Expr {
 					
 					prev_is_operand = true;
 				},
-				TokenContent::Name (name) | TokenContent::BuiltinName (name) => {
+				TokenContent::BuiltinName (name) => {
 					if prev_is_operand {
 						return Err(unexpected(pos));
 					}
@@ -197,6 +227,58 @@ impl Expr {
 					
 					prev_is_operand = true;
 				},
+				
+				TokenContent::Name (name) => {
+					if prev_is_operand {
+						return Err(unexpected(pos));
+					}
+					
+					match tokens_iter.peek_or_end_reached_err()?.content() {
+						TokenContent::Bracket (Bracket::Left) => {
+							tokens_iter.next_or_end_reached_err().unwrap();
+							
+							let mut arg_exprs = Vec::<Expr>::new();
+							
+							// TODO: move this code to Func::parse self because it duplicates the one from Statement::parse_func_call(...)
+							if let TokenContent::Bracket (Bracket::Right) = tokens_iter.peek_or_end_reached_err()?.content() {
+								tokens_iter.next_or_end_reached_err().unwrap();
+							} else {
+								loop {			
+									arg_exprs.push(Expr::new(
+										tokens_iter,
+										ExprContextKind::FunctionArg)?);
+										
+									match tokens_iter.next_or_end_reached_err()? {
+										Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
+										
+										Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
+										
+										found @ _ => 
+											return Err( InterpErr::from( TokenErr::ExpectedButFound { 
+												expected: vec![
+													TokenContent::StatementOp(StatementOp::Comma),
+													TokenContent::Bracket ( Bracket::Right ),
+												], 
+												found
+											} ) ),
+									}
+								}
+							}
+							
+							let func_name = NameToken::new_with_pos(&name, pos);
+							
+							let sym = Symbol::new_user_defined_func_call(func_name, arg_exprs);
+							expr_stack.push(sym);
+						},
+						_ => {
+							let sym = Symbol::new_name(name, pos);
+							expr_stack.push(sym);
+						},
+					}
+					
+					prev_is_operand = true;
+				}
+				
 				TokenContent::StringLiteral (s) => {
 					if prev_is_operand {
 						return Err(unexpected(pos));
@@ -469,6 +551,16 @@ impl Symbol {
 			pos,
 		}
 	}
+	fn new_user_defined_func_call(func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
+		let pos: CodePos = func_name.pos();
+		Self {
+			kind: SymbolKind::Operand( Operand::UserDefinedFuncCall { 
+				func_name, 
+				arg_exprs,
+			} ),
+			pos,
+		}
+	}
 	fn new_string_literal(content: String, pos: CodePos) -> Self {
 		Self {
 			kind: SymbolKind::Operand( Operand::Value (Value::from(content)) ),
@@ -509,6 +601,10 @@ enum Operand {
 		func_name: String, 
 		arg_exprs: Vec<Expr>,
 	},
+	UserDefinedFuncCall {
+		func_name: NameToken, 
+		arg_exprs: Vec<Expr>,
+	},
 }
 impl Eq for Operand {}
 impl PartialEq for Operand {
@@ -524,6 +620,10 @@ impl PartialEq for Operand {
 			},
 			Operand::BuiltinFuncCall { func_name: fn1, arg_exprs: ae1 } => match other {
 				Operand::BuiltinFuncCall { func_name: fn2, arg_exprs: ae2 } => fn1 == fn2 && ae1 == ae2,
+				_ => false,
+			},
+			Operand::UserDefinedFuncCall { func_name: fn1, arg_exprs: ae1 } => match other {
+				Operand::UserDefinedFuncCall { func_name: fn2, arg_exprs: ae2 } => fn1 == fn2 && ae1 == ae2,
 				_ => false,
 			},
 		}
@@ -1448,10 +1548,10 @@ mod tests {
 		
 			let expr = Expr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
 			
-			let memory = Memory::new();
+			let mut memory = Memory::new();
 			let builtin_funcs_def_list = BuiltinFuncsDefList::new();
 			
-			let ans = expr.calc(&memory, &builtin_funcs_def_list).unwrap();
+			let ans: Value = expr.calc(&mut memory, &builtin_funcs_def_list);
 			
 			if ans != result {
 				panic!("Wrong result for code '{}': {:?} != {:?}", expr_str, ans, result);

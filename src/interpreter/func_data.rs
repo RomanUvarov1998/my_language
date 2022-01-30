@@ -41,7 +41,7 @@ impl BuiltinFuncsDefList {
 
 //------------------------- BuiltinFuncDef -----------------------
 
-pub type BuiltinFuncBody = Box<dyn Fn(Vec<Value>) -> Result<Option<Value>, InterpErr>>;
+pub type BuiltinFuncBody = Box<dyn Fn(Vec<Value>) -> Option<Value>>;
 
 pub struct BuiltinFuncDef {
 	name: &'static str,
@@ -99,7 +99,7 @@ impl BuiltinFuncDef {
 		self.return_type
 	}
 	
-	pub fn call(&self, args_values: Vec<Value>) -> Result<Option<Value>, InterpErr> {
+	pub fn call(&self, args_values: Vec<Value>) -> Option<Value> {
 		(self.body)(args_values)
 	}
 }
@@ -179,7 +179,7 @@ impl std::fmt::Display for BuiltinFuncErr {
 
 //------------------------- UserFuncDef -----------------------
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UserFuncDef {
 	name: NameToken,
 	args: Vec<UserFuncArg>,
@@ -228,7 +228,7 @@ impl UserFuncDef {
 		Ok(())
 	}
 	
-	pub fn call(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<Value, InterpErr> {
+	pub fn call(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Value {
 		self.body.run(memory, builtin_func_defs)
 	}
 	
@@ -238,6 +238,10 @@ impl UserFuncDef {
 	
 	pub fn get_name(&self) -> &NameToken {
 		&self.name
+	}
+
+	pub fn return_type(&self) -> DataType {
+		self.return_type
 	}
 }
 

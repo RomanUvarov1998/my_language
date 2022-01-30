@@ -11,7 +11,7 @@ use statement::{StatementsIter, Statement, StatementErr};
 use memory::*;
 use func_data::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr, UserFuncErr};
 use var_data::{VarErr, Value, DataType};
-use utils::{CharPos, CodePos};
+use utils::CodePos;
 
 //------------------------ Interpreter --------------------
 
@@ -30,9 +30,21 @@ impl Interpreter {
 			vec![
 				BuiltinFuncArg::new("value".to_string(), DataType::Untyped),
 			],
-			Box::new(|args_values: Vec<Value>| -> Result<Option<Value>, InterpErr> {
+			Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				print!("{}", args_values[0]);
+				None
+			}) as BuiltinFuncBody,
+			DataType::Untyped
+		));
+		
+		builtin_func_defs.add(BuiltinFuncDef::new(
+			"println",
+			vec![
+				BuiltinFuncArg::new("value".to_string(), DataType::Untyped),
+			],
+			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				println!("{}", args_values[0]);
-				Ok(None)
+				None
 			}) as BuiltinFuncBody,
 			DataType::Untyped
 		));
@@ -40,8 +52,8 @@ impl Interpreter {
 		builtin_func_defs.add(BuiltinFuncDef::new(
 			"exit",
 			Vec::new(),
-			Box::new(|_args_values: Vec<Value>| -> Result<Option<Value>, InterpErr> {
-				Err( InterpErr::new_halt_request() )
+			Box::new(|_args_values: Vec<Value>| -> Option<Value> {
+				std::process::exit(0)
 			}) as BuiltinFuncBody,
 			DataType::Untyped
 		));
@@ -51,7 +63,7 @@ impl Interpreter {
 			vec![
 				BuiltinFuncArg::new("prompt".to_string(), DataType::String),
 			],
-			Box::new(|args_values: Vec<Value>| -> Result<Option<Value>, InterpErr> {
+			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				use std::io::{self, Write};
 				
 				print!("{}", args_values[0]);
@@ -60,7 +72,7 @@ impl Interpreter {
 				let mut input = String::new();
 				io::stdin().read_line(&mut input).unwrap();
 				
-				Ok(Some(Value::from(input.trim_end().clone())))
+				Some(Value::from(input.trim_end().clone()))
 			}) as BuiltinFuncBody,
 			DataType::String
 		));
@@ -70,13 +82,13 @@ impl Interpreter {
 			vec![
 				BuiltinFuncArg::new("value".to_string(), DataType::String),
 			],
-			Box::new(|args_values: Vec<Value>| -> Result<Option<Value>, InterpErr> {
+			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				let str_value: String = match &args_values[0] {
 					Value::String(val) => val.clone(),
 					_ => unreachable!(),
 				};
 				let result: f32 = str_value.parse::<f32>().unwrap();
-				Ok(Some(Value::from(result)))
+				Some(Value::from(result))
 			}) as BuiltinFuncBody,
 			DataType::Float32
 		));
@@ -101,7 +113,7 @@ impl Interpreter {
 		}
 		
 		for st_ref in &statements {
-			st_ref.run(&mut self.memory, &self.builtin_func_defs)?;
+			st_ref.run(&mut self.memory, &self.builtin_func_defs);
 		}
 		
 		Ok(())
@@ -125,20 +137,11 @@ pub enum InnerErr {
 	BuiltinFunc (BuiltinFuncErr),
 	UserFunc (UserFuncErr),
 	Statement (StatementErr),
-	HaltRequest,
 }
 
 impl InterpErr {
-	fn new_halt_request() -> Self {
-		InterpErr {
-			pos: CodePos::from(CharPos::new()), // TODO: do not use error to halt program execution from the middle
-			descr: String::new(),
-			inner: InnerErr::HaltRequest,
-		}
-	}
 	pub fn pos(&self) -> CodePos { self.pos }
 	pub fn descr(&self) -> &str { &self.descr }
-	pub fn inner(&self) -> &InnerErr { &self.inner }
 }
 
 impl std::fmt::Display for InterpErr {
@@ -290,6 +293,11 @@ impl From<StatementErr> for InterpErr {
 				descr,
 				inner: InnerErr::Statement (err),
 			},
+			StatementErr::UserFuncNotAllFuncPathsReturn { last_statement_pos } => InterpErr {
+				pos: last_statement_pos,
+				descr,
+				inner: InnerErr::Statement (err),
+			},
 		}
 	}
 }
@@ -324,17 +332,17 @@ mod tests {
 	use super::*;
 	use super::utils::NameToken;
 	use super::var_data::DataType;
+	use super::utils::CharPos;
 	
 	#[test]
 	fn check_err_if_redeclare_variable() {
 		let mut int = Interpreter::new();
 		
-		match int.check_and_run("var a: f32 = 3;") {
-			Ok(()) => {},
-			res @ _ => panic!("Wrong result: {:?}", res),
-		}
-		
-		match int.check_and_run("var a: f32 = 4;") {
+		match int.check_and_run(r#"
+		var a: f32 = 3;
+		var a: f32 = 4;
+		"#
+		) {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::AlreadyExists { name }), .. } ) if name.value() == String::from("a") => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
@@ -387,15 +395,137 @@ mod tests {
 
 	#[test]
 	fn if_statement() {
-		let mut int = Interpreter::new();
-		
-		match int.check_and_run("if 2 == 2 { @print(\"2 == 2\"); @print(\"Cool!\"); } @exit();") {
-			Err(err) => assert_eq!(*err.inner(), InnerErr::HaltRequest),
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+		if 2 == 2 { 
+			@print("2 == 2"); 
+			@print("Cool!"); 
+		} 
+		@print("end");
+		"#) {
+			Ok(_) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 		
-		match int.check_and_run("if 4 { @print(\"2 == 2\"); @print(\"Cool!\"); } @exit();") {
+		let mut int = Interpreter::new();
+		match int.check_and_run(r#"
+		if 4 { 
+			@print("2 == 2"); 
+			@print("Cool!"); 
+		} 
+		@print("end");
+		"#) {
 			Err(InterpErr { inner: InnerErr::Statement(StatementErr::IfConditionType { .. }), .. } ) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
+
+	#[test]
+	fn check_not_all_func_paths_return() {
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+f add2(a: f32, b: f32) -> f32 {
+	if a < b { // 1.1
+		a = 4;
+		return a;
+	} else {
+		b = 4;
+		if a < b {
+			return 4;
+		} else {
+			return 3;
+		}
+	}
+}
+		"#) {
+			Ok(_) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+		
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+f add2(a: f32, b: f32) -> f32 {
+	if a < b { // 1.1
+		a = 4;
+		// Not returning
+	} else {
+		b = 4;
+		if a < b {
+			return 4;
+		} else {
+			return 3;
+		}
+	}
+}
+		"#) {
+			Err(InterpErr { inner: InnerErr::Statement (StatementErr::UserFuncNotAllFuncPathsReturn { .. } ), .. } ) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+		
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+f add2(a: f32, b: f32) -> f32 {
+	if a < b { // 1.1
+		a = 4;
+		return a;
+	} else {
+		b = 4;
+		if a < b {
+			a = 4; 
+			// Not returning
+		} else {
+			return 3;
+		}
+	}
+}
+		"#) {
+			Err(InterpErr { inner: InnerErr::Statement (StatementErr::UserFuncNotAllFuncPathsReturn { .. }), .. } ) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+		
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+f add2(a: f32, b: f32) -> f32 {
+	if a < b { // 1.1
+		a = 4;
+		return a;
+	} else {
+		b = 4;
+		if a < b {
+			a = 4; 
+			return 3;
+		} else {
+			b = 4; 
+			// Not returning
+		}
+	}
+}
+		"#) {
+			Err(InterpErr { inner: InnerErr::Statement (StatementErr::UserFuncNotAllFuncPathsReturn { .. }), .. } ) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+		
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+f add2(a: f32, b: f32) -> f32 {
+	return a;
+	if a < b { // 1.1
+		a = 4;
+		// Not returning
+	} else {
+		b = 4;
+		// Not returning
+		if a < b {
+			a = 4; 
+			// Not returning
+		} else {
+			b = 4; 
+			// Not returning
+		}
+	}
+}
+		"#) {
+			Ok(_) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 	}

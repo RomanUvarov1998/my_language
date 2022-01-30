@@ -14,11 +14,7 @@ fn main() {
 			let code: String = file_reader::try_read(file_name);
 			match interpreter.check_and_run(&code) {
 				Ok(_) => {},
-				Err(err) => {
-					if *err.inner() == InnerErr::HaltRequest {
-						return;
-					}
-					
+				Err(err) => {					
 					println!("ERROR: {}:{} - {}:{}", 
 						err.pos().begin().line() + 1, err.pos().begin().col(),
 						err.pos().end().line() + 1, err.pos().end().col());
@@ -26,7 +22,7 @@ fn main() {
 					let code_lines: Vec<&str> = code.lines().collect();
 					
 					for line_num in err.pos().begin().line()..=err.pos().end().line() {
-						println!("{}", code_lines[line_num]);
+						print_code_line(code_lines[line_num]);
 					}
 					
 					println!("{}", err);
@@ -39,4 +35,14 @@ fn main() {
 
 fn print_usage() {
 	println!("program file_with_code.txt");
+}
+
+fn print_code_line(line: &str) {
+	for ch in line.chars() {
+		match ch {
+			'\t' => print!(" "),
+			_ => print!("{}", ch),
+		}
+	}
+	println!("");
 }

@@ -1,0 +1,28 @@
+f add(a: f32, b: f32) -> f32 {
+	return a + b;
+}
+
+var a: f32 = @str_to_f32(@input("Input a: "));
+
+@print("a + 5 == ");
+@println(add(a, 5));
+
+@print("a == ");
+@println(a);
+
+@print("(a+5) + (a+5)^2 == ");
+@println(add(a, 5) + add(a, 5) ^ 2);
+
+f mul(a: f32, b: f32, c: f32) -> f32 {
+	var a2: f32 = a ^ 2;
+	var b2: f32 = b ^ 2;
+	var c2: f32 = c ^ 2;
+	return a2 + b2 + c2;
+}
+
+a = @str_to_f32(@input("Input a: "));
+var b: f32 = @str_to_f32(@input("Input b: "));
+var c: f32 = @str_to_f32(@input("Input c: "));
+
+@print("a^2 + b^2 + c^2 + (a + b) == ");
+@println(mul(a, b, c) + add(a, b));

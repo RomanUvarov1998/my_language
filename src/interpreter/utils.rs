@@ -81,6 +81,12 @@ impl From<CharPos> for CodePos {
 	}
 }
 
+impl std::fmt::Display for CodePos {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{} - {}", self.begin, self.end)
+	}
+}
+
 //------------------------------ CharPos ----------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,5 +135,11 @@ impl std::cmp::Ord for CharPos {
 		} else {
 			self.col.cmp(&other.col)
 		}
+	}
+}
+
+impl std::fmt::Display for CharPos {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}:{}", self.line, self.col)
 	}
 }

@@ -3,9 +3,8 @@ mod call_stack_frame;
 use call_stack_frame::CallStackFrame;
 
 use super::var_data::{VarData, DataType, VarErr, Value};
-use super::InterpErr;
 use super::utils::NameToken;
-use super::func_data::{UserFuncErr, UserFuncArg, UserFuncDef, BuiltinFuncsDefList};
+use super::func_data::{UserFuncErr, UserFuncArg, UserFuncDef};
 use super::statement::ReturningBody;
 
 //----------------------------------- Memory -----------------------
@@ -69,6 +68,7 @@ impl Memory {
 	
 	pub fn pop_frame(&mut self) {
 		self.call_stack.pop().unwrap();
+		assert!(self.call_stack.len() >= 1);
 	}
 	
 	pub fn find_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, UserFuncErr> {
