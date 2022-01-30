@@ -21,7 +21,7 @@ impl StatementsIter {
 		self.tokens_iter.push_string(text);
 	}	
 	
-	fn parse_variable_set_or_func_call(&mut self, name: NameToken, is_builtin: bool) -> Result<StatementKind, InterpErr> {
+	fn parse_variable_set_or_func_call(&mut self, name: NameToken, is_builtin: bool) -> Result<Statement, InterpErr> {
 		let second = self.tokens_iter.next_or_end_reached_err()?;
 		let statement = match second {
 			Token { content: TokenContent::Bracket(Bracket::Left), .. } => 
@@ -41,7 +41,7 @@ impl StatementsIter {
 		Ok(statement)
 	}
 	
-	fn parse_varable_declaration(&mut self) -> Result<StatementKind, InterpErr> {	
+	fn parse_varable_declaration(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {	
 		let var_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 		
 		self.tokens_iter.next_expect_colon()?;
@@ -53,9 +53,12 @@ impl StatementsIter {
 		match tok_assign {
 			Token { content: TokenContent::Operator (Operator::Assign), .. } => {},
 			Token { content: TokenContent::StatementOp ( StatementOp::Semicolon ), .. } => return 
-				Ok ( StatementKind::VariableDeclare {
-					var_name, 
-					data_type, 
+				Ok ( Statement {
+					kind: StatementKind::VariableDeclare {
+						var_name, 
+						data_type, 
+					},
+					pos: CodePos::new(begin_pos, type_name.pos().end()),
 				} ),
 			found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound { 
 							expected: vec![
@@ -72,14 +75,18 @@ impl StatementsIter {
 
 		self.tokens_iter.next_expect_semicolon()?;
 		
-		Ok ( StatementKind::VariableDeclareSet {
+		let pos = CodePos::new(begin_pos, value_expr.pos().end());
+		Ok ( Statement {
+			kind: StatementKind::VariableDeclareSet {
 				var_name, 
 				data_type, 
 				value_expr,
-		} )
+			},
+			pos,
+		}	)
 	}
 	
-	fn parse_if_else_statement(&mut self) -> Result<StatementKind, InterpErr> {
+	fn parse_if_else_statement(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {
 		let mut if_bodies = Vec::<ConditionalBody>::new();
 		let mut else_body = UnconditionalBody {
 			statements: Vec::new(),
@@ -114,10 +121,25 @@ impl StatementsIter {
 			break; // another statement starts here, if-else chain is finished
 		}
 		
-		Ok( StatementKind::BranchingIfElse { if_bodies, else_body } )
+		let pos = if let Some(st) = else_body.statements().last() {
+			CodePos::new(begin_pos, st.pos().end())
+		} else if let Some(body) = if_bodies.last() {
+			if let Some(st) = body.statements().last() {
+				CodePos::new(begin_pos, st.pos().end())
+			} else {
+				unreachable!()
+			}
+		} else {
+			CodePos::new(begin_pos, begin_pos)
+		};
+		
+		Ok( Statement {
+			kind: StatementKind::BranchingIfElse { if_bodies, else_body },
+			pos,
+		} )
 	}
 	
-	fn parse_while_statement(&mut self) -> Result<StatementKind, InterpErr> {
+	fn parse_while_statement(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {
 		let condition_expr = Expr::new(
 			&mut self.tokens_iter,
 			ExprContextKind::IfCondition)?;
@@ -127,7 +149,15 @@ impl StatementsIter {
 			
 		let body = ConditionalBody { condition_expr, statements };
 
-		Ok( StatementKind::BranchingWhile { body } )
+		let pos = if let Some(st) = body.statements().last() {
+			CodePos::new(begin_pos, st.pos().end())
+		} else {
+			CodePos::new(begin_pos, begin_pos)
+		};
+		Ok( Statement {
+			kind: StatementKind::BranchingWhile { body },
+			pos,
+		} )
 	}
 	
 	fn parse_body(&mut self, body: &mut Vec<Statement>) -> Result<(), InterpErr> {
@@ -147,20 +177,24 @@ impl StatementsIter {
 			}
 		}
 	
-	fn parse_variable_set(&mut self, var_name: NameToken, _is_builtin: bool) -> Result<StatementKind, InterpErr> {		
+	fn parse_variable_set(&mut self, var_name: NameToken, _is_builtin: bool) -> Result<Statement, InterpErr> {		
 		let value_expr = Expr::new(
 			&mut self.tokens_iter,
 			ExprContextKind::ValueToAssign)?;
 		
 		self.tokens_iter.next_expect_semicolon()?;
 		
-		Ok ( StatementKind::VariableSet {
+		let pos = CodePos::new(var_name.pos().begin(), value_expr.pos().end());
+		Ok ( Statement {
+			kind: StatementKind::VariableSet {
 				var_name, 
 				value_expr,
+			},
+			pos,
 		} )
 	}
 
-	fn parse_func_call(&mut self, func_name: NameToken, is_builtin: bool) -> Result<StatementKind, InterpErr> {
+	fn parse_func_call(&mut self, func_name: NameToken, is_builtin: bool) -> Result<Statement, InterpErr> {
 		let mut arg_exprs = Vec::<Expr>::new();
 		
 		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_end_reached_err()?.content() {
@@ -190,14 +224,22 @@ impl StatementsIter {
 		
 		self.tokens_iter.next_expect_semicolon()?;
 		
-		Ok ( StatementKind::FuncCall {
-			kind: if is_builtin { FuncKind::Builtin } else { FuncKind::UserDefined },
-			func_name, 
-			arg_exprs,
+		let pos = if let Some(expr) = arg_exprs.last() {
+			CodePos::new(func_name.pos().begin(), expr.pos().end())
+		} else {
+			CodePos::new(func_name.pos().begin(), func_name.pos().begin())
+		};
+		Ok ( Statement {
+			kind: StatementKind::FuncCall {
+				kind: if is_builtin { FuncKind::Builtin } else { FuncKind::UserDefined },
+				func_name, 
+				arg_exprs,
+			},
+			pos,
 		} )
 	}
 
-	fn parse_user_func_def(&mut self) -> Result<StatementKind, InterpErr> {
+	fn parse_user_func_def(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {
 		let name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 		
 		self.tokens_iter.next_expect_left_bracket()?;
@@ -233,22 +275,34 @@ impl StatementsIter {
 		let mut statements = Vec::<Statement>::new();
 		self.parse_body(&mut statements)?;
 		
-		Ok ( StatementKind::UserDefinedFuncDeclare {
-			name,
-			args, 
-			return_type,
-			body: ReturningBody::new(statements),
+		let pos = if let Some(st) = statements.last() {
+			CodePos::new(begin_pos, st.pos().end())
+		} else {
+			CodePos::new(begin_pos, begin_pos)
+		};
+		Ok ( Statement {
+			kind: StatementKind::UserDefinedFuncDeclare {
+				name,
+				args, 
+				return_type,
+				body: ReturningBody::new(statements),
+			},
+			pos,
 		} )
 	}
 
-	fn parse_return_statement(&mut self) -> Result<StatementKind, InterpErr> {
+	fn parse_return_statement(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {
 		let return_expr: Expr = Expr::new(
 			&mut self.tokens_iter, 
 			ExprContextKind::ToReturn)?;
 		
 		self.tokens_iter.next_expect_semicolon()?;
 		
-		Ok ( StatementKind::UserDefinedFuncReturn { return_expr } )
+		let pos = CodePos::new(begin_pos, return_expr.pos().end());
+		Ok ( Statement {
+			kind: StatementKind::UserDefinedFuncReturn { return_expr },
+			pos,
+		} )
 	}
 
 	fn parse_next_statement(&mut self) -> Option<Result<Statement, InterpErr>> {
@@ -257,26 +311,26 @@ impl StatementsIter {
 			Err(err) => return Some(Err(InterpErr::from(err))),
 		};
 		
-		let pos_begin: CharPos = first.pos().begin();
+		let begin_pos: CharPos = first.pos().begin();
 		
-		let statement_kind_result: Result<StatementKind, InterpErr> = match first {
-			Token { content: TokenContent::StatementOp ( StatementOp::Comment (content) ), .. } => 
-				Ok( StatementKind::Comment (content) ),
+		let statement_result: Result<Statement, InterpErr> = match first {
+			Token { content: TokenContent::StatementOp ( StatementOp::Comment (content) ), pos } => 
+				Ok( Statement { kind: StatementKind::Comment (content), pos } ),
 				
 			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => 
-				self.parse_varable_declaration(),	
+				self.parse_varable_declaration(begin_pos),	
 				
 			Token { content: TokenContent::Keyword ( Keyword::If ), .. } =>
-				self.parse_if_else_statement(),	
+				self.parse_if_else_statement(begin_pos),	
 				
 			Token { content: TokenContent::Keyword ( Keyword::While ), .. } =>
-				self.parse_while_statement(),	
+				self.parse_while_statement(begin_pos),	
 				
 			Token { content: TokenContent::Keyword ( Keyword::F ), .. } =>
-				self.parse_user_func_def(),	
+				self.parse_user_func_def(begin_pos),	
 				
 			Token { content: TokenContent::Keyword ( Keyword::Return ), .. } =>
-				self.parse_return_statement(),	
+				self.parse_return_statement(begin_pos),	
 			
 			Token { content: TokenContent::Name(_), .. } => 
 				self.parse_variable_set_or_func_call(NameToken::from_or_err(first).unwrap(), false),
@@ -294,14 +348,7 @@ impl StatementsIter {
 				} ) ),
 		};
 		
-		match statement_kind_result {
-			Ok(kind) =>
-				Some( Ok( Statement {
-					pos: CodePos::new(pos_begin, self.tokens_iter.pos()),
-					kind,
-				} ) ),
-			Err(err) => Some(Err(err)),
-		}
+		Some(statement_result)
 	}
 }
 
@@ -309,7 +356,12 @@ impl Iterator for StatementsIter {
 	type Item = Result<Statement, InterpErr>;
 	
 	fn next(&mut self) -> Option<Self::Item> {
-		self.parse_next_statement()
+		let st = self.parse_next_statement();
+		match st {
+			Some(Ok(ref st)) => println!("{}", st),
+			_ => {},
+		}
+		st
 	}	
 }
 
