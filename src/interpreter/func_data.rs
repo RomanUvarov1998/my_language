@@ -258,7 +258,7 @@ impl std::fmt::Display for UserFuncDef {
 				need_comma_before = true;
 			}
 		}
-		write!(f, ") -> {}", self.body.return_type())
+		write!(f, ") -> {}", self.return_type)
 	}
 }
 

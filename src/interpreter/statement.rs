@@ -237,7 +237,7 @@ impl StatementsIter {
 			name,
 			args, 
 			return_type,
-			body: ReturningBody::new(statements, return_type),
+			body: ReturningBody::new(statements),
 		} )
 	}
 
@@ -717,37 +717,26 @@ impl UnconditionalBody {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ReturningBody {
 	statements: Vec<Statement>,
-	return_type: DataType,
 }
 
 impl ReturningBody {
-	pub fn new(statements: Vec<Statement>, return_type: DataType) -> Self {
+	pub fn new(statements: Vec<Statement>) -> Self {
 		Self {
 			statements,
-			return_type,
 		}
 	}
 	
 	pub fn check(&self, return_type: DataType, check_memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<(), InterpErr> {
 		let mut has_return = false; // at least one statement on 1st level returns
 		for st_ref in self.statements().iter() {
-			if Self::returns(st_ref) {
+			if Self::returns(st_ref, return_type, check_memory, builtin_func_defs)? {
 				has_return = true;
-				break;
 			}
 		}
 		
 		if !has_return {
 			return Err( InterpErr::from(StatementErr::UserFuncNotAllFuncPathsReturn {
 				last_statement_pos: CodePos::from(CharPos::new()),
-			}) );
-		}
-		
-		if return_type != self.return_type {
-			return Err( InterpErr::from(StatementErr::UserFuncReturnType {
-				return_expr_pos: CodePos::from(CharPos::new()),
-				declared_return_type: return_type,
-				returned_type: self.return_type,
 			}) );
 		}
 		
@@ -758,7 +747,7 @@ impl ReturningBody {
 		Ok(())
 	}
 	
-	fn returns(statement: &Statement) -> bool {
+	fn returns(statement: &Statement, declared_return_type: DataType, check_memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<bool, InterpErr> {
 		match &statement.kind {
 			StatementKind::Comment (_) 
 				| StatementKind::VariableDeclare { .. }
@@ -766,39 +755,58 @@ impl ReturningBody {
 				| StatementKind::VariableSet { .. }
 				| StatementKind::UserDefinedFuncDeclare { .. }
 				| StatementKind::FuncCall { .. }
-			=> false,
+			=> Ok(false),
 			
-			StatementKind::UserDefinedFuncReturn { .. } => true,
+			StatementKind::UserDefinedFuncReturn { return_expr } => {
+				let returned_type: DataType = return_expr.check_and_calc_data_type(check_memory, builtin_func_defs)?;
+				if returned_type != declared_return_type {
+					Err( InterpErr::from(StatementErr::UserFuncReturnType {
+						return_expr_pos: statement.pos(),
+						declared_return_type,
+						returned_type,
+					}) )
+				} else {
+					Ok(true)
+				}
+			},
 			
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
+				let mut all_bodies_return = true;
+				
 				for body_ref in if_bodies.iter() {
 					let mut body_returns = false;
 					for st_ref in body_ref.statements() {
-						if Self::returns(st_ref) {
+						if Self::returns(st_ref, declared_return_type, check_memory, builtin_func_defs)? {
 							body_returns = true;
-							break;
 						}
 					}
-					if !body_returns { return false; }
-				}
-				
-				for st_ref in else_body.statements() {
-					if Self::returns(st_ref) {
-						return true;
+					if !body_returns {
+						all_bodies_return = false;
 					}
 				}
 				
-				return false;
+				let mut body_returns = false;
+				for st_ref in else_body.statements() {
+					if Self::returns(st_ref, declared_return_type, check_memory, builtin_func_defs)? {
+						body_returns = true;
+					}
+				}
+				if !body_returns {
+					all_bodies_return = false;
+				}
+				
+				return Ok(all_bodies_return);
 			},
 				
 			StatementKind::BranchingWhile { body } => {
+				let mut body_returns = false;
 				for st_ref in body.statements().iter() {
-					if Self::returns(st_ref) {
-						return true;
+					if Self::returns(st_ref, declared_return_type, check_memory, builtin_func_defs)? {
+						body_returns = true;
 					}
 				}
 				
-				return false;
+				return Ok(body_returns);
 			},
 		}
 	}
@@ -816,10 +824,6 @@ impl ReturningBody {
 	
 	pub fn statements(&self) -> &Vec<Statement> {
 		&self.statements
-	}
-	
-	pub fn return_type(&self) -> DataType {
-		self.return_type
 	}
 }
 

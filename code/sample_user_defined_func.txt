@@ -17,7 +17,7 @@ f mul(a: f32, b: f32, c: f32) -> f32 {
 	var a2: f32 = a ^ 2;
 	var b2: f32 = b ^ 2;
 	var c2: f32 = c ^ 2;
-	return a2 + b2 + c2;
+	return False;
 }
 
 a = @str_to_f32(@input("Input a: "));
