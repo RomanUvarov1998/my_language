@@ -1,7 +1,7 @@
 use super::token::*;
 use super::expr::{Expr, ExprContextKind};
 use super::{InterpErr};
-use super::var_data::{DataType, VarErr, Value};
+use super::var_data::{VarData, DataType, VarErr, Value};
 use super::function::{BuiltinFuncsDefList, BuiltinFuncDef, UserFuncArg, UserFuncDef};
 use super::memory::Memory;
 use super::utils::{CharPos, CodePos, NameToken};
@@ -412,7 +412,7 @@ impl Statement {
 				},
 					
 			StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
-				check_memory.add_variable(var_name.clone(), *data_type, None)?;
+				check_memory.add_variable(var_name.clone(), *data_type, Some(data_type.default_value()))?;
 				
 				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_memory, builtin_func_defs)?;
 				if *data_type != expr_data_type {
@@ -425,8 +425,12 @@ impl Statement {
 			},
 			
 			StatementKind::VariableSet { var_name, value_expr } => {
-				let var_data_type: DataType = check_memory.get_variable_type(var_name)?;
 				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_memory, builtin_func_defs)?;
+				let var_def: &mut VarData = check_memory.get_variable_mut(var_name)?;
+				var_def.set(expr_data_type.default_value())?;
+				
+				let var_data_type: DataType = var_def.get_type();
+				
 				if var_data_type != expr_data_type {
 					return Err(InterpErr::from(VarErr::WrongType { 
 						value_data_type: expr_data_type, 
@@ -447,7 +451,7 @@ impl Statement {
 							check_memory.add_variable(
 								func_args[i].name().clone(),
 								func_args[i].data_type(),
-								None)?;
+								Some(func_args[i].data_type().default_value()))?;
 						}
 						func_def.check_args(arg_exprs, check_memory, builtin_func_defs)?;
 						check_memory.pop_frame();
@@ -467,7 +471,10 @@ impl Statement {
 				check_memory.push_frame();
 				
 				for arg_ref in args.iter() {
-					check_memory.add_variable(arg_ref.name().clone(), arg_ref.data_type(), None)?;
+					check_memory.add_variable(
+						arg_ref.name().clone(), 
+						arg_ref.data_type(),
+						Some(arg_ref.data_type().default_value()))?;
 				}
 				
 				body.check(*return_type, check_memory, builtin_func_defs)?;
@@ -1413,8 +1420,8 @@ mod tests {
 				assert_eq!(body.statements().len(), 3);
 				
 				mem.push_frame();
-				mem.add_variable(new_name_token("a"), DataType::Float32, None).unwrap();
-				mem.add_variable(new_name_token("b"), DataType::Float32, None).unwrap();
+				mem.add_variable(new_name_token("a"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				mem.add_variable(new_name_token("b"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
 				
 				match &body.statements()[0].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
@@ -1430,7 +1437,7 @@ mod tests {
 					},
 				}
 				
-				mem.add_variable(new_name_token("a2"), DataType::Float32, None).unwrap();
+				mem.add_variable(new_name_token("a2"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
 				
 				match &body.statements()[1].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
@@ -1446,7 +1453,7 @@ mod tests {
 					},
 				}
 				
-				mem.add_variable(new_name_token("b2"), DataType::Float32, None).unwrap();
+				mem.add_variable(new_name_token("b2"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
 				
 				match &body.statements()[2].kind {
 					StatementKind::UserDefinedFuncReturn { return_expr } => {

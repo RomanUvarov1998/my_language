@@ -108,7 +108,8 @@ impl Expr {
 				SymbolKind::Operand (ref opnd) => {
 					let opnd_dt: DataType = match opnd {
 						Operand::Value (val) => val.get_type(),
-						Operand::Name (name) => check_memory.get_variable_type(&NameToken::new_with_pos(&name, pos))?,
+						Operand::Name (name) =>
+							check_memory.get_variable_value(&NameToken::new_with_pos(&name, pos))?.get_type(),
 						Operand::BuiltinFuncCall { func_name, arg_exprs } => {
 							let f = builtin_func_defs.find(&func_name).unwrap();
 							

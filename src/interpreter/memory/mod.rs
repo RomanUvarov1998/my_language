@@ -14,7 +14,6 @@ pub struct Memory {
 	call_stack: Vec<CallStackFrame>,
 }
 
-#[allow(unused)]
 impl Memory {
 	pub fn new() -> Self {
 		Self {
@@ -41,9 +40,8 @@ impl Memory {
 		}
 	}
 	
-	pub fn get_variable_type(&self, name: &NameToken) -> Result<DataType, VarErr> {
-		let var = self.find_var(name)?;
-		Ok(var.get_type())
+	pub fn get_variable_mut(&mut self, name: &NameToken) -> Result<&mut VarData, VarErr> {
+		self.find_var_mut(name)
 	}
 	
 	pub fn add_user_func(&mut self, name: NameToken, args: Vec<UserFuncArg>, return_type: DataType, body: ReturningBody) -> Result<(), UserFuncErr> {
@@ -112,10 +110,10 @@ mod tests {
 		
 		mem.add_variable(nt_a.clone(), DataType::Float32, None).unwrap();
 		assert_eq!(mem.get_variable_value(&nt_a), Err(VarErr::NotSet { name: nt_a.clone() }));
-		assert_eq!(mem.get_variable_type(&nt_a), Ok(DataType::Float32));
+		assert_eq!(mem.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
 		mem.set_variable(&nt_a, Value::from(1_f32)).unwrap();
 		assert_eq!(mem.get_variable_value(&nt_a), Ok(&Value::Float32(1_f32)));
-		assert_eq!(mem.get_variable_type(&nt_a), Ok(DataType::Float32));
+		assert_eq!(mem.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
 		
 		assert_eq!(
 			mem.add_variable(nt_a.clone(), DataType::Float32, None),
@@ -124,10 +122,10 @@ mod tests {
 		mem.push_scope();
 		mem.add_variable(nt_a.clone(), DataType::Float32, None).unwrap();
 		assert_eq!(mem.get_variable_value(&nt_a), Err(VarErr::NotSet { name: nt_a.clone() }));		
-		assert_eq!(mem.get_variable_type(&nt_a), Ok(DataType::Float32));
+		assert_eq!(mem.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
 		mem.set_variable(&nt_a, Value::from(3_f32)).unwrap();
 		assert_eq!(mem.get_variable_value(&nt_a), Ok(&Value::Float32(3_f32)));
-		assert_eq!(mem.get_variable_type(&nt_a), Ok(DataType::Float32));
+		assert_eq!(mem.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
 		
 		assert_eq!(
 			mem.add_variable(nt_a.clone(), DataType::Float32, None),
@@ -135,24 +133,24 @@ mod tests {
 			
 		mem.add_variable(nt_b.clone(), DataType::Float32, None).unwrap();
 		assert_eq!(mem.get_variable_value(&nt_b), Err(VarErr::NotSet { name: nt_b.clone() }));		
-		assert_eq!(mem.get_variable_type(&nt_b), Ok(DataType::Float32));
+		assert_eq!(mem.get_variable_mut(&nt_b).unwrap().get_type(), DataType::Float32);
 		mem.set_variable(&nt_b, Value::from(5_f32)).unwrap();
 		assert_eq!(mem.get_variable_value(&nt_b), Ok(&Value::Float32(5_f32)));
-		assert_eq!(mem.get_variable_type(&nt_b), Ok(DataType::Float32));
+		assert_eq!(mem.get_variable_mut(&nt_b).unwrap().get_type(), DataType::Float32);
 		
 		assert_eq!(mem.get_variable_value(&nt_a), Ok(&Value::Float32(3_f32)));
-		assert_eq!(mem.get_variable_type(&nt_a), Ok(DataType::Float32));
+		assert_eq!(mem.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
 			
 		mem.pop_scope();	
 		assert_eq!(
-			mem.get_variable_type(&nt_b),
+			mem.get_variable_mut(&nt_b),
 			Err( VarErr::NotDefined { name: nt_b.clone() } ));	
 		assert_eq!(
 			mem.get_variable_value(&nt_b),
 			Err( VarErr::NotDefined { name: nt_b.clone() } ));	
 		
 		assert_eq!(mem.get_variable_value(&nt_a), Ok(&Value::Float32(1_f32)));
-		assert_eq!(mem.get_variable_type(&nt_a), Ok(DataType::Float32));
+		assert_eq!(mem.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
 	}
 	
 	#[test]
@@ -165,7 +163,7 @@ mod tests {
 		
 		assert_eq!(mem.get_variable_value(&nt), Ok(&Value::Float32(2_f32)));
 		
-		assert_eq!(mem.get_variable_type(&nt), Ok(DataType::Float32));
+		assert_eq!(mem.get_variable_mut(&nt).unwrap().get_type(), DataType::Float32);
 	}
 
 	fn new_name_token(name: &str) -> NameToken {

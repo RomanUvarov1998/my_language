@@ -64,6 +64,14 @@ impl DataType {
 			_ => Err( VarErr::UnknownType { name: name.clone() } ),
 		}
 	}
+	pub fn default_value(&self) -> Value {
+		match self {
+			DataType::Float32 => Value::from(0_f32),
+			DataType::String => Value::from(String::new()),
+			DataType::Bool => Value::from(false),
+			DataType::Untyped => unreachable!(),
+		}
+	}
 }
 
 impl std::fmt::Display for DataType {
