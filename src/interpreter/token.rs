@@ -136,7 +136,7 @@ impl TokensIter {
 									has_dot = true;
 								},
 								
-								CharKind::Letter | CharKind::Dog => {
+								CharKind::Letter => {
 									self.peeked_token.push_back(
 										Token::new(
 											dot_char.pos(), 
@@ -147,6 +147,7 @@ impl TokensIter {
 								},
 								
 								CharKind::Dot
+									| CharKind::Dog
 									| CharKind::Plus
 									| CharKind::Minus
 									| CharKind::Greater
