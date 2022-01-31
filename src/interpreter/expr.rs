@@ -440,6 +440,7 @@ impl ExprContext {
 			TokenContent::Bracket (_) 
 				=> self.check_brackets(tok),
 			TokenContent::StatementOp (st_op) => match st_op {
+				StatementOp::Dot => todo!(),
 				StatementOp::Colon | StatementOp::Comment (_) | StatementOp::ThinArrow => Err(unexpected(tok.pos())),
 				StatementOp::Comma => match self.kind {
 					ExprContextKind::ValueToAssign | ExprContextKind::IfCondition | ExprContextKind::ToReturn => Err(unexpected(tok.pos())),

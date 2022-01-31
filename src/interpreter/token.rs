@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 #[derive(Debug)]
 pub struct TokensIter {
 	iter: CharsIter,
-	peeked_token: Option<Token>,
+	peeked_token: VecDeque<Token>,
 	cached_queue: VecDeque<Token>,
 }
 
@@ -15,7 +15,7 @@ impl TokensIter {
 	pub fn new() -> Self {
 		Self { 
 			iter: CharsIter::new(),
-			peeked_token: None,
+			peeked_token: VecDeque::new(),
 			cached_queue: VecDeque::new(),
 		}
 	}
@@ -29,19 +29,20 @@ impl TokensIter {
 	}
 	
 	pub fn peek(&mut self) -> Result<Option<&Token>, TokenErr> {
-		if self.peeked_token.is_none() {
+		if self.peeked_token.front().is_none() {
 			if let Some(token_result) = self.next() {
-				self.peeked_token = Some(token_result?);
+				self.peeked_token.push_back(token_result?);
 			}
 		}
-		Ok(self.peeked_token.as_ref())
+		Ok(self.peeked_token.front())
 	}
 	
 	pub fn peek_or_end_reached_err(&mut self) -> Result<&Token, TokenErr> {
-		if self.peeked_token.is_none() {
-			self.peeked_token = Some(self.next_or_end_reached_err()?);
+		let pos: CharPos = self.iter.last_pos();
+		match self.peek()? {
+			Some(token_ref) => Ok(token_ref),
+			None => Err( TokenErr::EndReached { pos } ),
 		}
-		Ok(self.peeked_token.as_ref().unwrap())
 	}
 	
 	pub fn next_or_end_reached_err(&mut self) -> Result<Token, TokenErr> {
@@ -87,48 +88,97 @@ impl TokensIter {
 		}
 	}
 		
-	fn parse_number(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
-		let mut has_dot = false;
-		let mut value: f32 = match first_char.kind() {
-			CharKind::Digit (first_digit) => first_digit as f32,
+	fn parse_number_or_dot(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
+		let (mut value, mut has_dot): (f32, bool) = match first_char.kind() {
+			CharKind::Digit (d1) => (d1 as f32, false), // X
+			
 			CharKind::Dot => {
-				has_dot = true;
-				0_f32
+				match self.iter.peek() {
+					Some(parsed_char) => match parsed_char.kind() {
+						CharKind::Digit (_) => (0_f32, true), // 0.
+						
+						_ => return Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::StatementOp (StatementOp::Dot) ) ),
+					},
+					
+					None => return Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::StatementOp (StatementOp::Dot) ) ),
+				}
 			},
 			_ => panic!("Wrong input: {:?}", first_char),
 		};
-		let mut frac_multiplier = 0.1_f32;
+		
 		let mut pos_end: CharPos = first_char.pos();
-		loop {
-			match self.iter.peek() {
-				Some(parsed_char) => {
-					match parsed_char.kind() {
-						CharKind::Digit (val) => {
-							if has_dot {
-								value += val as f32 * frac_multiplier;
-								frac_multiplier *= 0.1_f32;
-							} else {
-								value *= 10_f32;
-								value += val as f32;
-							}
-							self.iter.next(); // skip current digit
-						},
-						CharKind::Dot => {
-							self.iter.next(); // skip dot
-							if !has_dot {
-								has_dot = true;
-							} else {
-								break Err(TokenErr::Construct (parsed_char));
-							}
-						},
-						CharKind::Letter => break Err(TokenErr::Construct (parsed_char)),
-						_ => break Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) )),
-					};
+		let mut frac_multiplier = 0.1_f32;
+		
+		while let Some(parsed_char) = self.iter.peek() {
+			match parsed_char.kind() {
+				CharKind::Digit (d) => {
+					if has_dot {
+						value += d as f32 * frac_multiplier;
+						frac_multiplier *= 0.1_f32;
+					} else {
+						value *= 10_f32;
+						value += d as f32;
+					}
+					self.iter.next().unwrap(); // skip peeked digit
 					pos_end = parsed_char.pos();
 				},
-				None => break Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) )),
+				CharKind::Dot => {
+					if has_dot {
+						// leave dot as peeked
+						return Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) ) );
+					} else {
+						let dot_char = self.iter.next().unwrap();
+						assert_eq!(self.peeked_token.len(), 0);
+						
+						match self.iter.peek() {
+							Some(parsed_char) => match parsed_char.kind() {
+								CharKind::Digit(_) => {
+									has_dot = true;
+								},
+								
+								CharKind::Letter | CharKind::Dog => {
+									self.peeked_token.push_back(
+										Token::new(
+											dot_char.pos(), 
+											dot_char.pos(), 
+											TokenContent::StatementOp (StatementOp::Dot)));
+									assert_eq!(self.peeked_token.len(), 1);
+									return Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) ) );
+								},
+								
+								CharKind::Dot
+									| CharKind::Plus
+									| CharKind::Minus
+									| CharKind::Greater
+									| CharKind::Less
+									| CharKind::Asterisk
+									| CharKind::Circumflex
+									| CharKind::Exclamation
+									| CharKind::DoubleQuote
+									| CharKind::LeftSlash
+									| CharKind::LeftBracket
+									| CharKind::RightBracket
+									| CharKind::LeftCurlyBracket
+									| CharKind::RightCurlyBracket
+									| CharKind::Eq
+									| CharKind::Underscore
+									| CharKind::Punctuation (_)
+									| CharKind::Whitespace
+									| CharKind::NewLine
+									=> return Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) ) ),
+									
+								CharKind::Control | CharKind::Invalid => return Err( TokenErr::Construct (parsed_char) ),
+							},
+							
+							None => return Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value)) ),
+						}
+					}
+				},
+				_ => return Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) ) ),
 			}
 		}
+		
+		return Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) ) );
 	}
 
 	fn parse_string_literal(&mut self, pos_begin: CharPos) -> Result<Token, TokenErr> {
@@ -354,13 +404,13 @@ impl Iterator for TokensIter {
 	type Item = Result<Token, TokenErr>;
 	
 	fn next(&mut self) -> Option<Self::Item> {
-		if self.peeked_token.is_some() {
-			return Some( Ok( self.peeked_token.take().unwrap() ) );
+		if let Some(token) =  self.peeked_token.pop_front() {
+			return Some(Ok(token));
 		}
 		
 		for ch in self.iter.by_ref() {			
 			let token_result = match ch.kind() {
-				CharKind::Digit (_) | CharKind::Dot => self.parse_number(ch),
+				CharKind::Digit (_) | CharKind::Dot => self.parse_number_or_dot(ch),
 				
 				CharKind::Plus | CharKind::Minus 
 					| CharKind::Greater | CharKind::Less
@@ -482,6 +532,7 @@ impl std::fmt::Display for TokenContent {
 				StatementOp::Comma => write!(f, "'{}'", ","),
 				StatementOp::Comment (content) => write!(f, "Comment //'{}'", content),
 				StatementOp::ThinArrow => write!(f, "->"),
+				StatementOp::Dot => write!(f, "."),
 			},
 			TokenContent::Keyword (kw) => match kw {
 				Keyword::Var => write!(f, "'{}'", "var"),
@@ -572,6 +623,7 @@ pub enum StatementOp {
 	Colon,
 	Semicolon,
 	Comma,
+	Dot,
 	Comment (String),
 	ThinArrow,
 }
@@ -652,6 +704,7 @@ mod tests {
 		test_token_content_detection(":", TokenContent::StatementOp (StatementOp::Colon));
 		test_token_content_detection(";", TokenContent::StatementOp (StatementOp::Semicolon));
 		test_token_content_detection(",", TokenContent::StatementOp (StatementOp::Comma));
+		test_token_content_detection(".", TokenContent::StatementOp (StatementOp::Dot));
 		test_token_content_detection("//23rwrer2", TokenContent::StatementOp (StatementOp::Comment (String::from("23rwrer2"))));
 		test_token_content_detection("->", TokenContent::StatementOp (StatementOp::ThinArrow));
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
@@ -714,12 +767,85 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::While ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from("sdsdfd"))));
 		assert_eq!(tokens_iter.next(), None);
+		
+		let mut tokens_iter = TokensIter::new();
+		tokens_iter.push_string("2.r".to_string());
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (2_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Dot));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("r")));
+		assert_eq!(tokens_iter.next(), None);
+		
+		let mut tokens_iter = TokensIter::new();
+		tokens_iter.push_string("2. r".to_string());
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (2_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("r")));
+		assert_eq!(tokens_iter.next(), None);
+		
+		let mut tokens_iter = TokensIter::new();
+		tokens_iter.push_string(".2.r".to_string());
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (0.2_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Dot));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("r")));
+		assert_eq!(tokens_iter.next(), None);
+		
+		let mut tokens_iter = TokensIter::new();
+		tokens_iter.push_string("2.2.r".to_string());
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (2.2_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Dot));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("r")));
+		assert_eq!(tokens_iter.next(), None);
+		
+		let mut tokens_iter = TokensIter::new();
+		tokens_iter.push_string("2.2.2.r".to_string());
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (2.2_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (0.2_f32));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Dot));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("r")));
+		assert_eq!(tokens_iter.next(), None);
 	}
 
 	#[test]
 	pub fn can_parse_multiple_tokens_with_whitespaces() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1 \n\t + \n\t 23.4 \n\t - \n\t 45.6 \n\t *7.8 \n\t / \n\t 9 \n\t f \n\t return \n\t var_1 \n\t var \n\t \"vasya\" \n\t > \n\t >= < \n\t <= \n\t == \n\t != \n\t ! \n\t land \n\t lor \n\t lxor \n\t : \n\t ; \n\t , \n\t -> \n\t (  \n\t ) \n\t { \n\t } \n\t if \n\t else \n\t while \n\t // sdfsdfs \n\t ".to_string());
+		tokens_iter.push_string(r#"
+		1
+		+
+		23.4
+		-45.6
+		*
+		7.8
+		/
+		9
+		f
+		return
+		var_1
+		var
+		"vasya"
+		>
+		
+		>= 
+		<
+		<=
+		==
+		!=
+		!
+		land
+		lor
+		lxor
+		:
+		;
+		, 
+		->
+		(
+		)
+		{
+			
+		}
+		if
+		else
+		while
+		// sdfsdfs 
+		"#.to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
