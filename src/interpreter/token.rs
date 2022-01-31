@@ -7,7 +7,7 @@ use std::collections::VecDeque;
 #[derive(Debug)]
 pub struct TokensIter {
 	iter: CharsIter,
-	peeked_token: VecDeque<Token>,
+	peeked_tokens: VecDeque<Token>,
 	cached_queue: VecDeque<Token>,
 }
 
@@ -15,7 +15,7 @@ impl TokensIter {
 	pub fn new() -> Self {
 		Self { 
 			iter: CharsIter::new(),
-			peeked_token: VecDeque::new(),
+			peeked_tokens: VecDeque::new(),
 			cached_queue: VecDeque::new(),
 		}
 	}
@@ -29,12 +29,12 @@ impl TokensIter {
 	}
 	
 	pub fn peek(&mut self) -> Result<Option<&Token>, TokenErr> {
-		if self.peeked_token.front().is_none() {
+		if self.peeked_tokens.front().is_none() {
 			if let Some(token_result) = self.next() {
-				self.peeked_token.push_back(token_result?);
+				self.peeked_tokens.push_back(token_result?);
 			}
 		}
-		Ok(self.peeked_token.front())
+		Ok(self.peeked_tokens.front())
 	}
 	
 	pub fn peek_or_end_reached_err(&mut self) -> Result<&Token, TokenErr> {
@@ -128,7 +128,7 @@ impl TokensIter {
 						return Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) ) );
 					} else {
 						let dot_char = self.iter.next().unwrap();
-						assert_eq!(self.peeked_token.len(), 0);
+						assert_eq!(self.peeked_tokens.len(), 0);
 						
 						match self.iter.peek() {
 							Some(parsed_char) => match parsed_char.kind() {
@@ -137,12 +137,12 @@ impl TokensIter {
 								},
 								
 								CharKind::Letter => {
-									self.peeked_token.push_back(
+									self.peeked_tokens.push_back(
 										Token::new(
 											dot_char.pos(), 
 											dot_char.pos(), 
 											TokenContent::StatementOp (StatementOp::Dot)));
-									assert_eq!(self.peeked_token.len(), 1);
+									assert_eq!(self.peeked_tokens.len(), 1);
 									return Ok( Token::new(first_char.pos(), pos_end, TokenContent::Number (value) ) );
 								},
 								
@@ -405,7 +405,7 @@ impl Iterator for TokensIter {
 	type Item = Result<Token, TokenErr>;
 	
 	fn next(&mut self) -> Option<Self::Item> {
-		if let Some(token) =  self.peeked_token.pop_front() {
+		if let Some(token) =  self.peeked_tokens.pop_front() {
 			return Some(Ok(token));
 		}
 		
