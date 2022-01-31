@@ -4,9 +4,10 @@ use super::memory::Memory;
 use super::variable::{Value, DataType};
 use super::function::{BuiltinFuncsDefList, UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
+use super::statement::FuncKind;
 
 // TODO: make Expr not clonable
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Expr {
 	expr_stack: Vec<Symbol>,
 	pos: CodePos,
@@ -41,43 +42,47 @@ impl Expr {
 					let value: Value = match opnd {
 						Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
 						Operand::Name (name) => memory.get_variable_value(&NameToken::new_with_pos(&name, pos)).unwrap().clone(),
-						Operand::BuiltinFuncCall { func_name, arg_exprs } => {
-							let f = builtin_func_defs.find(&func_name).unwrap();
+						Operand::FuncCall { kind, func_name, arg_exprs } => {
+							match kind {
+								FuncKind::Builtin => {
+									let f = builtin_func_defs.find(&func_name).unwrap();
 							
-							let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
+									let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
+									
+									for expr in arg_exprs {
+										let value: Value = expr.calc(memory, builtin_func_defs);
+										args_values.push(value);
+									}
+									
+									f.call(args_values).unwrap()
+								},
+								FuncKind::UserDefined => {
+									let f: UserFuncDef = (*memory.find_func_def(&func_name).unwrap()).clone(); // TODO: Do not clone UserFuncDef
 							
-							for expr in arg_exprs {
-								let value: Value = expr.calc(memory, builtin_func_defs);
-								args_values.push(value);
+									let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
+									
+									for expr in arg_exprs {
+										let value: Value = expr.calc(memory, builtin_func_defs);
+										args_values.push(value);
+									}
+									
+									memory.push_frame();
+									
+									let func_args: &Vec<UserFuncArg> = f.args();
+									for i in 0..args_values.len() {
+										memory.add_variable(
+											func_args[i].name().clone(),
+											func_args[i].data_type(),
+											Some(args_values[i].clone())).unwrap();
+									}
+									
+									let value: Value = f.call(memory, builtin_func_defs).unwrap();
+									
+									memory.pop_frame();
+									
+									value
+								},
 							}
-							
-							f.call(args_values).unwrap()
-						},
-						Operand::UserDefinedFuncCall { func_name, arg_exprs } => {
-							let f: UserFuncDef = (*memory.find_func_def(&func_name).unwrap()).clone(); // TODO: Do not clone UserFuncDef
-							
-							let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
-							
-							for expr in arg_exprs {
-								let value: Value = expr.calc(memory, builtin_func_defs);
-								args_values.push(value);
-							}
-							
-							memory.push_frame();
-							
-							let func_args: &Vec<UserFuncArg> = f.args();
-							for i in 0..args_values.len() {
-								memory.add_variable(
-									func_args[i].name().clone(),
-									func_args[i].data_type(),
-									Some(args_values[i].clone())).unwrap();
-							}
-							
-							let value: Value = f.call(memory, builtin_func_defs).unwrap();
-							
-							memory.pop_frame();
-							
-							value
 						},
 					};
 					calc_stack.push(value);
@@ -110,17 +115,21 @@ impl Expr {
 						Operand::Value (val) => val.get_type(),
 						Operand::Name (name) =>
 							check_memory.get_variable_value(&NameToken::new_with_pos(&name, pos))?.get_type(),
-						Operand::BuiltinFuncCall { func_name, arg_exprs } => {
-							let f = builtin_func_defs.find(&func_name).unwrap();
+						Operand::FuncCall { kind, func_name, arg_exprs } => {
+							match kind {
+								FuncKind::Builtin => {
+									let f = builtin_func_defs.find(&func_name).unwrap();
 							
-							f.check_args(&func_name, arg_exprs, check_memory, builtin_func_defs)?;
-							f.return_type()
-						},
-						Operand::UserDefinedFuncCall { func_name, arg_exprs } => {
-							let f = check_memory.find_func_def(&func_name).unwrap();
+									f.check_args(&func_name, arg_exprs, check_memory, builtin_func_defs)?;
+									f.return_type()
+								},
+								FuncKind::UserDefined => {
+									let f = check_memory.find_func_def(&func_name).unwrap();
 							
-							f.check_args(arg_exprs, check_memory, builtin_func_defs)?;
-							f.return_type()
+									f.check_args(arg_exprs, check_memory, builtin_func_defs)?;
+									f.return_type()
+								},
+							}
 						},
 					};
 					type_calc_stack.push(opnd_dt);
@@ -178,107 +187,16 @@ impl Expr {
 					
 					prev_is_operand = true;
 				},
+				
 				TokenContent::BuiltinName (name) => {
-					if prev_is_operand {
-						return Err(unexpected(pos));
-					}
-					
-					match tokens_iter.peek_or_end_reached_err()?.content() {
-						TokenContent::Bracket (Bracket::Left) => {
-							tokens_iter.next_or_end_reached_err().unwrap();
-							
-							let mut arg_exprs = Vec::<Expr>::new();
-							
-							// TODO: move this code to Func::parse self because it duplicates the one from Statement::parse_func_call(...)
-							if let TokenContent::Bracket (Bracket::Right) = tokens_iter.peek_or_end_reached_err()?.content() {
-								tokens_iter.next_or_end_reached_err().unwrap();
-							} else {
-								loop {			
-									arg_exprs.push(Expr::new(
-										tokens_iter,
-										ExprContextKind::FunctionArg)?);
-										
-									match tokens_iter.next_or_end_reached_err()? {
-										Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
-										
-										Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
-										
-										found @ _ => 
-											return Err( InterpErr::from( TokenErr::ExpectedButFound { 
-												expected: vec![
-													TokenContent::StatementOp(StatementOp::Comma),
-													TokenContent::Bracket ( Bracket::Right ),
-												], 
-												found
-											} ) ),
-									}
-								}
-							}
-							
-							let func_name = NameToken::new_with_pos(&name, pos);
-							
-							let sym = Symbol::new_builtin_func_call(func_name, arg_exprs);
-							expr_stack.push(sym);
-						},
-						_ => {
-							let sym = Symbol::new_name(name, pos);
-							expr_stack.push(sym);
-						},
-					}
-					
-					prev_is_operand = true;
+					let sym = Self::parse_func_call_or_name(FuncKind::Builtin, &mut prev_is_operand, tokens_iter, name, pos)?;
+					expr_stack.push(sym);
 				},
 				
 				TokenContent::Name (name) => {
-					if prev_is_operand {
-						return Err(unexpected(pos));
-					}
-					
-					match tokens_iter.peek_or_end_reached_err()?.content() {
-						TokenContent::Bracket (Bracket::Left) => {
-							tokens_iter.next_or_end_reached_err().unwrap();
-							
-							let mut arg_exprs = Vec::<Expr>::new();
-							
-							// TODO: move this code to Func::parse self because it duplicates the one from Statement::parse_func_call(...)
-							if let TokenContent::Bracket (Bracket::Right) = tokens_iter.peek_or_end_reached_err()?.content() {
-								tokens_iter.next_or_end_reached_err().unwrap();
-							} else {
-								loop {			
-									arg_exprs.push(Expr::new(
-										tokens_iter,
-										ExprContextKind::FunctionArg)?);
-										
-									match tokens_iter.next_or_end_reached_err()? {
-										Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
-										
-										Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
-										
-										found @ _ => 
-											return Err( InterpErr::from( TokenErr::ExpectedButFound { 
-												expected: vec![
-													TokenContent::StatementOp(StatementOp::Comma),
-													TokenContent::Bracket ( Bracket::Right ),
-												], 
-												found
-											} ) ),
-									}
-								}
-							}
-							
-							let func_name = NameToken::new_with_pos(&name, pos);
-							
-							let sym = Symbol::new_user_defined_func_call(func_name, arg_exprs);
-							expr_stack.push(sym);
-						},
-						_ => {
-							let sym = Symbol::new_name(name, pos);
-							expr_stack.push(sym);
-						},
-					}
-					
-					prev_is_operand = true;
-				}
+					let sym = Self::parse_func_call_or_name(FuncKind::UserDefined, &mut prev_is_operand, tokens_iter, name, pos)?;
+					expr_stack.push(sym);
+				},
 				
 				TokenContent::StringLiteral (s) => {
 					if prev_is_operand {
@@ -430,6 +348,62 @@ impl Expr {
 		
 		Ok(())
 	}
+
+	fn parse_func_call_or_name(kind: FuncKind, prev_is_operand: &mut bool, tokens_iter: &mut TokensIter, name: String, pos: CodePos) -> Result<Symbol, InterpErr> {
+		if *prev_is_operand {
+			return Err(unexpected(pos));
+		}
+		*prev_is_operand = true;
+		
+		match tokens_iter.peek_or_end_reached_err()?.content() {
+			TokenContent::Bracket (Bracket::Left) => {
+				tokens_iter.next_or_end_reached_err().unwrap();
+				
+				let mut arg_exprs = Vec::<Expr>::new();
+				
+				if let TokenContent::Bracket (Bracket::Right) = tokens_iter.peek_or_end_reached_err()?.content() {
+					tokens_iter.next_or_end_reached_err().unwrap();
+				} else {
+					loop {			
+						arg_exprs.push(Expr::new(
+							tokens_iter,
+							ExprContextKind::FunctionArg)?);
+							
+						match tokens_iter.next_or_end_reached_err()? {
+							Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
+							
+							Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
+							
+							found @ _ => 
+								return Err( InterpErr::from( TokenErr::ExpectedButFound { 
+									expected: vec![
+										TokenContent::StatementOp(StatementOp::Comma),
+										TokenContent::Bracket ( Bracket::Right ),
+									], 
+									found
+								} ) ),
+						}
+					}
+				}
+				
+				let func_name = NameToken::new_with_pos(&name, pos);
+				
+				let sym = Symbol::new_func_call(kind, func_name, arg_exprs);
+				Ok(sym)
+			},
+			_ => {
+				let sym = Symbol::new_name(name, pos);
+				Ok(sym)
+			},
+		}
+	}
+}
+
+impl Eq for Expr {}
+impl PartialEq for Expr {
+	fn eq(&self, other: &Self) -> bool {
+		self.expr_stack == other.expr_stack
+	}
 }
 
 //------------------------------- ExprContext ----------------------------------
@@ -516,7 +490,7 @@ impl ExprContext {
 
 //------------------------------- Symbol ----------------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 struct Symbol {
 	kind: SymbolKind,
 	pos: CodePos,
@@ -542,20 +516,11 @@ impl Symbol {
 			pos,
 		}
 	}
-	fn new_builtin_func_call(func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
+	fn new_func_call(kind: FuncKind, func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
 		let pos = func_name.pos();
 		Self {
-			kind: SymbolKind::Operand( Operand::BuiltinFuncCall { 
-				func_name, 
-				arg_exprs,
-			} ),
-			pos,
-		}
-	}
-	fn new_user_defined_func_call(func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
-		let pos: CodePos = func_name.pos();
-		Self {
-			kind: SymbolKind::Operand( Operand::UserDefinedFuncCall { 
+			kind: SymbolKind::Operand( Operand::FuncCall {
+				kind,
 				func_name, 
 				arg_exprs,
 			} ),
@@ -594,15 +559,19 @@ impl Symbol {
 	}
 }
 
+impl Eq for Symbol {}
+impl PartialEq for Symbol {
+	fn eq(&self, other: &Self) -> bool {
+		self.kind == other.kind
+	}
+}
+
 #[derive(Debug, Clone)]
 enum Operand {
 	Value (Value),
 	Name (String),
-	BuiltinFuncCall {
-		func_name: NameToken, 
-		arg_exprs: Vec<Expr>,
-	},
-	UserDefinedFuncCall {
+	FuncCall {
+		kind: FuncKind,
 		func_name: NameToken, 
 		arg_exprs: Vec<Expr>,
 	},
@@ -619,12 +588,8 @@ impl PartialEq for Operand {
 				Operand::Name (op2) => op1 == op2,
 				_ => false,
 			},
-			Operand::BuiltinFuncCall { func_name: fn1, arg_exprs: ae1 } => match other {
-				Operand::BuiltinFuncCall { func_name: fn2, arg_exprs: ae2 } => fn1 == fn2 && ae1 == ae2,
-				_ => false,
-			},
-			Operand::UserDefinedFuncCall { func_name: fn1, arg_exprs: ae1 } => match other {
-				Operand::UserDefinedFuncCall { func_name: fn2, arg_exprs: ae2 } => fn1 == fn2 && ae1 == ae2,
+			Operand::FuncCall { kind: kind1, func_name: fn1, arg_exprs: ae1 } => match other {
+				Operand::FuncCall { kind: kind2, func_name: fn2, arg_exprs: ae2 } => fn1 == fn2 && ae1 == ae2 && kind1 == kind2,
 				_ => false,
 			},
 		}
@@ -1266,19 +1231,19 @@ mod tests {
 	
 	#[test]
 	fn check_stack_creation_and_arithmetic_calc() {
-		test_expr_and_its_stack_eq("3.125;", vec![
+		test_expr_and_its_stack_eq_and_value("3.125;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 		],
 		Value::Float32(3.125_f32));
 		
-		test_expr_and_its_stack_eq("3.125 + 5.4;", vec![
+		test_expr_and_its_stack_eq_and_value("3.125 + 5.4;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (5.4_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::Float32(3.125_f32 + 5.4_f32));
 		
-		test_expr_and_its_stack_eq("3.125 + 5.4 * 2.46;", vec![
+		test_expr_and_its_stack_eq_and_value("3.125 + 5.4 * 2.46;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (5.4_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2.46_f32))),
@@ -1287,7 +1252,7 @@ mod tests {
 		],
 		Value::Float32(3.125_f32 + 5.4_f32 * 2.46_f32));
 		
-		test_expr_and_its_stack_eq("3.125 + 0 + 5.25 * 2.25 - 3.25 / 2 * 4.25;", vec![
+		test_expr_and_its_stack_eq_and_value("3.125 + 0 + 5.25 * 2.25 - 3.25 / 2 * 4.25;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (0_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
@@ -1304,7 +1269,7 @@ mod tests {
 		],
 		Value::Float32(3.125_f32 + 0.0_f32 + 5.25_f32 * 2.25_f32 - 3.25_f32 / 2.0_f32 * 4.25_f32));
 		
-		test_expr_and_its_stack_eq("3.125 + -5.25 * 2.25;", vec![
+		test_expr_and_its_stack_eq_and_value("3.125 + -5.25 * 2.25;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (5.25_f32))),
 			SymbolKind::ExprOperator (ExprOperator::UnMinus),
@@ -1314,7 +1279,7 @@ mod tests {
 		],
 		Value::Float32(3.125_f32 + -5.25_f32 * 2.25_f32));
 		
-		test_expr_and_its_stack_eq("2.5 * ---5.5;", vec![
+		test_expr_and_its_stack_eq_and_value("2.5 * ---5.5;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2.5_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (5.5_f32))),
 			SymbolKind::ExprOperator (ExprOperator::UnMinus),
@@ -1324,7 +1289,7 @@ mod tests {
 		],
 		Value::Float32(2.5_f32 * ---5.5_f32));
 		
-		test_expr_and_its_stack_eq("1.125 * (3.125 + 2.125);", vec![
+		test_expr_and_its_stack_eq_and_value("1.125 * (3.125 + 2.125);", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (1.125_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2.125_f32))),
@@ -1333,7 +1298,7 @@ mod tests {
 		],
 		Value::Float32(1.125_f32 * (3.125_f32 + 2.125_f32)));
 		
-		test_expr_and_its_stack_eq("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
+		test_expr_and_its_stack_eq_and_value("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (33_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
@@ -1352,7 +1317,7 @@ mod tests {
 		],
 		Value::Float32(33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32));
 		
-		test_expr_and_its_stack_eq("-(8 - 2.125 * 5.125 + 4.125) / -3.125;", vec![
+		test_expr_and_its_stack_eq_and_value("-(8 - 2.125 * 5.125 + 4.125) / -3.125;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (8_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2.125_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (5.125_f32))),
@@ -1367,7 +1332,7 @@ mod tests {
 		],
 		Value::Float32(-(8_f32 - 2.125_f32 * 5.125_f32 + 4.125_f32) / -3.125_f32));
 		
-		test_expr_and_its_stack_eq("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
+		test_expr_and_its_stack_eq_and_value("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (33_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
@@ -1386,14 +1351,14 @@ mod tests {
 		],
 		Value::Float32(33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32));
 		
-		test_expr_and_its_stack_eq("2^2;", vec![
+		test_expr_and_its_stack_eq_and_value("2^2;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Pow),
 		],
 		Value::Float32(2_f32.powf(2_f32)));
 		
-		test_expr_and_its_stack_eq("-2^2+4;", vec![
+		test_expr_and_its_stack_eq_and_value("-2^2+4;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Pow),
@@ -1403,7 +1368,7 @@ mod tests {
 		],
 		Value::Float32(-2_f32.powf(2_f32) + 4_f32));
 		
-		test_expr_and_its_stack_eq("3^1^2;", vec![
+		test_expr_and_its_stack_eq_and_value("3^1^2;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
@@ -1411,82 +1376,148 @@ mod tests {
 			SymbolKind::ExprOperator (ExprOperator::Pow),
 		],
 		Value::Float32(3_f32.powf(1_f32.powf(2_f32))));
+		
+		let zero_pos = CodePos::from(CharPos::new());
+		
+		test_expr_and_its_stack_eq("a + add(2, 4) + @add(4, 9);", vec![
+			SymbolKind::Operand (Operand::Name (String::from ("a"))),
+			SymbolKind::Operand (Operand::FuncCall {
+				kind: FuncKind::UserDefined,
+				func_name: new_name_token("add"),
+				arg_exprs: vec![
+					// arg 1
+					Expr { 
+						pos: zero_pos,
+						expr_stack: vec![
+							Symbol {
+								kind: SymbolKind::Operand (Operand::Value (Value::from(2_f32))),
+								pos: zero_pos,
+							},
+						],
+					},
+					
+					// arg 2
+					Expr {
+						pos: zero_pos,
+						expr_stack: vec![
+							Symbol {
+								kind: SymbolKind::Operand (Operand::Value (Value::from(4_f32))),
+								pos: zero_pos,
+							},
+						],
+					},
+				],
+			}),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::FuncCall {
+				kind: FuncKind::Builtin,
+				func_name: new_name_token("add"),
+				arg_exprs: vec![
+					// arg 1
+					Expr { 
+						pos: zero_pos,
+						expr_stack: vec![
+							Symbol {
+								kind: SymbolKind::Operand (Operand::Value (Value::from(4_f32))),
+								pos: zero_pos,
+							},
+						],
+					},
+					
+					// arg 2
+					Expr {
+						pos: zero_pos,
+						expr_stack: vec![
+							Symbol {
+								kind: SymbolKind::Operand (Operand::Value (Value::from(9_f32))),
+								pos: zero_pos,
+							},
+						],
+					},
+				],
+			}),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+		]);
 	}
 	
+	fn new_name_token(name: &str) -> NameToken {
+		NameToken::new_with_pos(name, CodePos::from(CharPos::new()))
+	}
+
 	#[test]
 	fn check_stack_creation_and_bool_calc() {
-		test_expr_and_its_stack_eq("False;", vec![
+		test_expr_and_its_stack_eq_and_value("False;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
 		],
 		Value::Bool(false));
 		
-		test_expr_and_its_stack_eq("True;", vec![
+		test_expr_and_its_stack_eq_and_value("True;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
 		],
 		Value::Bool(true));
 		
-		test_expr_and_its_stack_eq("!True;", vec![
+		test_expr_and_its_stack_eq_and_value("!True;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
 			SymbolKind::ExprOperator (ExprOperator::Not),
 		],
 		Value::Bool(false));
 		
-		test_expr_and_its_stack_eq("!False;", vec![
+		test_expr_and_its_stack_eq_and_value("!False;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::Not),
 		],
 		Value::Bool(true));
 		
-		test_expr_and_its_stack_eq("True == True;", vec![
+		test_expr_and_its_stack_eq_and_value("True == True;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
 			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
 			SymbolKind::ExprOperator (ExprOperator::Equal),
 		],
 		Value::Bool(true));
 		
-		test_expr_and_its_stack_eq("False == False;", vec![
+		test_expr_and_its_stack_eq_and_value("False == False;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
 			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::Equal),
 		],
 		Value::Bool(true));
 		
-		test_expr_and_its_stack_eq("True != False;", vec![
+		test_expr_and_its_stack_eq_and_value("True != False;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
 			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::NotEqual),
 		],
 		Value::Bool(true));
 		
-		test_expr_and_its_stack_eq("True land False;", vec![
+		test_expr_and_its_stack_eq_and_value("True land False;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
 			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::LogicalAnd),
 		],
 		Value::Bool(false));
 		
-		test_expr_and_its_stack_eq("True lor False;", vec![
+		test_expr_and_its_stack_eq_and_value("True lor False;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
 			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::LogicalOr),
 		],
 		Value::Bool(true));
 		
-		test_expr_and_its_stack_eq("True lxor False;", vec![
+		test_expr_and_its_stack_eq_and_value("True lxor False;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
 			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::LogicalXor),
 		],
 		Value::Bool(true));
 		
-		test_expr_and_its_stack_eq("2 > 3;", vec![
+		test_expr_and_its_stack_eq_and_value("2 > 3;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Greater),
 		],
 		Value::Bool(false));
 		
-		test_expr_and_its_stack_eq("!(2 > 3);", vec![
+		test_expr_and_its_stack_eq_and_value("!(2 > 3);", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Greater),
@@ -1494,28 +1525,28 @@ mod tests {
 		],
 		Value::Bool(true));
 		
-		test_expr_and_its_stack_eq("2 >= 3;", vec![
+		test_expr_and_its_stack_eq_and_value("2 >= 3;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
 			SymbolKind::ExprOperator (ExprOperator::GreaterEqual),
 		],
 		Value::Bool(false));
 		
-		test_expr_and_its_stack_eq("2 < 3;", vec![
+		test_expr_and_its_stack_eq_and_value("2 < 3;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Less),
 		],
 		Value::Bool(true));
 		
-		test_expr_and_its_stack_eq("2 <= 3;", vec![
+		test_expr_and_its_stack_eq_and_value("2 <= 3;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
 			SymbolKind::ExprOperator (ExprOperator::LessEqual),
 		],
 		Value::Bool(true));
 		
-		test_expr_and_its_stack_eq("1 + 1 ^ 10 <= 27 / 9;", vec![
+		test_expr_and_its_stack_eq_and_value("1 + 1 ^ 10 <= 27 / 9;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
 			SymbolKind::Operand (Operand::Value (Value::Float32 (10_f32))),
@@ -1529,7 +1560,7 @@ mod tests {
 		Value::Bool(true));
 	}
 	
-	fn test_expr_and_its_stack_eq(
+	fn test_expr_and_its_stack_eq_and_value(
 		expr_str: &str, 
 		correct_expr_stack: Vec<SymbolKind>,
 		result: Value
@@ -1558,6 +1589,45 @@ mod tests {
 				panic!("Wrong result for code '{}': {:?} != {:?}", expr_str, ans, result);
 			}
 			
+			return; 
+		}
+		
+		let max_len = std::cmp::max(expr_stack.len(), syms_expr_stack.len());
+		for i in 0..max_len {
+			match syms_expr_stack.get(i) {
+				Some(sym) => print!("{:?}", sym),
+				None => print!("None"),
+			}
+			match syms_expr_stack.get(i) == correct_expr_stack.get(i) {
+				true => print!(" == "),
+				false => {
+					print!(" != "); 
+				},
+			}
+			match correct_expr_stack.get(i) {
+				Some(sym) => println!("{:?}", sym),
+				None => println!("None"),
+			}
+		}
+		
+		panic!("Test failed ^^^");
+	}
+	
+	
+	fn test_expr_and_its_stack_eq(
+		expr_str: &str, 
+		correct_expr_stack: Vec<SymbolKind>,
+	) {
+		let mut tokens_iter = TokensIter::new();	
+		tokens_iter.push_string(expr_str.to_string());
+		
+		let expr_stack: Vec<Symbol> = Expr::create_stack(
+			&mut tokens_iter, 
+			ExprContext::new(ExprContextKind::ValueToAssign)).unwrap();
+		
+		let syms_expr_stack: Vec<SymbolKind> = expr_stack.iter().map(|Symbol { kind, .. }| kind.clone()).collect();
+		
+		if syms_expr_stack == correct_expr_stack {		
 			return; 
 		}
 		
