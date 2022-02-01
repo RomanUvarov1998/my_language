@@ -1,0 +1,7 @@
+var a: f32 = -3;
+@print("a.abs() == ");
+@println(a.abs());
+
+var b: str = "hello";
+@print("length of 'hello' is ");
+@println(b.len());
