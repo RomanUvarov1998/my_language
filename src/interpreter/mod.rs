@@ -3,14 +3,20 @@ mod expr;
 mod string_char;
 mod token;
 mod statement;
-mod variable;
-mod function;
+mod var_data;
+mod data_type;
+mod value;
+mod builtin_func;
+mod user_func;
 mod utils;
 
 use statement::{StatementsIter, Statement, StatementErr};
 use memory::*;
-use function::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr, UserFuncErr};
-use variable::{VarErr, Value, DataType};
+use builtin_func::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
+use user_func::UserFuncErr;
+use var_data::VarErr;
+use data_type::DataType;
+use value::Value;
 use utils::CodePos;
 
 //------------------------ Interpreter --------------------
@@ -330,9 +336,8 @@ impl From<BuiltinFuncErr> for InterpErr {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use super::utils::NameToken;
-	use super::variable::DataType;
-	use super::utils::CharPos;
+	use super::utils::{NameToken, CharPos};
+	use super::data_type::DataType;
 	
 	#[test]
 	fn check_err_if_redeclare_variable() {

@@ -1,8 +1,10 @@
 use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp, Keyword, TokenErr};
 use super::InterpErr;
 use super::memory::Memory;
-use super::variable::{Value, DataType};
-use super::function::{BuiltinFuncsDefList, UserFuncArg, UserFuncDef};
+use super::value::Value;
+use super::data_type::DataType;
+use super::builtin_func::BuiltinFuncsDefList;
+use super::user_func::{UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
 use super::statement::FuncKind;
 

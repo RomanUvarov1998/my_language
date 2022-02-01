@@ -1,8 +1,8 @@
 mod scope;
 
 use scope::Scope;
-use super::super::variable::{VarData, VarErr};
-use super::super::function::{UserFuncDef, UserFuncErr};
+use super::super::var_data::{VarData, VarErr};
+use super::super::user_func::{UserFuncDef, UserFuncErr};
 use super::super::utils::NameToken;
 
 #[derive(Debug)]

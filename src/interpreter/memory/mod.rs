@@ -1,10 +1,11 @@
 mod call_stack_frame;
 
 use call_stack_frame::CallStackFrame;
-
-use super::variable::{VarData, DataType, VarErr, Value};
+use super::value::Value;
+use super::data_type::DataType;
+use super::var_data::{VarData, VarErr};
 use super::utils::NameToken;
-use super::function::{UserFuncErr, UserFuncArg, UserFuncDef};
+use super::user_func::{UserFuncErr, UserFuncArg, UserFuncDef};
 use super::statement::ReturningBody;
 
 //----------------------------------- Memory -----------------------

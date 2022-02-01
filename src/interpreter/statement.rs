@@ -1,8 +1,11 @@
 use super::token::*;
 use super::expr::{Expr, ExprContextKind};
-use super::{InterpErr};
-use super::variable::{VarData, DataType, VarErr, Value};
-use super::function::{BuiltinFuncsDefList, BuiltinFuncDef, UserFuncArg, UserFuncDef};
+use super::InterpErr;
+use super::value::Value;
+use super::data_type::DataType;
+use super::var_data::{VarData, VarErr};
+use super::builtin_func::{BuiltinFuncsDefList, BuiltinFuncDef};
+use super::user_func::{UserFuncArg, UserFuncDef};
 use super::memory::Memory;
 use super::utils::{CharPos, CodePos, NameToken};
 
@@ -970,7 +973,7 @@ impl std::fmt::Display for StatementErr {
 mod tests {
 	use super::*;
 	use super::super::*;
-	use super::super::variable::Value;
+	use super::super::value::Value;
 	use super::super::memory::Memory;
 	use super::super::utils::NameToken;
 	
