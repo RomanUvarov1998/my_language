@@ -33,7 +33,7 @@ impl Expr {
 	}
 	
 	pub fn calc(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Value {
-		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len());
+		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len()); // TODO: try to keep symbols instead of values to be able to call member functions
 		
 		for Symbol { kind, pos } in self.expr_stack.iter() {
 			let pos = *pos;
