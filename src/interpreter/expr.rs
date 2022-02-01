@@ -1496,7 +1496,29 @@ mod tests {
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		]);
 		
-		test_expr_and_its_stack_eq("2 * a.foo1(c.foo3() - 3) ^ b.foo2() / d.foo4();", vec![
+		test_expr_and_its_stack_eq("foo1().foo3() + b.foo2();", vec![
+			SymbolKind::Operand (Operand::FuncCall {
+				kind: FuncKind::UserDefined,
+				func_name: new_name_token("foo1"),
+				arg_exprs: Vec::new(),
+			}),
+			SymbolKind::Operand (Operand::FuncCall {
+				kind: FuncKind::UserDefined,
+				func_name: new_name_token("foo3"),
+				arg_exprs: Vec::new(),
+			}),
+			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+			SymbolKind::Operand (Operand::Variable (String::from ("b"))),
+			SymbolKind::Operand (Operand::FuncCall {
+				kind: FuncKind::UserDefined,
+				func_name: new_name_token("foo2"),
+				arg_exprs: Vec::new(),
+			}),
+			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+		]);
+		
+		test_expr_and_its_stack_eq("2 * a.foo1(c.foo3().foo5() - 3) ^ b.foo2() / d.foo4();", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
 			SymbolKind::Operand (Operand::Variable (String::from ("a"))),
 			SymbolKind::Operand (Operand::FuncCall {
@@ -1511,6 +1533,12 @@ mod tests {
 							Symbol { kind: SymbolKind::Operand (Operand::FuncCall {
 								kind: FuncKind::UserDefined,
 								func_name: new_name_token("foo3"),
+								arg_exprs: Vec::new(),
+							}), pos: zero_pos, },
+							Symbol { kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess), pos: zero_pos, },
+							Symbol { kind: SymbolKind::Operand (Operand::FuncCall {
+								kind: FuncKind::UserDefined,
+								func_name: new_name_token("foo5"),
 								arg_exprs: Vec::new(),
 							}), pos: zero_pos, },
 							Symbol { kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess), pos: zero_pos, },
