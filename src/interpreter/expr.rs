@@ -41,7 +41,7 @@ impl Expr {
 				SymbolKind::Operand (opnd) => {
 					let value: Value = match opnd {
 						Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
-						Operand::Name (name) => memory.get_variable_value(&NameToken::new_with_pos(&name, pos)).unwrap().clone(),
+						Operand::Variable (name) => memory.get_variable_value(&NameToken::new_with_pos(&name, pos)).unwrap().clone(),
 						Operand::FuncCall { kind, func_name, arg_exprs } => {
 							match kind {
 								FuncKind::Builtin => {
@@ -113,7 +113,7 @@ impl Expr {
 				SymbolKind::Operand (ref opnd) => {
 					let opnd_dt: DataType = match opnd {
 						Operand::Value (val) => val.get_type(),
-						Operand::Name (name) =>
+						Operand::Variable (name) =>
 							check_memory.get_variable_value(&NameToken::new_with_pos(&name, pos))?.get_type(),
 						Operand::FuncCall { kind, func_name, arg_exprs } => {
 							match kind {
@@ -531,7 +531,7 @@ impl Symbol {
 	}
 	fn new_name(name: String, pos: CodePos) -> Self {
 		Self {
-			kind: SymbolKind::Operand( Operand::Name (name) ),
+			kind: SymbolKind::Operand( Operand::Variable (name) ),
 			pos,
 		}
 	}
@@ -588,7 +588,7 @@ impl PartialEq for Symbol {
 #[derive(Debug, Clone)]
 enum Operand {
 	Value (Value),
-	Name (String),
+	Variable (String),
 	FuncCall {
 		kind: FuncKind,
 		func_name: NameToken, 
@@ -603,8 +603,8 @@ impl PartialEq for Operand {
 				Operand::Value (v2) => v1 == v2,
 				_ => false,
 			},
-			Operand::Name (op1) => match other {
-				Operand::Name (op2) => op1 == op2,
+			Operand::Variable (op1) => match other {
+				Operand::Variable (op2) => op1 == op2,
 				_ => false,
 			},
 			Operand::FuncCall { kind: kind1, func_name: fn1, arg_exprs: ae1 } => match other {
@@ -1419,7 +1419,7 @@ mod tests {
 		let zero_pos = CodePos::from(CharPos::new());
 		
 		test_expr_and_its_stack_eq("a + add(2, 4) + @add(4, 9);", vec![
-			SymbolKind::Operand (Operand::Name (String::from ("a"))),
+			SymbolKind::Operand (Operand::Variable (String::from ("a"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("add"),
@@ -1479,14 +1479,14 @@ mod tests {
 		]);
 		
 		test_expr_and_its_stack_eq("a.foo1() + b.foo2();", vec![
-			SymbolKind::Operand (Operand::Name (String::from ("a"))),
+			SymbolKind::Operand (Operand::Variable (String::from ("a"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo1"),
 				arg_exprs: Vec::new(),
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
-			SymbolKind::Operand (Operand::Name (String::from ("b"))),
+			SymbolKind::Operand (Operand::Variable (String::from ("b"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo2"),
@@ -1498,7 +1498,7 @@ mod tests {
 		
 		test_expr_and_its_stack_eq("2 * a.foo1(c.foo3() - 3) ^ b.foo2() / d.foo4();", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Name (String::from ("a"))),
+			SymbolKind::Operand (Operand::Variable (String::from ("a"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo1"),
@@ -1507,7 +1507,7 @@ mod tests {
 					Expr {
 						pos: zero_pos,
 						expr_stack: vec![						
-							Symbol { kind: SymbolKind::Operand (Operand::Name (String::from ("c"))), pos: zero_pos, },
+							Symbol { kind: SymbolKind::Operand (Operand::Variable (String::from ("c"))), pos: zero_pos, },
 							Symbol { kind: SymbolKind::Operand (Operand::FuncCall {
 								kind: FuncKind::UserDefined,
 								func_name: new_name_token("foo3"),
@@ -1522,7 +1522,7 @@ mod tests {
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
 			
-			SymbolKind::Operand (Operand::Name (String::from ("b"))),
+			SymbolKind::Operand (Operand::Variable (String::from ("b"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo2"),
@@ -1534,7 +1534,7 @@ mod tests {
 			
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 			
-			SymbolKind::Operand (Operand::Name (String::from ("d"))),
+			SymbolKind::Operand (Operand::Variable (String::from ("d"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo4"),
