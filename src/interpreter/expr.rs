@@ -189,11 +189,19 @@ impl Expr {
 				},
 				
 				TokenContent::BuiltinName (name) => {
+					if prev_is_operand {
+						return Err(unexpected(pos));
+					}
+					
 					let sym = Self::parse_func_call_or_name(FuncKind::Builtin, &mut prev_is_operand, tokens_iter, name, pos)?;
 					expr_stack.push(sym);
 				},
 				
 				TokenContent::Name (name) => {
+					if prev_is_operand {
+						return Err(unexpected(pos));
+					}
+					
 					let sym = Self::parse_func_call_or_name(FuncKind::UserDefined, &mut prev_is_operand, tokens_iter, name, pos)?;
 					expr_stack.push(sym);
 				},
@@ -209,13 +217,13 @@ impl Expr {
 					prev_is_operand = true;					
 				},
 				
-				TokenContent::Operator (tok_op) => {					
+				TokenContent::Operator (ref tok_op) => {
 					match tok_op {
 						Operator::Plus | Operator::Minus => {
 							if prev_is_operand {
-								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, pos, tok_op)?;
+								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, pos, content)?;
 							} else {
-								tmp_stack.push(Symbol::new_un_pref_op(tok_op, pos));
+								tmp_stack.push(Symbol::new_un_pref_op(content, pos));
 							}
 						},
 						Operator::Mul 
@@ -232,7 +240,7 @@ impl Expr {
 							| Operator::LogicalOr
 							| Operator::LogicalXor
 							=> {
-								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, pos, tok_op)?;
+								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, pos, content)?;
 						},
 						Operator::Assign => return Err(unexpected(pos)),
 					};
@@ -258,13 +266,23 @@ impl Expr {
 						Keyword::F | 
 						Keyword::Return => return Err(unexpected(pos)),
 					Keyword::True | Keyword::False => {
+						if prev_is_operand {
+							return Err(unexpected(pos));
+						}
+						
 						let sym = Symbol::new_bool_literal(kw, pos);
 						expr_stack.push(sym);
 						prev_is_operand = true;
 					},
 				},
 				
-				TokenContent::StatementOp (..) => unreachable!(),
+				TokenContent::StatementOp (ref st_op) => match st_op {
+					StatementOp::Dot => {
+						Self::add_bin_op(&mut expr_stack, &mut tmp_stack, pos, content)?;
+						prev_is_operand = false;
+					},
+					_ => return Err(unexpected(pos)),
+				},
 			}
 		}
 		
@@ -282,10 +300,10 @@ impl Expr {
 	fn add_bin_op(
 		expr_stack: &mut Vec<Symbol>, 
 		tmp_stack: &mut Vec<Symbol>, 
-		pos: CodePos, op: Operator
+		pos: CodePos, tc: TokenContent
 		) -> Result<(), InterpErr> 
 	{
-		let next_kind = ExprOperator::new_bin(op);
+		let next_kind = ExprOperator::new_bin(tc);
 		
 		use std::cmp::Ordering;
 		
@@ -440,7 +458,7 @@ impl ExprContext {
 			TokenContent::Bracket (_) 
 				=> self.check_brackets(tok),
 			TokenContent::StatementOp (st_op) => match st_op {
-				StatementOp::Dot => todo!(),
+				StatementOp::Dot => Ok(false),
 				StatementOp::Colon | StatementOp::Comment (_) | StatementOp::ThinArrow => Err(unexpected(tok.pos())),
 				StatementOp::Comma => match self.kind {
 					ExprContextKind::ValueToAssign | ExprContextKind::IfCondition | ExprContextKind::ToReturn => Err(unexpected(tok.pos())),
@@ -548,9 +566,9 @@ impl Symbol {
 			pos,
 		}
 	}
-	fn new_un_pref_op(op: Operator, pos: CodePos) -> Self {
+	fn new_un_pref_op(tc: TokenContent, pos: CodePos) -> Self {
 		Self { 
-			kind: SymbolKind::ExprOperator( ExprOperator::new_un_pref(op) ), 
+			kind: SymbolKind::ExprOperator( ExprOperator::new_un_pref(tc) ), 
 			pos,
 		}
 	}
@@ -623,6 +641,8 @@ enum ExprOperator {
 	Not,
 	
 	Pow,
+	
+	DotMemberAccess,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -644,7 +664,7 @@ enum OpAssot {
 	Right,
 }
 
-static OP_ATTRS: [OpInfo; 17] = [
+static OP_ATTRS: [OpInfo; 18] = [
 	OpInfo { arity: OpArity::Binary, rank: 0, assot: OpAssot::Left },		//LogicalOr
 	OpInfo { arity: OpArity::Binary, rank: 1, assot: OpAssot::Left },		//LogicalAnd
 	OpInfo { arity: OpArity::Binary, rank: 2, assot: OpAssot::Left },		//LogicalXor
@@ -668,49 +688,61 @@ static OP_ATTRS: [OpInfo; 17] = [
 	OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left },		//Not
 	
 	OpInfo { arity: OpArity::Binary, rank: 8, assot: OpAssot::Right }, 	//Pow
+	
+	OpInfo { arity: OpArity::Binary, rank: 9, assot: OpAssot::Left }, 	//Dot
 ];
 
 impl ExprOperator {
-	fn new_bin(op: Operator) -> Self {
-		match op {
-			Operator::Plus => ExprOperator::BinPlus,
-			Operator::Minus => ExprOperator::BinMinus,
-			Operator::Mul => ExprOperator::Mul,
-			Operator::Div => ExprOperator::Div,
-			Operator::Pow => ExprOperator::Pow,
-			Operator::Equal => ExprOperator::Equal,
-			Operator::Greater => ExprOperator::Greater,
-			Operator::GreaterEqual => ExprOperator::GreaterEqual,
-			Operator::Less => ExprOperator::Less,
-			Operator::LessEqual => ExprOperator::LessEqual,
-			Operator::NotEqual => ExprOperator::NotEqual,
-			Operator::LogicalAnd => ExprOperator::LogicalAnd,
-			Operator::LogicalOr => ExprOperator::LogicalOr,
-			Operator::LogicalXor => ExprOperator::LogicalXor,
-			Operator::Not => ExprOperator::Not,
-			Operator::Assign => unreachable!(),
+	fn new_bin(tc: TokenContent) -> Self {
+		match tc {
+			TokenContent::Operator (ref tok_op) => match tok_op {
+				Operator::Plus => ExprOperator::BinPlus,
+				Operator::Minus => ExprOperator::BinMinus,
+				Operator::Mul => ExprOperator::Mul,
+				Operator::Div => ExprOperator::Div,
+				Operator::Pow => ExprOperator::Pow,
+				Operator::Equal => ExprOperator::Equal,
+				Operator::Greater => ExprOperator::Greater,
+				Operator::GreaterEqual => ExprOperator::GreaterEqual,
+				Operator::Less => ExprOperator::Less,
+				Operator::LessEqual => ExprOperator::LessEqual,
+				Operator::NotEqual => ExprOperator::NotEqual,
+				Operator::LogicalAnd => ExprOperator::LogicalAnd,
+				Operator::LogicalOr => ExprOperator::LogicalOr,
+				Operator::LogicalXor => ExprOperator::LogicalXor,
+				Operator::Not => ExprOperator::Not,
+				Operator::Assign => panic!("Wrong input: {:?}", tc),
+			},
+			TokenContent::StatementOp (ref st_op) => match st_op {
+				StatementOp::Dot => ExprOperator::DotMemberAccess,
+				_ => panic!("Wrong input: {:?}", tc),
+			},
+			_ => panic!("Wrong input: {:?}", tc),
 		}
 	}
 	
-	fn new_un_pref(op: Operator) -> Self {
-		match op {
-			Operator::Plus => ExprOperator::UnPlus,
-			Operator::Minus => ExprOperator::UnMinus,
-			Operator::Mul 
-				| Operator::Div 
-				| Operator::Equal 
-				| Operator::Assign 
-				| Operator::Pow 
-				| Operator::Greater 
-				| Operator::GreaterEqual
-				| Operator::Less 
-				| Operator::LessEqual 
-				| Operator::NotEqual
-				| Operator::Not
-				| Operator::LogicalAnd
-				| Operator::LogicalOr
-				| Operator::LogicalXor
-				=> unreachable!(),
+	fn new_un_pref(tc: TokenContent) -> Self {
+		match tc {
+			TokenContent::Operator (tok_op) => match tok_op {
+				Operator::Plus => ExprOperator::UnPlus,
+				Operator::Minus => ExprOperator::UnMinus,
+				Operator::Mul 
+					| Operator::Div 
+					| Operator::Equal 
+					| Operator::Assign 
+					| Operator::Pow 
+					| Operator::Greater 
+					| Operator::GreaterEqual
+					| Operator::Less 
+					| Operator::LessEqual 
+					| Operator::NotEqual
+					| Operator::Not
+					| Operator::LogicalAnd
+					| Operator::LogicalOr
+					| Operator::LogicalXor
+				=> panic!("Wrong input: {:?}", tc),
+			},
+			_ => panic!("Wrong input: {:?}", tc),
 		}
 	}
 	
@@ -742,6 +774,7 @@ impl ExprOperator {
 			LogicalAnd => self.apply_logical_and(calc_stack),
 			LogicalOr => self.apply_logical_or(calc_stack),
 			LogicalXor => self.apply_logical_xor(calc_stack),
+			DotMemberAccess => todo!(),
 		}
 	}
 	
@@ -765,6 +798,7 @@ impl ExprOperator {
 			LogicalAnd => self.get_logical_and_result_type(calc_stack),
 			LogicalOr => self.get_logical_or_result_type(calc_stack),
 			LogicalXor => self.get_logical_xor_result_type(calc_stack),
+			DotMemberAccess => todo!(),
 		}
 	}
 	
@@ -1228,6 +1262,10 @@ mod tests {
 		assert_eq!(
 			OP_ATTRS[ExprOperator::Pow as usize], 
 			OpInfo { arity: OpArity::Binary, rank: 8, assot: OpAssot::Right });
+			
+		assert_eq!(
+			OP_ATTRS[ExprOperator::DotMemberAccess as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 9, assot: OpAssot::Left });
 	}
 	
 	#[test]
@@ -1438,6 +1476,73 @@ mod tests {
 				],
 			}),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+		]);
+		
+		test_expr_and_its_stack_eq("a.foo1() + b.foo2();", vec![
+			SymbolKind::Operand (Operand::Name (String::from ("a"))),
+			SymbolKind::Operand (Operand::FuncCall {
+				kind: FuncKind::UserDefined,
+				func_name: new_name_token("foo1"),
+				arg_exprs: Vec::new(),
+			}),
+			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+			SymbolKind::Operand (Operand::Name (String::from ("b"))),
+			SymbolKind::Operand (Operand::FuncCall {
+				kind: FuncKind::UserDefined,
+				func_name: new_name_token("foo2"),
+				arg_exprs: Vec::new(),
+			}),
+			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+		]);
+		
+		test_expr_and_its_stack_eq("2 * a.foo1(c.foo3() - 3) ^ b.foo2() / d.foo4();", vec![
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Name (String::from ("a"))),
+			SymbolKind::Operand (Operand::FuncCall {
+				kind: FuncKind::UserDefined,
+				func_name: new_name_token("foo1"),
+				arg_exprs: vec![
+					// arg 1
+					Expr {
+						pos: zero_pos,
+						expr_stack: vec![						
+							Symbol { kind: SymbolKind::Operand (Operand::Name (String::from ("c"))), pos: zero_pos, },
+							Symbol { kind: SymbolKind::Operand (Operand::FuncCall {
+								kind: FuncKind::UserDefined,
+								func_name: new_name_token("foo3"),
+								arg_exprs: Vec::new(),
+							}), pos: zero_pos, },
+							Symbol { kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess), pos: zero_pos, },
+							Symbol { kind: SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))), pos: zero_pos, },
+							Symbol { kind: SymbolKind::ExprOperator (ExprOperator::BinMinus), pos: zero_pos, },
+						],
+					},
+				],
+			}),
+			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+			
+			SymbolKind::Operand (Operand::Name (String::from ("b"))),
+			SymbolKind::Operand (Operand::FuncCall {
+				kind: FuncKind::UserDefined,
+				func_name: new_name_token("foo2"),
+				arg_exprs: Vec::new(),
+			}),
+			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+
+			SymbolKind::ExprOperator (ExprOperator::Pow),
+			
+			SymbolKind::ExprOperator (ExprOperator::Mul),
+			
+			SymbolKind::Operand (Operand::Name (String::from ("d"))),
+			SymbolKind::Operand (Operand::FuncCall {
+				kind: FuncKind::UserDefined,
+				func_name: new_name_token("foo4"),
+				arg_exprs: Vec::new(),
+			}),
+			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+			
+			SymbolKind::ExprOperator (ExprOperator::Div),
 		]);
 	}
 	
