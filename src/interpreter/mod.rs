@@ -6,6 +6,7 @@ mod statement;
 mod var_data;
 mod data_type;
 mod value;
+mod struct_def;
 mod builtin_func;
 mod user_func;
 mod utils;

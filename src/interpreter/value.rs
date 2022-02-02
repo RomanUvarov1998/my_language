@@ -5,8 +5,24 @@ pub enum Value {
 	Float32 (f32),
 	String (String),
 	Bool (bool),
+	Struct {
+		data_type: DataType,
+		fields: Vec<Value>,
+	},
 	None,
 	// TODO: add struct
+}
+
+impl Value {
+	pub fn get_type(&self) -> DataType {
+		match self {
+			Value::Float32 (_) => DataType::Float32,
+			Value::String (_) => DataType::String,
+			Value::Bool (_) => DataType::Bool,
+			Value::Struct { data_type, .. } => *data_type,
+			Value::None => DataType::None,
+		}
+	}
 }
 
 impl Eq for Value {}
@@ -24,6 +40,10 @@ impl PartialEq for Value {
 			},
 			Value::Bool (b1) => match other {
 				Value::Bool (b2) => b1 == b2,
+				_ => false,
+			},
+			Value::Struct { data_type: data_type1, .. } => match other {
+				Value::Struct { data_type: data_type2, .. } => data_type1 == data_type2,
 				_ => false,
 			},
 			Value::None => match other {
@@ -44,18 +64,8 @@ impl std::fmt::Display for Value {
 			} else {
 				write!(f, "False")
 			},
+			Value::Struct { data_type, .. } => write!(f, "Struct '{}'", data_type),
 			Value::None => write!(f, "None"),
-		}
-	}
-}
-
-impl Value {
-	pub fn get_type(&self) -> DataType {
-		match self {
-			Value::Float32 (_) => DataType::Float32,
-			Value::String (_) => DataType::String,		
-			Value::Bool (_) => DataType::Bool,		
-			Value::None => DataType::None,		
 		}
 	}
 }
