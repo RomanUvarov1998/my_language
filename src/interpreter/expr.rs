@@ -35,69 +35,28 @@ impl Expr {
 	}
 	
 	pub fn calc(&self, context: &Context) -> Value {
-		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len()); // TODO: try to keep symbols instead of values to be able to call member functions
+		let mut calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
 		
-		for Symbol { kind, pos } in self.expr_stack.iter() {
-			let pos = *pos;
-			match kind {
-				SymbolKind::Operand (opnd) => {
-					let value: Value = match opnd {
-						Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
-						Operand::Variable (name) => context.get_variable_value(&NameToken::new_with_pos(&name, pos)).unwrap().clone(),
-						Operand::FuncCall { kind, func_name, arg_exprs } => {
-							match kind {
-								FuncKind::Builtin => {
-									let f: &BuiltinFuncDef = context.find_builtin_func_def(&func_name).unwrap();
-							
-									let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
-									
-									for expr in arg_exprs {
-										let value: Value = expr.calc(context);
-										args_values.push(value);
-									}
-									
-									f.call(args_values).unwrap()
-								},
-								FuncKind::UserDefined => {
-									let f: &UserFuncDef = context.find_func_def(&func_name).unwrap();
-							
-									let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
-									
-									for expr in arg_exprs {
-										let value: Value = expr.calc(context);
-										args_values.push(value);
-									}
-									
-									let mut next_context = context.new_stack_frame_context();
-									
-									let func_args: &Vec<UserFuncArg> = f.args();
-									for i in 0..args_values.len() {
-										next_context.add_variable(
-											func_args[i].name().clone(),
-											func_args[i].data_type().clone(),
-											Some(args_values[i].clone())).unwrap();
-									}
-									
-									let value: Value = f.call(&mut next_context).unwrap();
-									
-									value
-								},
-							}
-						},
-					};
-					calc_stack.push(value);
-				},
+		for sym in self.expr_stack.iter() {
+			match &sym.kind {
+				SymbolKind::Operand (_) => calc_stack.push(sym.clone()), // TODO: avoid cloning symbols
 				
 				SymbolKind::LeftBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => {
-					let value: Value = op.apply(&mut calc_stack).unwrap();
-					calc_stack.push(value);
+					let value: Value = op.apply(&mut calc_stack, context);
+					calc_stack.push(Symbol { 
+						pos: sym.pos, 
+						kind: SymbolKind::Operand (Operand::Value(value)),
+					}); // TODO: somehow place DataType here, not a massive symbol
 				},
 			}
 		}
 		
-		let result: Value = calc_stack.pop().unwrap();
+		let result: Value = calc_stack.pop()
+			.unwrap()
+			.unwrap_operand()
+			.calc_in_place(context);
 		assert_eq!(calc_stack.pop(), None);
 		
 		result
@@ -629,6 +588,51 @@ impl Operand {
 		};
 		Ok(dt)
 	}
+	
+	fn calc_in_place(&self, context: &Context) -> Value {
+		match self {
+			Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
+			Operand::Variable (name) => context.get_variable_value(&NameToken::new_with_pos(&name, CodePos::from(CharPos::new()))).unwrap().clone(), // TODO: use NameToken::pos() here
+			Operand::FuncCall { kind, func_name, arg_exprs } => {
+				match kind {
+					FuncKind::Builtin => {
+						let f: &BuiltinFuncDef = context.find_builtin_func_def(&func_name).unwrap();
+				
+						let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
+						
+						for expr in arg_exprs {
+							let value: Value = expr.calc(context);
+							args_values.push(value);
+						}
+						
+						f.call(args_values).unwrap()
+					},
+					FuncKind::UserDefined => {
+						let f: &UserFuncDef = context.find_func_def(&func_name).unwrap();
+				
+						let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
+						
+						for expr in arg_exprs {
+							let value: Value = expr.calc(context);
+							args_values.push(value);
+						}
+						
+						let mut next_context = context.new_stack_frame_context();
+						
+						let func_args: &Vec<UserFuncArg> = f.args();
+						for i in 0..args_values.len() {
+							next_context.add_variable(
+								func_args[i].name().clone(),
+								func_args[i].data_type().clone(),
+								Some(args_values[i].clone())).unwrap();
+						}
+						
+						f.call(&mut next_context).unwrap()
+					},
+				}
+			},
+		}
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -770,27 +774,89 @@ impl ExprOperator {
 		OP_ATTRS[*self as usize].assot
 	}
 
-	fn apply(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {	
+	fn apply(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {	
 		use ExprOperator::*;
-		match self {
-			BinPlus => self.apply_bin_plus(calc_stack),
-			BinMinus => self.apply_bin_minus(calc_stack),
-			Div => self.apply_bin_div(calc_stack),
-			Mul => self.apply_bin_mul(calc_stack),
-			Pow => self.apply_bin_pow(calc_stack),
-			UnPlus => self.apply_unary_plus(calc_stack),
-			UnMinus => self.apply_unary_minus(calc_stack),
-			Equal => self.apply_equal(calc_stack),
-			NotEqual => self.apply_not_equal(calc_stack),
-			Not => self.apply_not(calc_stack),
-			Greater => self.apply_greater(calc_stack),
-			GreaterEqual => self.apply_greater_equal(calc_stack),
-			Less => self.apply_less(calc_stack),
-			LessEqual => self.apply_less_equal(calc_stack),
-			LogicalAnd => self.apply_logical_and(calc_stack),
-			LogicalOr => self.apply_logical_or(calc_stack),
-			LogicalXor => self.apply_logical_xor(calc_stack),
-			DotMemberAccess => todo!(),
+		
+		if let DotMemberAccess = self {
+			let rhs: Symbol = calc_stack
+				.pop()
+				.unwrap();
+				
+			let lhs: Symbol = calc_stack
+				.pop()
+				.unwrap();
+			
+			match (lhs.kind, rhs.kind) {
+				(SymbolKind::Operand (Operand::Value (ref value)), SymbolKind::Operand (Operand::FuncCall {
+					ref kind,
+					ref func_name,
+					ref arg_exprs,
+				})) => {
+					match kind {
+						FuncKind::Builtin => {
+							let func_def: &BuiltinFuncDef = value.get_type()
+								.find_member_builtin_func(&func_name, context).unwrap();
+							
+							let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
+							args_values.push(value.clone());
+							for expr in arg_exprs {
+								let value: Value = expr.calc(context);
+								args_values.push(value);
+							}
+							
+							return func_def.call(args_values).unwrap();
+						},
+						
+						FuncKind::UserDefined => todo!(),
+					}
+				},
+				(SymbolKind::Operand (Operand::Variable (ref var_name)), SymbolKind::Operand (Operand::FuncCall {
+					ref kind,
+					ref func_name,
+					ref arg_exprs,
+				})) => {
+					let value: &Value = context.get_variable_value(&NameToken::new_with_pos(var_name, CodePos::from(CharPos::new()))).unwrap(); // TODO: use NameToken instead of string
+					match kind {
+						FuncKind::Builtin => {
+							let func_def: &BuiltinFuncDef = value.get_type()
+								.find_member_builtin_func(&func_name, context).unwrap();
+							
+							let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
+							args_values.push(value.clone());
+							for expr in arg_exprs {
+								let value: Value = expr.calc(context);
+								args_values.push(value);
+							}
+							
+							return func_def.call(args_values).unwrap();
+						},
+						
+						FuncKind::UserDefined => todo!(),
+					}
+				},
+				_ => todo!(),
+			}
+		} else {
+			match self {
+				BinPlus => self.apply_bin_plus(calc_stack, context),
+				BinMinus => self.apply_bin_minus(calc_stack, context),
+				Div => self.apply_bin_div(calc_stack, context),
+				Mul => self.apply_bin_mul(calc_stack, context),
+				Pow => self.apply_bin_pow(calc_stack, context),
+				UnPlus => self.apply_unary_plus(calc_stack, context),
+				UnMinus => self.apply_unary_minus(calc_stack, context),
+				Equal => self.apply_equal(calc_stack, context),
+				NotEqual => self.apply_not_equal(calc_stack, context),
+				Not => self.apply_not(calc_stack, context),
+				Greater => self.apply_greater(calc_stack, context),
+				GreaterEqual => self.apply_greater_equal(calc_stack, context),
+				Less => self.apply_less(calc_stack, context),
+				LessEqual => self.apply_less_equal(calc_stack, context),
+				LogicalAnd => self.apply_logical_and(calc_stack, context),
+				LogicalOr => self.apply_logical_or(calc_stack, context),
+				LogicalXor => self.apply_logical_xor(calc_stack, context),
+				DotMemberAccess => todo!(),
+			}
 		}
 	}
 	
@@ -876,180 +942,181 @@ impl ExprOperator {
 		}
 	}
 	
-	fn apply_bin_plus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	
+	fn apply_bin_plus(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 + val2)),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Float32(val1 + val2),
 			(Value::String (val1), Value::String (val2)) => {
 				let mut res: String = val1.clone();
 				res.push_str(&val2);
-				Ok(Value::String(res))
+				Value::String(res)
 			},
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 	
-	fn apply_bin_minus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_bin_minus(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 - val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Float32(val1 - val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 	
-	fn apply_bin_mul(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_bin_mul(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 * val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Float32(val1 * val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 	
-	fn apply_bin_div(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_bin_div(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 / val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Float32(val1 / val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 	
-	fn apply_bin_pow(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_bin_pow(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1.powf(val2))),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Float32(val1.powf(val2)),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 	
-	fn apply_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_equal(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 == val2)),
-			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 == val2)),
-			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 == val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Bool(val1 == val2),
+			(Value::String (val1), Value::String (val2)) => Value::Bool(val1 == val2),
+			(Value::Bool (val1), Value::Bool (val2)) => Value::Bool(val1 == val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 
-	fn apply_not_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_not_equal(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 != val2)),
-			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 != val2)),
-			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 != val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Bool(val1 != val2),
+			(Value::String (val1), Value::String (val2)) => Value::Bool(val1 != val2),
+			(Value::Bool (val1), Value::Bool (val2)) => Value::Bool(val1 != val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 
-	fn apply_greater(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_greater(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 > val2)),
-			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 > val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Bool(val1 > val2),
+			(Value::String (val1), Value::String (val2)) => Value::Bool(val1 > val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 
-	fn apply_greater_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_greater_equal(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 >= val2)),
-			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 >= val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Bool(val1 >= val2),
+			(Value::String (val1), Value::String (val2)) => Value::Bool(val1 >= val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 
-	fn apply_less(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_less(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 < val2)),
-			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 < val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Bool(val1 < val2),
+			(Value::String (val1), Value::String (val2)) => Value::Bool(val1 < val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 
-	fn apply_less_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_less_equal(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 <= val2)),
-			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 <= val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Bool(val1 <= val2),
+			(Value::String (val1), Value::String (val2)) => Value::Bool(val1 <= val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 
-	fn apply_logical_and(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_logical_and(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 && val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Bool (val1), Value::Bool (val2)) => Value::Bool(val1 && val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 
-	fn apply_logical_or(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_logical_or(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 || val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Bool (val1), Value::Bool (val2)) => Value::Bool(val1 || val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 
-	fn apply_logical_xor(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
+	fn apply_logical_xor(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 ^ val2)),
-			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
+			(Value::Bool (val1), Value::Bool (val2)) => Value::Bool(val1 ^ val2),
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
 	
-	fn take_2_values(calc_stack: &mut Vec<Value>) -> Result<(Value, Value), OperatorErr> {
+	fn take_2_values(calc_stack: &mut Vec<Symbol>, context: &Context) -> (Value, Value) {
 		let rhs: Value = calc_stack
 			.pop()
-			.ok_or(OperatorErr::NotEnoughOperands { 
-				provided_cnt: 0,
-				required_cnt: 2, 
-			} )?;
+			.unwrap()
+			.unwrap_operand()
+			.calc_in_place(context);
+			
 		let lhs: Value = calc_stack
 			.pop()
-			.ok_or(OperatorErr::NotEnoughOperands { 
-				provided_cnt: 1,
-				required_cnt: 2, 
-			} )?;
-		Ok((lhs, rhs))
+			.unwrap()
+			.unwrap_operand()
+			.calc_in_place(context);
+			
+		(lhs, rhs)
 	}
 	
 	
-	fn apply_unary_plus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let op = Self::take_1_value(calc_stack)?;
+	fn apply_unary_plus(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let op: Value = Self::take_1_value(calc_stack, context);
 		match op {
-			Value::Float32 (val1) => Ok(Value::Float32(val1)),
-			_ => return Err( self.create_value_type_err(&[&op]) ),
+			Value::Float32 (val1) => Value::Float32(val1),
+			_ => panic!("Wrong type {:?} for operand {:?}", op, self),
 		}
 	}
 	
-	fn apply_unary_minus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let op = Self::take_1_value(calc_stack)?;
+	fn apply_unary_minus(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let op: Value = Self::take_1_value(calc_stack, context);
 		match op {
-			Value::Float32 (val1) => Ok(Value::Float32(-val1)),
-			_ => return Err( self.create_value_type_err(&[&op]) ),
+			Value::Float32 (val1) => Value::Float32(-val1),
+			_ => panic!("Wrong type {:?} for operand {:?}", op, self),
 		}
 	}
 	
-	fn apply_not(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let op = Self::take_1_value(calc_stack)?;
+	fn apply_not(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let op: Value = Self::take_1_value(calc_stack, context);
 		match op {
-			Value::Bool (val1) => Ok(Value::Bool(!val1)),
-			_ => return Err( self.create_value_type_err(&[&op]) ),
+			Value::Bool (val1) => Value::Bool(!val1),
+			_ => panic!("Wrong type {:?} for operand {:?}", op, self),
 		}
 	}
 	
-	fn take_1_value(calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+	fn take_1_value(calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
 		let op: Value = calc_stack
 			.pop()
-			.ok_or(OperatorErr::NotEnoughOperands { 
-				provided_cnt: 0,
-				required_cnt: 1, 
-			} )?;
-		Ok(op)
+			.unwrap()
+			.unwrap_operand()
+			.calc_in_place(context);
+		
+		op
 	}
 	
 	fn create_value_type_err(&self, values: &[&Value]) -> OperatorErr {
