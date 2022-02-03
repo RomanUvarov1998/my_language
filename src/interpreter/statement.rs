@@ -248,26 +248,30 @@ impl StatementsIter {
 		self.tokens_iter.next_expect_left_bracket()?;
 		
 		let mut args = Vec::<UserFuncArg>::new();
-		loop {
-			let arg_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
-			
-			self.tokens_iter.next_expect_colon()?;
-			
-			let type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
-			let data_type: DataType = self.parse_data_type(&type_name)?;
-			
-			args.push(UserFuncArg::new(arg_name, data_type));
-			
-			match self.tokens_iter.next_or_end_reached_err()? {
-				Token { content: TokenContent::StatementOp (StatementOp::Comma), .. } => continue,
-				Token { content: TokenContent::Bracket (Bracket::Right), .. } => break,
-				found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound {
-					expected: vec![
-						TokenContent::StatementOp (StatementOp::Comma),
-						TokenContent::Bracket (Bracket::Right),
-					],
-					found,
-				} ) ),
+		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_end_reached_err()?.content() {
+			self.tokens_iter.next_or_end_reached_err().unwrap();
+		} else {
+			loop {
+				let arg_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
+				
+				self.tokens_iter.next_expect_colon()?;
+				
+				let type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
+				let data_type: DataType = self.parse_data_type(&type_name)?;
+				
+				args.push(UserFuncArg::new(arg_name, data_type));
+				
+				match self.tokens_iter.next_or_end_reached_err()? {
+					Token { content: TokenContent::StatementOp (StatementOp::Comma), .. } => continue,
+					Token { content: TokenContent::Bracket (Bracket::Right), .. } => break,
+					found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound {
+						expected: vec![
+							TokenContent::StatementOp (StatementOp::Comma),
+							TokenContent::Bracket (Bracket::Right),
+						],
+						found,
+					} ) ),
+				}
 			}
 		}
 		
@@ -830,7 +834,7 @@ impl ReturningBody {
 			}
 		}
 		
-		if !has_return {
+		if !has_return && return_type.ne(&DataType::Primitive (Primitive::None)) {
 			return Err( InterpErr::from(StatementErr::UserFuncNotAllFuncPathsReturn {
 				last_statement_pos: CodePos::from(CharPos::new()),
 			}) );
