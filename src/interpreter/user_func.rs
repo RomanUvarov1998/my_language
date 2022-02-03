@@ -43,13 +43,13 @@ impl UserFuncDef {
 		let args_data_types: Vec<DataType> = args_data_types_result?;
 		
 		for i in 0..self.args.len() {
-			if !self.args[i].type_check(args_data_types[i]) {
+			if !self.args[i].type_check(&args_data_types[i]) {
 				return Err( InterpErr::from( UserFuncErr::ArgType {
 					func_signature: format!("{}", self),
 					arg_name: self.args[i].name.clone(),
 					arg_expr_pos: args_exprs[i].pos(),
-					actual_type: self.args[i].data_type,
-					given_type: args_data_types[i],
+					actual_type: self.args[i].data_type.clone(),
+					given_type: args_data_types[i].clone(),
 				} ) );
 			}
 		}
@@ -69,8 +69,8 @@ impl UserFuncDef {
 		&self.name
 	}
 
-	pub fn return_type(&self) -> DataType {
-		self.return_type
+	pub fn return_type(&self) -> &DataType {
+		&self.return_type
 	}
 }
 
@@ -89,7 +89,7 @@ impl std::fmt::Display for UserFuncDef {
 			}
 		}
 		
-		match self.return_type {
+		match &self.return_type {
 			DataType::None => write!(f, ")"),
 			dt @ _ => write!(f, ") -> {}", dt),
 		}
@@ -116,14 +116,14 @@ impl UserFuncArg {
 		&self.name
 	}
 	
-	pub fn data_type(&self) -> DataType {
-		self.data_type
+	pub fn data_type(&self) -> &DataType {
+		&self.data_type
 	}
 
-	pub fn type_check(&self, data_type: DataType) -> bool {
-		match self.data_type {
+	pub fn type_check(&self, data_type: &DataType) -> bool {
+		match &self.data_type {
 			DataType::Any => true,
-			_ => self.data_type == data_type,
+			_ => self.data_type.eq(data_type),
 		}
 	}
 }

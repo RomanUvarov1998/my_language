@@ -112,10 +112,10 @@ mod tests {
 		
 		context.add_variable(nt_a.clone(), DataType::Float32, None).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Err(VarErr::NotSet { name: nt_a.clone() }));
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
 		context.set_variable(&nt_a, Value::from(1_f32)).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(1_f32)));
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
 		
 		assert_eq!(
 			context.add_variable(nt_a.clone(), DataType::Float32, None),
@@ -124,10 +124,10 @@ mod tests {
 		context.push_scope();
 		context.add_variable(nt_a.clone(), DataType::Float32, None).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Err(VarErr::NotSet { name: nt_a.clone() }));		
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
 		context.set_variable(&nt_a, Value::from(3_f32)).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(3_f32)));
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
 		
 		assert_eq!(
 			context.add_variable(nt_a.clone(), DataType::Float32, None),
@@ -135,13 +135,13 @@ mod tests {
 			
 		context.add_variable(nt_b.clone(), DataType::Float32, None).unwrap();
 		assert_eq!(context.get_variable_value(&nt_b), Err(VarErr::NotSet { name: nt_b.clone() }));		
-		assert_eq!(context.get_variable_mut(&nt_b).unwrap().get_type(), DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_b).unwrap().get_type(), &DataType::Float32);
 		context.set_variable(&nt_b, Value::from(5_f32)).unwrap();
 		assert_eq!(context.get_variable_value(&nt_b), Ok(&Value::Float32(5_f32)));
-		assert_eq!(context.get_variable_mut(&nt_b).unwrap().get_type(), DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_b).unwrap().get_type(), &DataType::Float32);
 		
 		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(3_f32)));
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
 			
 		context.pop_scope();	
 		assert_eq!(
@@ -152,7 +152,7 @@ mod tests {
 			Err( VarErr::NotDefined { name: nt_b.clone() } ));	
 		
 		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(1_f32)));
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
 	}
 	
 	#[test]
@@ -166,7 +166,7 @@ mod tests {
 		
 		assert_eq!(context.get_variable_value(&nt), Ok(&Value::Float32(2_f32)));
 		
-		assert_eq!(context.get_variable_mut(&nt).unwrap().get_type(), DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt).unwrap().get_type(), &DataType::Float32);
 	}
 
 	fn new_name_token(name: &str) -> NameToken {

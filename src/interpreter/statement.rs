@@ -432,17 +432,17 @@ impl Statement {
 			StatementKind::Comment (_) => {},
 				
 			StatementKind::VariableDeclare { var_name, data_type } => {
-					check_context.add_variable(var_name.clone(), *data_type,  None)?;
+					check_context.add_variable(var_name.clone(), data_type.clone(),  None)?;
 				},
 					
 			StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
-				check_context.add_variable(var_name.clone(), *data_type, Some(data_type.default_value()))?;
+				check_context.add_variable(var_name.clone(), data_type.clone(), Some(data_type.default_value()))?;
 				
 				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_context)?;
-				if *data_type != expr_data_type {
+				if data_type.clone() != expr_data_type {
 					return Err(InterpErr::from(VarErr::WrongType { 
 						value_data_type: expr_data_type, 
-						variable_type: *data_type,
+						variable_type: data_type.clone(),
 						var_name: var_name.clone(),
 					}));
 				}
@@ -453,12 +453,12 @@ impl Statement {
 				let var_def: &mut VarData = check_context.get_variable_mut(var_name)?;
 				var_def.set(expr_data_type.default_value())?;
 				
-				let variable_type: DataType = var_def.get_type();
+				let variable_type: &DataType = var_def.get_type();
 				
-				if variable_type != expr_data_type {
+				if variable_type.ne(&expr_data_type) {
 					return Err(InterpErr::from(VarErr::WrongType { 
 						value_data_type: expr_data_type, 
-						variable_type,
+						variable_type: variable_type.clone(),
 						var_name: var_name.clone(),
 					}));
 				}
@@ -475,7 +475,7 @@ impl Statement {
 						for i in 0..arg_exprs.len() {
 							next_check_context.add_variable(
 								func_args[i].name().clone(),
-								func_args[i].data_type(),
+								func_args[i].data_type().clone(),
 								Some(func_args[i].data_type().default_value()))?;
 						}
 						func_def.check_args(arg_exprs, &next_check_context)?;
@@ -490,18 +490,18 @@ impl Statement {
 			},
 			
 			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
-				check_context.add_user_func(name.clone(), args.clone(), *return_type, body.clone())?;
+				check_context.add_user_func(name.clone(), args.clone(), return_type.clone(), body.clone())?;
 				
 				let mut next_check_context = check_context.new_stack_frame_context();
 				
 				for arg_ref in args.iter() {
 					next_check_context.add_variable(
 						arg_ref.name().clone(), 
-						arg_ref.data_type(),
+						arg_ref.data_type().clone(),
 						Some(arg_ref.data_type().default_value()))?;
 				}
 				
-				body.check(*return_type, &mut next_check_context)?;
+				body.check(return_type, &mut next_check_context)?;
 			},
 			
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
@@ -527,13 +527,13 @@ impl Statement {
 			StatementKind::Comment (_) => {},
 			
 			StatementKind::VariableDeclare { var_name, data_type } => 
-				context.add_variable(var_name.clone(), *data_type, None).unwrap(),
+				context.add_variable(var_name.clone(), data_type.clone(), None).unwrap(),
 					
 			StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 				let value: Value = value_expr.calc(context);
 				context.add_variable(
 					var_name.clone(), 
-					*data_type,
+					data_type.clone(),
 					Some(value)).unwrap();
 			},
 				
@@ -572,7 +572,7 @@ impl Statement {
 							for i in 0..args_values.len() {
 								next_context.add_variable(
 									func_args[i].name().clone(),
-									func_args[i].data_type(),
+									func_args[i].data_type().clone(),
 									Some(args_values[i].clone())).unwrap();
 							}
 							
@@ -582,7 +582,7 @@ impl Statement {
 				},
 				
 			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
-				context.add_user_func(name.clone(), args.clone(), *return_type, body.clone()).unwrap();
+				context.add_user_func(name.clone(), args.clone(), return_type.clone(), body.clone()).unwrap();
 			},
 				
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
@@ -813,7 +813,7 @@ impl ReturningBody {
 		}
 	}
 	
-	pub fn check(&self, return_type: DataType, check_context: &mut Context) -> Result<(), InterpErr> {
+	pub fn check(&self, return_type: &DataType, check_context: &mut Context) -> Result<(), InterpErr> {
 		let mut has_return = false; // at least one statement on 1st level returns
 		for st_ref in self.statements().iter() {
 			if Self::returns(st_ref, return_type, check_context)? {
@@ -834,7 +834,7 @@ impl ReturningBody {
 		Ok(())
 	}
 	
-	fn returns(statement: &Statement, declared_return_type: DataType, check_context: &Context) -> Result<bool, InterpErr> {
+	fn returns(statement: &Statement, declared_return_type: &DataType, check_context: &Context) -> Result<bool, InterpErr> {
 		match &statement.kind {
 			StatementKind::Comment (_) 
 				| StatementKind::VariableDeclare { .. }
@@ -852,10 +852,10 @@ impl ReturningBody {
 					},
 					None => DataType::None,
 				};
-				if returned_type != declared_return_type {
+				if returned_type.ne(declared_return_type) {
 					Err( InterpErr::from(StatementErr::UserFuncReturnType {
 						return_expr_pos: statement.pos(),
-						declared_return_type,
+						declared_return_type: declared_return_type.clone(),
 						returned_type,
 					}) )
 				} else {
@@ -1468,7 +1468,7 @@ mod tests {
 				match &body.statements()[0].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2"));
-						assert_eq!(*data_type, DataType::Float32);
+						assert_eq!(data_type.clone(), DataType::Float32);
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
 						assert_eq!(dt, DataType::Float32);
 					},
@@ -1484,7 +1484,7 @@ mod tests {
 				match &body.statements()[1].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2"));
-						assert_eq!(*data_type, DataType::Float32);
+						assert_eq!(data_type.clone(), DataType::Float32);
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
 						assert_eq!(dt, DataType::Float32);
 					},
@@ -1555,7 +1555,7 @@ mod tests {
 				match &body.statements()[0].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2"));
-						assert_eq!(*data_type, DataType::Float32);
+						assert_eq!(data_type.clone(), DataType::Float32);
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
 						assert_eq!(dt, DataType::Float32);
 					},
@@ -1571,7 +1571,7 @@ mod tests {
 				match &body.statements()[1].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2"));
-						assert_eq!(*data_type, DataType::Float32);
+						assert_eq!(data_type.clone(), DataType::Float32);
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
 						assert_eq!(dt, DataType::Float32);
 					},

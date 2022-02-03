@@ -29,7 +29,7 @@ impl VarData {
 		} else {
 			Err( VarErr::WrongValue { 
 					new_var_value, 
-					variable_type: self.data_type,
+					variable_type: self.data_type.clone(),
 					var_name: self.name.clone(),
 				} )
 		}
@@ -39,8 +39,8 @@ impl VarData {
 		self.var_value.as_ref()
 	}
 	
-	pub fn get_type(&self) -> DataType {
-		self.data_type
+	pub fn get_type(&self) -> &DataType {
+		&self.data_type
 	}
 	
 	pub fn get_name(&self) -> &NameToken {

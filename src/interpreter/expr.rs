@@ -74,7 +74,7 @@ impl Expr {
 									for i in 0..args_values.len() {
 										next_context.add_variable(
 											func_args[i].name().clone(),
-											func_args[i].data_type(),
+											func_args[i].data_type().clone(),
 											Some(args_values[i].clone())).unwrap();
 									}
 									
@@ -121,13 +121,13 @@ impl Expr {
 									let f: &BuiltinFuncDef = check_context.find_builtin_func_def(&func_name).unwrap();
 							
 									f.check_args(&func_name, arg_exprs, check_context)?;
-									f.return_type()
+									f.return_type().clone()
 								},
 								FuncKind::UserDefined => {
 									let f: &UserFuncDef = check_context.find_func_def(&func_name).unwrap();
 							
 									f.check_args(arg_exprs, check_context)?;
-									f.return_type()
+									f.return_type().clone()
 								},
 							}
 						},

@@ -19,7 +19,7 @@ impl Value {
 			Value::Float32 (_) => DataType::Float32,
 			Value::String (_) => DataType::String,
 			Value::Bool (_) => DataType::Bool,
-			Value::Struct { data_type, .. } => *data_type,
+			Value::Struct { data_type, .. } => data_type.clone(),
 			Value::None => DataType::None,
 		}
 	}

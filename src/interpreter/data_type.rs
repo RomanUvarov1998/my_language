@@ -2,7 +2,7 @@ use super::utils::NameToken;
 use super::var_data::VarErr;
 use super::value::Value;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataType {
 	Float32,
 	String,
