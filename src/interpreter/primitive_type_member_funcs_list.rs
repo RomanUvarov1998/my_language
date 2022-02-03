@@ -1,4 +1,4 @@
-use super::builtin_func::{BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
+use super::builtin_func::{BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody};
 use super::data_type::{DataType, Primitive};
 use super::utils::NameToken;
 use super::value::Value;
@@ -100,22 +100,7 @@ impl PrimitiveTypeMemberFuncsList {
 			),
 		];
 		
-		let lookup_any = vec![
-			BuiltinFuncDef::new(
-				"to_string",
-				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Bool)),
-				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
-					if let Value::Bool (val) = &args_values[0] {
-						Some( Value::from("Any") )
-					} else {
-						unreachable!();
-					}
-				}) as BuiltinFuncBody,
-				DataType::Primitive (Primitive::String)
-			),
-		];
+		let lookup_any = Vec::new();
 		
 		let lookup_none = vec![
 			BuiltinFuncDef::new(
@@ -124,7 +109,7 @@ impl PrimitiveTypeMemberFuncsList {
 					BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Bool)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
-					if let Value::Bool (val) = &args_values[0] {
+					if let Value::None = &args_values[0] {
 						Some( Value::from("None") )
 					} else {
 						unreachable!();
@@ -150,7 +135,7 @@ impl PrimitiveTypeMemberFuncsList {
 	pub fn find_func(&self, data_type: Primitive, name: &NameToken) -> Result<&BuiltinFuncDef, StructDefErr> {
 		match self.lookup[data_type as usize].iter().find(|fd| fd.name() == name.value()) {
 			Some(func_def) => Ok(func_def),
-			None => Err( StructDefErr::BuiltinMemberFuncIsNotDefined { name: name.value().to_string() } )
+			None => Err( StructDefErr::BuiltinMemberFuncIsNotDefined { name: name.clone() } )
 		}
 	}
 }
@@ -177,8 +162,7 @@ mod tests {
 		assert_eq!(list.lookup[Primitive::Bool as usize].len(), 1);
 		assert_eq!(list.lookup[Primitive::Bool as usize][0].name(), "to_string");
 		
-		assert_eq!(list.lookup[Primitive::Any as usize].len(), 1);
-		assert_eq!(list.lookup[Primitive::Any as usize][0].name(), "to_string");
+		assert_eq!(list.lookup[Primitive::Any as usize].len(), 0);
 		
 		assert_eq!(list.lookup[Primitive::None as usize].len(), 1);
 		assert_eq!(list.lookup[Primitive::None as usize][0].name(), "to_string");

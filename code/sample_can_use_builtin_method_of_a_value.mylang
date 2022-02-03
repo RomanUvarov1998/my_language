@@ -1,0 +1,35 @@
+// f32
+
+var a: f32 = -3;
+@print("a.@abs() == ");
+@println(a.@abs());
+
+@print("(-32.5).@abs() == ");
+@println((-32.5).@abs());
+
+@print("a.@sign() == ");
+@println(a.@sign());
+
+@print("(-32.5).@sign() == ");
+@println((-32.5).@sign());
+
+@print("a.@to_string() == ");
+@println(a.@to_string());
+
+@print("(-32.5).@to_string() == ");
+@println((-32.5).@to_string());
+
+// str
+
+var s: str = "hello";
+@print("s.@len() == ");
+@println(s.@len());
+
+// bool
+
+var b: bool = True;
+@print("s.@to_string() == ");
+@println(b.@to_string());
+
+@print("False.@to_string() == ");
+@println(False.@to_string());

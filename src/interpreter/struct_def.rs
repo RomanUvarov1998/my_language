@@ -8,21 +8,25 @@ use std::rc::Rc;
 
 //------------------ StructDef ---------------------
 
+#[allow(dead_code)]
 pub struct StructDef {
 	inner: Rc<RefCell<StructDefInner>>
 }
 
 impl StructDef {
+	#[allow(dead_code)]
 	pub fn new(name: NameToken, default_value: Value) -> Self {
 		Self {
 			inner: Rc::new(RefCell::new(StructDefInner::new(name, default_value))),
 		}
 	}
 	
+	#[allow(dead_code)]
 	pub fn inner(&self) -> Ref<'_, StructDefInner> {
 		self.inner.borrow()
 	}
 	
+	#[allow(dead_code)]
 	pub fn inner_mut(&self) -> RefMut<'_, StructDefInner> {
 		self.inner.borrow_mut()
 	}
@@ -52,6 +56,7 @@ impl std::fmt::Debug for StructDef {
 
 //------------------ StructDefInner ---------------------
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct StructDefInner {
 	name: NameToken,
@@ -72,14 +77,17 @@ impl StructDefInner {
 		}
 	}
 	
+	#[allow(dead_code)]
 	pub fn name(&self) -> &NameToken {
 		&self.name
 	}
 	
+	#[allow(dead_code)]
 	pub fn default_value(&self) -> Value {
 		self.default_value.clone()
 	}
 	
+	#[allow(dead_code)]
 	pub fn add_builtin_func_def(&mut self, func_def: BuiltinFuncDef) -> Result<(), StructDefErr> {
 		if let Some(_) = self.builtin_funcs.iter().find(|fd| fd.name() == func_def.name()) {
 			return Err( StructDefErr::BuiltinMemberFuncAlreadyDefined { name: func_def.name() } );
@@ -90,16 +98,18 @@ impl StructDefInner {
 		Ok(())
 	}
 	
-	pub fn find_builtin_func_def(&self, name: &str) -> Result<&BuiltinFuncDef, StructDefErr> {
-		match self.builtin_funcs.iter().find(|fd| fd.name() == name) {
+	#[allow(dead_code)]
+	pub fn find_builtin_func_def(&self, name: &NameToken) -> Result<&BuiltinFuncDef, StructDefErr> {
+		match self.builtin_funcs.iter().find(|fd| fd.name() == name.value()) {
 			Some(func_def) => Ok(func_def),
-			None => Err( StructDefErr::BuiltinMemberFuncIsNotDefined { name: name.to_string() } )
+			None => Err( StructDefErr::BuiltinMemberFuncIsNotDefined { name: name.clone() } )
 		}
 	}
 }
 
 //------------------ StructFieldDef ---------------------
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct StructFieldDef {
 	name: NameToken,
@@ -108,6 +118,7 @@ pub struct StructFieldDef {
 
 //------------------ StructDefErr ---------------------
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum StructDefErr {
 	FieldAlreadyDefined {
@@ -117,7 +128,7 @@ pub enum StructDefErr {
 		name: &'static str,
 	},
 	BuiltinMemberFuncIsNotDefined {
-		name: String,
+		name: NameToken,
 	},
 }
 

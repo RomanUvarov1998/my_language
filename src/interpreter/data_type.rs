@@ -9,6 +9,7 @@ use super::builtin_func::BuiltinFuncDef;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataType {
 	Primitive (Primitive),
+	#[allow(dead_code)]
 	Complex (StructDef),
 }
 

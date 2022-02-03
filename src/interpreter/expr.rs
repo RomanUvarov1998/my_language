@@ -1119,20 +1119,6 @@ impl ExprOperator {
 		op
 	}
 	
-	fn create_value_type_err(&self, values: &[&Value]) -> OperatorErr {
-		let types: Vec<DataType> = values
-			.iter()
-			.map(|val| val.get_type())
-			.collect();
-		
-		OperatorErr::WrongType { 
-			descr: String::from(format!(
-				"Operator {:?} cannot be applied to type(-s) {:?}", 
-				self, 
-				&types[..]))
-		}
-	}
-	
 	//---------------- Result data type -----------------------
 	
 	fn get_bin_plus_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
@@ -1354,10 +1340,6 @@ pub enum ExprErr {
 	UnexpectedToken (CodePos),
 	UnpairedBracket (CodePos),
 	ExpectedExprButFound (CodePos),
-	Operator { 
-		err: OperatorErr, 
-		pos: CodePos, 
-	},
 }
 
 impl std::fmt::Display for ExprErr {
@@ -1366,7 +1348,6 @@ impl std::fmt::Display for ExprErr {
 			ExprErr::UnexpectedToken (_) => write!(f, "Unexpected token"),
 			ExprErr::UnpairedBracket (_) => write!(f, "Unpaired bracket"),
 			ExprErr::ExpectedExprButFound (_) => write!(f, "Expected arithmetical expression, but found"),
-			ExprErr::Operator { err, .. } => write!(f, "{}", err)
 		}
 	}
 }

@@ -219,11 +219,6 @@ impl From<ExprErr> for InterpErr {
 				descr: format!("{}", err),
 				inner: InnerErr::Expr (err),
 			},
-			ExprErr::Operator { pos, .. } => InterpErr {
-				pos,
-				descr: format!("{}", err),
-				inner: InnerErr::Expr (err),
-			},
 		}
 	}
 }
@@ -376,16 +371,14 @@ impl From<StructDefErr> for InterpErr {
 				descr,
 				inner: InnerErr::StructDef (err),
 			},
-			StructDefErr::BuiltinMemberFuncIsNotDefined { .. } => InterpErr {
-				pos: CodePos::from(CharPos::new()), // TODO: provide CodePos here
+			StructDefErr::BuiltinMemberFuncIsNotDefined { ref name } => InterpErr {
+				pos: name.pos(), // TODO: provide CodePos here
 				descr,
 				inner: InnerErr::StructDef (err),
 			},
 		}
 	}
 }
-
-
 
 //------------------------ Tests --------------------
 
