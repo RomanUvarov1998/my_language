@@ -3,39 +3,7 @@ use super::value::Value;
 use super::InterpErr;
 use super::utils::{CodePos, NameToken};
 use super::expr::Expr;
-use super::memory::Memory;
-
-//------------------------- BuiltinFuncsDefList -----------------------
-
-pub struct BuiltinFuncsDefList {
-	funcs: Vec<BuiltinFuncDef>,
-}
-
-impl BuiltinFuncsDefList {
-	pub fn new() -> Self {
-		Self {
-			funcs: Vec::new(),
-		}
-	}
-	
-	pub fn add(&mut self, func_def: BuiltinFuncDef) {
-		let func_name: &str = func_def.get_name();
-		if let Some(..) =  self.funcs
-			.iter()
-			.find(|func| func.get_name() == func_name) {
-				panic!("Builtin function '{}' is already defined", func_name);
-		}
-		
-		self.funcs.push(func_def);
-	}
-	
-	pub fn find<'mem>(&'mem self, name: &NameToken) -> Result<&'mem BuiltinFuncDef, BuiltinFuncErr> {
-		match self.funcs.iter().find(|func| func.get_name() == name.value()) {
-			Some(func) => Ok(func),
-			None => Err( BuiltinFuncErr::NotDefined { name_pos: name.pos() } ),
-		}
-	}
-}
+use super::context::Context;
 
 //------------------------- BuiltinFuncDef -----------------------
 
@@ -58,7 +26,7 @@ impl BuiltinFuncDef {
 		}
 	}
 	
-	pub fn check_args(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, check_memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<(), InterpErr> {
+	pub fn check_args(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() {
 			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
@@ -69,7 +37,7 @@ impl BuiltinFuncDef {
 		}
 						
 		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
-			.map(|expr| expr.check_and_calc_data_type(check_memory, builtin_func_defs))
+			.map(|expr| expr.check_and_calc_data_type(check_context))
 			.collect();
 			
 		let args_data_types: Vec<DataType> = args_data_types_result?;

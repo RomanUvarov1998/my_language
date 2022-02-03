@@ -3,9 +3,8 @@ use super::value::Value;
 use super::InterpErr;
 use super::utils::{CodePos, NameToken};
 use super::expr::Expr;
-use super::memory::Memory;
 use super::statement::ReturningBody;
-use super::builtin_func::BuiltinFuncsDefList;
+use super::context::Context;
 
 //------------------------- UserFuncDef -----------------------
 
@@ -27,7 +26,7 @@ impl UserFuncDef {
 		}
 	}
 	
-	pub fn check_args(&self, args_exprs: &Vec<Expr>, check_memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<(), InterpErr> {
+	pub fn check_args(&self, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() {
 			return Err( InterpErr::from( UserFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
@@ -38,7 +37,7 @@ impl UserFuncDef {
 		}
 						
 		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
-			.map(|expr| expr.check_and_calc_data_type(check_memory, builtin_func_defs))
+			.map(|expr| expr.check_and_calc_data_type(check_context))
 			.collect();
 			
 		let args_data_types: Vec<DataType> = args_data_types_result?;
@@ -58,8 +57,8 @@ impl UserFuncDef {
 		Ok(())
 	}
 	
-	pub fn call(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Option<Value> {
-		self.body.run(memory, builtin_func_defs)
+	pub fn call(&self, context: &mut Context) -> Option<Value> {
+		self.body.run(context)
 	}
 	
 	pub fn args(&self) -> &Vec<UserFuncArg> {

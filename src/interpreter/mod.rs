@@ -1,4 +1,3 @@
-mod memory;
 mod expr;
 mod string_char;
 mod token;
@@ -10,29 +9,29 @@ mod struct_def;
 mod builtin_func;
 mod user_func;
 mod utils;
+mod context;
 
 use statement::{StatementsIter, Statement, StatementErr};
-use memory::*;
-use builtin_func::{BuiltinFuncsDefList, BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
+use builtin_func::{BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
 use user_func::UserFuncErr;
 use var_data::VarErr;
+use utils::CodePos;
+use context::Context;
 use data_type::DataType;
 use value::Value;
-use utils::CodePos;
 
 //------------------------ Interpreter --------------------
 
 pub struct Interpreter {
-	memory: Memory,
-	builtin_func_defs: BuiltinFuncsDefList,
 	statements_iter: StatementsIter,
+	builtin_func_defs: Vec<BuiltinFuncDef>,
 }
 
 impl Interpreter {
 	pub fn new() -> Self {
-		let mut builtin_func_defs = BuiltinFuncsDefList::new();
+		let mut builtin_func_defs = Vec::<BuiltinFuncDef>::new();
 		
-		builtin_func_defs.add(BuiltinFuncDef::new(
+		builtin_func_defs.push(BuiltinFuncDef::new(
 			"print",
 			vec![
 				BuiltinFuncArg::new("value".to_string(), DataType::Any),
@@ -44,7 +43,7 @@ impl Interpreter {
 			DataType::Any
 		));
 		
-		builtin_func_defs.add(BuiltinFuncDef::new(
+		builtin_func_defs.push(BuiltinFuncDef::new(
 			"println",
 			vec![
 				BuiltinFuncArg::new("value".to_string(), DataType::Any),
@@ -56,7 +55,7 @@ impl Interpreter {
 			DataType::Any
 		));
 		
-		builtin_func_defs.add(BuiltinFuncDef::new(
+		builtin_func_defs.push(BuiltinFuncDef::new(
 			"exit",
 			Vec::new(),
 			Box::new(|_args_values: Vec<Value>| -> Option<Value> {
@@ -65,7 +64,7 @@ impl Interpreter {
 			DataType::Any
 		));
 		
-		builtin_func_defs.add(BuiltinFuncDef::new(
+		builtin_func_defs.push(BuiltinFuncDef::new(
 			"input",
 			vec![
 				BuiltinFuncArg::new("prompt".to_string(), DataType::String),
@@ -84,7 +83,7 @@ impl Interpreter {
 			DataType::String
 		));
 		
-		builtin_func_defs.add(BuiltinFuncDef::new(
+		builtin_func_defs.push(BuiltinFuncDef::new(
 			"str_to_f32",
 			vec![
 				BuiltinFuncArg::new("value".to_string(), DataType::String),
@@ -101,9 +100,8 @@ impl Interpreter {
 		));
 		
 		Self {
-			memory: Memory::new(),
-			builtin_func_defs,
 			statements_iter: StatementsIter::new(),
+			builtin_func_defs,
 		}
 	}
 	
@@ -111,16 +109,18 @@ impl Interpreter {
 		self.statements_iter.push_string(code.to_string());
 		
 		let mut statements = Vec::<Statement>::new();
-		let mut check_memory = Memory::new();
+		let mut check_context = Context::new(&self.builtin_func_defs);
 	
 		while let Some(statement_result) = self.statements_iter.next() {
 			let st: Statement = statement_result?;
-			st.check(&mut check_memory, &self.builtin_func_defs)?;
+			st.check(&mut check_context)?;
 			statements.push(st);
 		}
 		
+		let mut run_context = Context::new(&self.builtin_func_defs);
+		
 		for st_ref in &statements {
-			st_ref.run(&mut self.memory, &self.builtin_func_defs);
+			st_ref.run(&mut run_context);
 		}
 		
 		Ok(())

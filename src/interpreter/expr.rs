@@ -1,12 +1,12 @@
 use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp, Keyword, TokenErr};
 use super::InterpErr;
-use super::memory::Memory;
 use super::value::Value;
 use super::data_type::DataType;
-use super::builtin_func::BuiltinFuncsDefList;
+use super::builtin_func::BuiltinFuncDef;
 use super::user_func::{UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
 use super::statement::FuncKind;
+use super::context::Context;
 
 // TODO: make Expr not clonable
 #[derive(Debug, Clone)]
@@ -34,7 +34,7 @@ impl Expr {
 		} )
 	}
 	
-	pub fn calc(&self, memory: &mut Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Value {
+	pub fn calc(&self, context: &Context) -> Value {
 		let mut calc_stack = Vec::<Value>::with_capacity(self.expr_stack.len()); // TODO: try to keep symbols instead of values to be able to call member functions
 		
 		for Symbol { kind, pos } in self.expr_stack.iter() {
@@ -43,44 +43,42 @@ impl Expr {
 				SymbolKind::Operand (opnd) => {
 					let value: Value = match opnd {
 						Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
-						Operand::Variable (name) => memory.get_variable_value(&NameToken::new_with_pos(&name, pos)).unwrap().clone(),
+						Operand::Variable (name) => context.get_variable_value(&NameToken::new_with_pos(&name, pos)).unwrap().clone(),
 						Operand::FuncCall { kind, func_name, arg_exprs } => {
 							match kind {
 								FuncKind::Builtin => {
-									let f = builtin_func_defs.find(&func_name).unwrap();
+									let f: &BuiltinFuncDef = context.find_builtin_func_def(&func_name).unwrap();
 							
 									let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
 									
 									for expr in arg_exprs {
-										let value: Value = expr.calc(memory, builtin_func_defs);
+										let value: Value = expr.calc(context);
 										args_values.push(value);
 									}
 									
 									f.call(args_values).unwrap()
 								},
 								FuncKind::UserDefined => {
-									let f: UserFuncDef = (*memory.find_func_def(&func_name).unwrap()).clone(); // TODO: Do not clone UserFuncDef
+									let f: &UserFuncDef = context.find_func_def(&func_name).unwrap();
 							
 									let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
 									
 									for expr in arg_exprs {
-										let value: Value = expr.calc(memory, builtin_func_defs);
+										let value: Value = expr.calc(context);
 										args_values.push(value);
 									}
 									
-									memory.push_frame();
+									let mut next_context = context.new_stack_frame_context();
 									
 									let func_args: &Vec<UserFuncArg> = f.args();
 									for i in 0..args_values.len() {
-										memory.add_variable(
+										next_context.add_variable(
 											func_args[i].name().clone(),
 											func_args[i].data_type(),
 											Some(args_values[i].clone())).unwrap();
 									}
 									
-									let value: Value = f.call(memory, builtin_func_defs).unwrap();
-									
-									memory.pop_frame();
+									let value: Value = f.call(&mut next_context).unwrap();
 									
 									value
 								},
@@ -105,7 +103,7 @@ impl Expr {
 		result
 	}
 	
-	pub fn check_and_calc_data_type(&self, check_memory: &Memory, builtin_func_defs: &BuiltinFuncsDefList) -> Result<DataType, InterpErr> {		
+	pub fn check_and_calc_data_type(&self, check_context: &Context) -> Result<DataType, InterpErr> {		
 		assert!(self.expr_stack.len() > 0);
 		let mut type_calc_stack = Vec::<DataType>::with_capacity(self.expr_stack.len());
 		
@@ -116,19 +114,19 @@ impl Expr {
 					let opnd_dt: DataType = match opnd {
 						Operand::Value (val) => val.get_type(),
 						Operand::Variable (name) =>
-							check_memory.get_variable_value(&NameToken::new_with_pos(&name, pos))?.get_type(),
+							check_context.get_variable_value(&NameToken::new_with_pos(&name, pos))?.get_type(),
 						Operand::FuncCall { kind, func_name, arg_exprs } => {
 							match kind {
 								FuncKind::Builtin => {
-									let f = builtin_func_defs.find(&func_name).unwrap();
+									let f: &BuiltinFuncDef = check_context.find_builtin_func_def(&func_name).unwrap();
 							
-									f.check_args(&func_name, arg_exprs, check_memory, builtin_func_defs)?;
+									f.check_args(&func_name, arg_exprs, check_context)?;
 									f.return_type()
 								},
 								FuncKind::UserDefined => {
-									let f = check_memory.find_func_def(&func_name).unwrap();
+									let f: &UserFuncDef = check_context.find_func_def(&func_name).unwrap();
 							
-									f.check_args(arg_exprs, check_memory, builtin_func_defs)?;
+									f.check_args(arg_exprs, check_context)?;
 									f.return_type()
 								},
 							}
@@ -1716,10 +1714,10 @@ mod tests {
 		
 			let expr = Expr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
 			
-			let mut memory = Memory::new();
-			let builtin_funcs_def_list = BuiltinFuncsDefList::new();
+			let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
+			let context = Context::new(&builtin_func_defs);
 			
-			let ans: Value = expr.calc(&mut memory, &builtin_funcs_def_list);
+			let ans: Value = expr.calc(&context);
 			
 			if ans != result {
 				panic!("Wrong result for code '{}': {:?} != {:?}", expr_str, ans, result);
