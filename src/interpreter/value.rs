@@ -11,7 +11,6 @@ pub enum Value {
 		fields: Vec<Value>,
 	},
 	None,
-	// TODO: add struct
 }
 
 impl Value {
