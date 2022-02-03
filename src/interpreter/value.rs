@@ -5,6 +5,7 @@ pub enum Value {
 	Float32 (f32),
 	String (String),
 	Bool (bool),
+	#[allow(dead_code)]
 	Struct {
 		data_type: DataType,
 		fields: Vec<Value>,

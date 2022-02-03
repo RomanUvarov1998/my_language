@@ -1,16 +1,19 @@
 use super::value::Value;
+use super::struct_def::StructDef;
 
 //--------------------------- DataType -------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataType {
 	Primitive (Primitive),
+	Complex (StructDef),
 }
 
 impl DataType {	
 	pub fn default_value(&self) -> Value {
 		match self {
 			DataType::Primitive (dt) => dt.default_value(),
+			DataType::Complex (dt) => dt.inner().default_value(),
 		}
 	}
 }
@@ -19,6 +22,7 @@ impl std::fmt::Display for DataType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			DataType::Primitive (dt) => write!(f, "{}", dt),
+			DataType::Complex (dt) => write!(f, "Struct '{}'", dt.inner().name().value()),
 		}
 	}
 }

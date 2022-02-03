@@ -84,7 +84,7 @@ impl<'prev_context> Context<'prev_context> {
 	}
 	
 	pub fn find_builtin_func_def(&'prev_context self, name: &'prev_context NameToken) -> Result<& 'prev_context BuiltinFuncDef, BuiltinFuncErr> {
-		match self.builtin_func_defs.iter().find(|func| func.get_name() == name.value()) {
+		match self.builtin_func_defs.iter().find(|func| func.name() == name.value()) {
 			Some(func) => Ok(func),
 			None => Err( BuiltinFuncErr::NotDefined { name_pos: name.pos() } ),
 		}

@@ -57,7 +57,7 @@ impl BuiltinFuncDef {
 		Ok(())
 	}
 	
-	pub fn get_name(&self) -> &'static str {
+	pub fn name(&self) -> &'static str {
 		self.name
 	}
 	
@@ -87,6 +87,19 @@ impl std::fmt::Display for BuiltinFuncDef {
 	}
 }
 
+impl std::fmt::Debug for BuiltinFuncDef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("BuiltinFuncDef")
+		 .field("name", &self.name)
+		 .field("args", &self.args)
+		 .field("return_type", &self.return_type)
+		 .finish()
+	}
+}
+
+//------------------------- BuiltinFuncArg -----------------------
+
+#[derive(Debug)]
 pub struct BuiltinFuncArg {
 	name: String,
 	data_type: DataType,
