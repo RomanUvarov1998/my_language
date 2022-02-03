@@ -98,7 +98,7 @@ mod tests {
 	use super::Context;
 	use super::super::utils::NameToken;
 	use super::super::builtin_func::BuiltinFuncDef;
-	use super::super::data_type::DataType;
+	use super::super::data_type::{DataType, Primitive};
 	use super::super::var_data::VarErr;
 	use super::super::value::Value;
 	
@@ -110,38 +110,38 @@ mod tests {
 		let nt_a = new_name_token("a");
 		let nt_b = new_name_token("b");
 		
-		context.add_variable(nt_a.clone(), DataType::Float32, None).unwrap();
+		context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), None).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Err(VarErr::NotSet { name: nt_a.clone() }));
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		context.set_variable(&nt_a, Value::from(1_f32)).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(1_f32)));
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		
 		assert_eq!(
-			context.add_variable(nt_a.clone(), DataType::Float32, None),
+			context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), None),
 			Err( VarErr::AlreadyExists { name: nt_a.clone() } ));	
 		
 		context.push_scope();
-		context.add_variable(nt_a.clone(), DataType::Float32, None).unwrap();
+		context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), None).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Err(VarErr::NotSet { name: nt_a.clone() }));		
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		context.set_variable(&nt_a, Value::from(3_f32)).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(3_f32)));
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		
 		assert_eq!(
-			context.add_variable(nt_a.clone(), DataType::Float32, None),
+			context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), None),
 			Err( VarErr::AlreadyExists { name: nt_a.clone() } ));	
 			
-		context.add_variable(nt_b.clone(), DataType::Float32, None).unwrap();
+		context.add_variable(nt_b.clone(), DataType::Primitive (Primitive::Float32), None).unwrap();
 		assert_eq!(context.get_variable_value(&nt_b), Err(VarErr::NotSet { name: nt_b.clone() }));		
-		assert_eq!(context.get_variable_mut(&nt_b).unwrap().get_type(), &DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_b).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		context.set_variable(&nt_b, Value::from(5_f32)).unwrap();
 		assert_eq!(context.get_variable_value(&nt_b), Ok(&Value::Float32(5_f32)));
-		assert_eq!(context.get_variable_mut(&nt_b).unwrap().get_type(), &DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_b).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		
 		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(3_f32)));
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 			
 		context.pop_scope();	
 		assert_eq!(
@@ -152,7 +152,7 @@ mod tests {
 			Err( VarErr::NotDefined { name: nt_b.clone() } ));	
 		
 		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(1_f32)));
-		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt_a).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 	}
 	
 	#[test]
@@ -162,11 +162,11 @@ mod tests {
 		
 		let nt = new_name_token("a");
 		
-		context.add_variable(nt.clone(), DataType::Float32, Some(Value::Float32(2_f32))).unwrap();
+		context.add_variable(nt.clone(), DataType::Primitive (Primitive::Float32), Some(Value::Float32(2_f32))).unwrap();
 		
 		assert_eq!(context.get_variable_value(&nt), Ok(&Value::Float32(2_f32)));
 		
-		assert_eq!(context.get_variable_mut(&nt).unwrap().get_type(), &DataType::Float32);
+		assert_eq!(context.get_variable_mut(&nt).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 	}
 
 	fn new_name_token(name: &str) -> NameToken {

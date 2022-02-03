@@ -1,4 +1,4 @@
-use super::data_type::DataType;
+use super::data_type::{DataType, Primitive};
 use super::value::Value;
 use super::InterpErr;
 use super::utils::{CodePos, NameToken};
@@ -102,7 +102,7 @@ impl BuiltinFuncArg {
 	
 	pub fn type_check(&self, data_type: &DataType) -> bool {
 		match &self.data_type {
-			DataType::Any => true,
+			DataType::Primitive (Primitive::Any) => true,
 			_ => self.data_type.eq(data_type),
 		}
 	}

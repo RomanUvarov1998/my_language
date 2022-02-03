@@ -1,4 +1,4 @@
-use super::data_type::DataType;
+use super::data_type::{DataType, Primitive};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -16,11 +16,11 @@ pub enum Value {
 impl Value {
 	pub fn get_type(&self) -> DataType {
 		match self {
-			Value::Float32 (_) => DataType::Float32,
-			Value::String (_) => DataType::String,
-			Value::Bool (_) => DataType::Bool,
+			Value::Float32 (_) => DataType::Primitive (Primitive::Float32),
+			Value::String (_) => DataType::Primitive (Primitive::String),
+			Value::Bool (_) => DataType::Primitive (Primitive::Bool),
 			Value::Struct { data_type, .. } => data_type.clone(),
-			Value::None => DataType::None,
+			Value::None => DataType::Primitive (Primitive::None),
 		}
 	}
 }

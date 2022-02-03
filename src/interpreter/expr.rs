@@ -1,7 +1,7 @@
 use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp, Keyword, TokenErr};
 use super::InterpErr;
 use super::value::Value;
-use super::data_type::DataType;
+use super::data_type::{DataType, Primitive};
 use super::builtin_func::BuiltinFuncDef;
 use super::user_func::{UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
@@ -997,8 +997,8 @@ impl ExprOperator {
 	fn get_bin_plus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Float32),
-			(DataType::String, DataType::String) => Ok(DataType::String),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
+			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::String)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1006,7 +1006,7 @@ impl ExprOperator {
 	fn get_bin_minus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Float32),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1014,7 +1014,7 @@ impl ExprOperator {
 	fn get_bin_mul_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Float32),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1022,7 +1022,7 @@ impl ExprOperator {
 	fn get_bin_div_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Float32),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1030,7 +1030,7 @@ impl ExprOperator {
 	fn get_bin_pow_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Float32),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1038,9 +1038,9 @@ impl ExprOperator {
 	fn get_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
-			(DataType::String, DataType::String) => Ok(DataType::Bool),
-			(DataType::Bool, DataType::Bool) => Ok(DataType::Bool),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1048,9 +1048,9 @@ impl ExprOperator {
 	fn get_not_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
-			(DataType::String, DataType::String) => Ok(DataType::Bool),
-			(DataType::Bool, DataType::Bool) => Ok(DataType::Bool),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1058,8 +1058,8 @@ impl ExprOperator {
 	fn get_greater_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
-			(DataType::String, DataType::String) => Ok(DataType::Bool),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1067,8 +1067,8 @@ impl ExprOperator {
 	fn get_greater_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
-			(DataType::String, DataType::String) => Ok(DataType::Bool),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1076,8 +1076,8 @@ impl ExprOperator {
 	fn get_less_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
-			(DataType::String, DataType::String) => Ok(DataType::Bool),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1085,8 +1085,8 @@ impl ExprOperator {
 	fn get_less_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Float32, DataType::Float32) => Ok(DataType::Bool),
-			(DataType::String, DataType::String) => Ok(DataType::Bool),
+			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1094,7 +1094,7 @@ impl ExprOperator {
 	fn get_logical_and_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Bool, DataType::Bool) => Ok(DataType::Bool),
+			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1102,7 +1102,7 @@ impl ExprOperator {
 	fn get_logical_or_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Bool, DataType::Bool) => Ok(DataType::Bool),
+			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1110,7 +1110,7 @@ impl ExprOperator {
 	fn get_logical_xor_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
 		match (lhs, rhs) {
-			(DataType::Bool, DataType::Bool) => Ok(DataType::Bool),
+			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
 			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
@@ -1118,7 +1118,7 @@ impl ExprOperator {
 	fn get_unary_plus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let op = Self::take_1_operand(calc_stack)?;
 		match op {
-			DataType::Float32 => Ok(DataType::Float32),
+			DataType::Primitive (Primitive::Float32) => Ok(DataType::Primitive (Primitive::Float32)),
 			_ => return Err( self.create_type_err(&[&op]) ),
 		}
 	}
@@ -1126,7 +1126,7 @@ impl ExprOperator {
 	fn get_unary_minus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let op = Self::take_1_operand(calc_stack)?;
 		match op {
-			DataType::Float32 => Ok(DataType::Float32),
+			DataType::Primitive (Primitive::Float32) => Ok(DataType::Primitive (Primitive::Float32)),
 			_ => return Err( self.create_type_err(&[&op]) ),
 		}
 	}
@@ -1134,7 +1134,7 @@ impl ExprOperator {
 	fn get_not_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
 		let op = Self::take_1_operand(calc_stack)?;
 		match op {
-			DataType::Bool => Ok(DataType::Bool),
+			DataType::Primitive (Primitive::Bool) => Ok(DataType::Primitive (Primitive::Bool)),
 			_ => return Err( self.create_type_err(&[&op]) ),
 		}
 	}

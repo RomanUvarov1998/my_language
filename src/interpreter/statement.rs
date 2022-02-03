@@ -2,7 +2,7 @@ use super::token::*;
 use super::expr::{Expr, ExprContextKind};
 use super::InterpErr;
 use super::value::Value;
-use super::data_type::DataType;
+use super::data_type::{DataType, Primitive};
 use super::var_data::{VarData, VarErr};
 use super::builtin_func::BuiltinFuncDef;
 use super::user_func::{UserFuncArg, UserFuncDef};
@@ -50,7 +50,7 @@ impl StatementsIter {
 		self.tokens_iter.next_expect_colon()?;
 		
 		let type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
-		let data_type = DataType::parse(&type_name)?;
+		let data_type = self.parse_data_type(&type_name)?;
 		
 		let tok_assign = self.tokens_iter.next_or_end_reached_err()?;
 		match tok_assign {
@@ -254,7 +254,7 @@ impl StatementsIter {
 			self.tokens_iter.next_expect_colon()?;
 			
 			let type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
-			let data_type: DataType = DataType::parse(&type_name)?;
+			let data_type: DataType = self.parse_data_type(&type_name)?;
 			
 			args.push(UserFuncArg::new(arg_name, data_type));
 			
@@ -275,10 +275,10 @@ impl StatementsIter {
 			Token { content: TokenContent::StatementOp (StatementOp::ThinArrow), .. } => { // function returns value
 				self.tokens_iter.next_or_end_reached_err().unwrap(); // skip ThinArrow
 				let return_type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
-				DataType::parse(&return_type_name)?
+				self.parse_data_type(&return_type_name)?
 			},
 			Token { content: TokenContent::Bracket (Bracket::LeftCurly), .. } => { // function doesn't return value
-				DataType::None
+				DataType::Primitive (Primitive::None)
 			},
 			found @ _ => return Err( InterpErr::from(TokenErr::ExpectedButFound {
 				expected: vec![
@@ -328,6 +328,15 @@ impl StatementsIter {
 			kind: StatementKind::UserDefinedFuncReturn { return_expr },
 			pos,
 		} )
+	}
+
+	fn parse_data_type(&mut self, data_type_name: &NameToken) -> Result<DataType, VarErr> {
+		match data_type_name.value() {
+			"f32" => Ok( DataType::Primitive (Primitive::Float32) ),
+			"str" => Ok( DataType::Primitive (Primitive::String) ),
+			"bool" => Ok( DataType::Primitive (Primitive::Bool) ),
+			_ => Err( VarErr::UnknownType { name: data_type_name.clone() } ),
+		}
 	}
 
 	fn parse_next_statement(&mut self) -> Option<Result<Statement, InterpErr>> {
@@ -642,7 +651,7 @@ impl std::fmt::Display for Statement {
 				write!(f, "define user func {}(...)", name)?;
 				
 				match return_type {
-					DataType::None => writeln!(f, " ")?,
+					DataType::Primitive (Primitive::None) => writeln!(f, " ")?,
 					dt @ _ => writeln!(f, " -> {}", dt)?,
 				}
 				
@@ -724,7 +733,7 @@ impl ConditionalBody {
 	
 	pub fn check(&self, check_context: &mut Context) -> Result<(), InterpErr> {
 		match self.condition_expr.check_and_calc_data_type(check_context)? {
-			DataType::Bool => {},
+			DataType::Primitive (Primitive::Bool) => {},
 			_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
 										pos: self.condition_expr().pos(),
 									} ) ),
@@ -850,7 +859,7 @@ impl ReturningBody {
 						let dt: DataType = expr.check_and_calc_data_type(check_context)?;
 						dt
 					},
-					None => DataType::None,
+					None => DataType::Primitive (Primitive::None),
 				};
 				if returned_type.ne(declared_return_type) {
 					Err( InterpErr::from(StatementErr::UserFuncReturnType {
@@ -888,7 +897,7 @@ impl ReturningBody {
 					all_bodies_return = false;
 				}
 				
-				return if let DataType::None = declared_return_type {
+				return if let DataType::Primitive (Primitive::None) = declared_return_type {
 					Ok(true)
 				} else {
 					Ok(all_bodies_return)
@@ -903,7 +912,7 @@ impl ReturningBody {
 					}
 				}
 				
-				return if let DataType::None = declared_return_type {
+				return if let DataType::Primitive (Primitive::None) = declared_return_type {
 					Ok(true)
 				} else {
 					Ok(body_returns)
@@ -989,7 +998,7 @@ mod tests {
 			statements_iter.next().unwrap().unwrap().kind, 
 			StatementKind::VariableDeclare {
 					var_name: nt, 
-					data_type: DataType::Float32, 
+					data_type: DataType::Primitive (Primitive::Float32), 
 			} 
 		);
 		
@@ -1011,7 +1020,7 @@ mod tests {
 		let st = statements_iter.next().unwrap().unwrap();
 		assert_eq!(st.kind, StatementKind::VariableDeclare {
 			var_name: nt.clone(), 
-			data_type: DataType::Float32, 
+			data_type: DataType::Primitive (Primitive::Float32), 
 		});		
 		assert!(statements_iter.next().is_none());
 		
@@ -1019,7 +1028,7 @@ mod tests {
 		let st = statements_iter.next().unwrap().unwrap();
 		assert_eq!(st.kind, StatementKind::VariableDeclare {
 			var_name: nt.clone(), 
-			data_type: DataType::String, 
+			data_type: DataType::Primitive (Primitive::String), 
 		});		
 		assert!(statements_iter.next().is_none());
 		
@@ -1027,7 +1036,7 @@ mod tests {
 		let st = statements_iter.next().unwrap().unwrap();
 		assert_eq!(st.kind, StatementKind::VariableDeclare {
 			var_name: nt.clone(), 
-			data_type: DataType::Bool, 
+			data_type: DataType::Primitive (Primitive::Bool), 
 		});		
 		assert!(statements_iter.next().is_none());
 	}
@@ -1045,7 +1054,7 @@ mod tests {
 		match st.kind {
 			StatementKind::VariableDeclareSet {
 					var_name, 
-					data_type: DataType::Float32, 
+					data_type: DataType::Primitive (Primitive::Float32), 
 					value_expr
 				} 
 			if 
@@ -1061,7 +1070,7 @@ mod tests {
 		match st.kind {
 			StatementKind::VariableDeclareSet {
 					var_name, 
-					data_type: DataType::String, 
+					data_type: DataType::Primitive (Primitive::String), 
 					value_expr
 				}
 			if 
@@ -1077,7 +1086,7 @@ mod tests {
 		match st.kind {
 			StatementKind::VariableDeclareSet {
 					var_name, 
-					data_type: DataType::Bool, 
+					data_type: DataType::Primitive (Primitive::Bool), 
 					value_expr
 				} 
 			if 
@@ -1327,11 +1336,11 @@ mod tests {
 			value_expr,
 		} = st.kind {
 			assert_eq!(var_name.value(), "a");
-			assert_eq!(data_type, DataType::Float32);
+			assert_eq!(data_type, DataType::Primitive (Primitive::Float32));
 		
 			assert_eq!(
 				value_expr.check_and_calc_data_type(&context).unwrap(), 
-				DataType::Float32);
+				DataType::Primitive (Primitive::Float32));
 						
 			assert_eq!(
 				value_expr.calc(&context), 
@@ -1370,7 +1379,7 @@ mod tests {
 				
 				assert_eq!(
 					arg_exprs[0].check_and_calc_data_type(&context).unwrap(), 
-					DataType::String);
+					DataType::Primitive (Primitive::String));
 					
 				assert_eq!(
 					arg_exprs[0].calc(&context), 
@@ -1388,7 +1397,7 @@ mod tests {
 		
 		assert_eq!(
 			condition_expr.check_and_calc_data_type(&context).unwrap(), 
-			DataType::Bool);
+			DataType::Primitive (Primitive::Bool));
 					
 		assert_eq!(
 			condition_expr.calc(&context), 
@@ -1423,7 +1432,7 @@ mod tests {
 				
 				assert_eq!(
 					arg_exprs[0].check_and_calc_data_type(&context).unwrap(), 
-					DataType::String);
+					DataType::Primitive (Primitive::String));
 					
 				assert_eq!(
 					arg_exprs[0].calc(&context), 
@@ -1455,22 +1464,22 @@ mod tests {
 				assert_eq!(
 					args,
 					vec![
-						UserFuncArg::new(new_name_token("a"), DataType::Float32),
-						UserFuncArg::new(new_name_token("b"), DataType::Float32),
+						UserFuncArg::new(new_name_token("a"), DataType::Primitive (Primitive::Float32)),
+						UserFuncArg::new(new_name_token("b"), DataType::Primitive (Primitive::Float32)),
 					]);
-				assert_eq!(return_type, DataType::Float32);
+				assert_eq!(return_type, DataType::Primitive (Primitive::Float32));
 				
 				assert_eq!(body.statements().len(), 3);
 				
-				context.add_variable(new_name_token("a"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
-				context.add_variable(new_name_token("b"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				context.add_variable(new_name_token("a"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
+				context.add_variable(new_name_token("b"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[0].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2"));
-						assert_eq!(data_type.clone(), DataType::Float32);
+						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
-						assert_eq!(dt, DataType::Float32);
+						assert_eq!(dt, DataType::Primitive (Primitive::Float32));
 					},
 					_ => {
 						println!("Wrong statement:");
@@ -1479,14 +1488,14 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("a2"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				context.add_variable(new_name_token("a2"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[1].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2"));
-						assert_eq!(data_type.clone(), DataType::Float32);
+						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
-						assert_eq!(dt, DataType::Float32);
+						assert_eq!(dt, DataType::Primitive (Primitive::Float32));
 					},
 					_ => {
 						println!("Wrong statement:");
@@ -1495,14 +1504,14 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("b2"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				context.add_variable(new_name_token("b2"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[2].kind {
 					StatementKind::UserDefinedFuncReturn { return_expr } => {
 						let dt: Option<DataType> = return_expr.as_ref()
 							.map(|expr| expr.check_and_calc_data_type(&context).unwrap());
 							
-						assert_eq!(dt, Some(DataType::Float32));
+						assert_eq!(dt, Some(DataType::Primitive (Primitive::Float32)));
 					},
 					_ => {
 						println!("Wrong statement:");
@@ -1542,22 +1551,22 @@ mod tests {
 				assert_eq!(
 					args,
 					vec![
-						UserFuncArg::new(new_name_token("a"), DataType::Float32),
-						UserFuncArg::new(new_name_token("b"), DataType::Float32),
+						UserFuncArg::new(new_name_token("a"), DataType::Primitive (Primitive::Float32)),
+						UserFuncArg::new(new_name_token("b"), DataType::Primitive (Primitive::Float32)),
 					]);
-				assert_eq!(return_type, DataType::None);
+				assert_eq!(return_type, DataType::Primitive (Primitive::None));
 				
 				assert_eq!(body.statements().len(), 4);
 				
-				context.add_variable(new_name_token("a"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
-				context.add_variable(new_name_token("b"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				context.add_variable(new_name_token("a"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
+				context.add_variable(new_name_token("b"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[0].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2"));
-						assert_eq!(data_type.clone(), DataType::Float32);
+						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
-						assert_eq!(dt, DataType::Float32);
+						assert_eq!(dt, DataType::Primitive (Primitive::Float32));
 					},
 					_ => {
 						println!("Wrong statement:");
@@ -1566,14 +1575,14 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("a2"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				context.add_variable(new_name_token("a2"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[1].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2"));
-						assert_eq!(data_type.clone(), DataType::Float32);
+						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
-						assert_eq!(dt, DataType::Float32);
+						assert_eq!(dt, DataType::Primitive (Primitive::Float32));
 					},
 					_ => {
 						println!("Wrong statement:");
@@ -1582,7 +1591,7 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("b2"), DataType::Float32, Some(DataType::Float32.default_value())).unwrap();
+				context.add_variable(new_name_token("b2"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[2].kind {
 					StatementKind::FuncCall { kind, func_name, arg_exprs } => {
@@ -1590,7 +1599,7 @@ mod tests {
 						assert_eq!(*func_name, new_name_token("println"));
 						assert_eq!(arg_exprs.len(), 1);
 						let dt: DataType = arg_exprs[0].check_and_calc_data_type(&context).unwrap();
-						assert_eq!(dt, DataType::Float32);
+						assert_eq!(dt, DataType::Primitive (Primitive::Float32));
 					},
 					_ => {
 						println!("Wrong statement:");

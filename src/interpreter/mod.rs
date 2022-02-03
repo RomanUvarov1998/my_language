@@ -17,7 +17,7 @@ use user_func::UserFuncErr;
 use var_data::VarErr;
 use utils::CodePos;
 use context::Context;
-use data_type::DataType;
+use data_type::{DataType, Primitive};
 use value::Value;
 
 //------------------------ Interpreter --------------------
@@ -34,25 +34,25 @@ impl Interpreter {
 		builtin_func_defs.push(BuiltinFuncDef::new(
 			"print",
 			vec![
-				BuiltinFuncArg::new("value".to_string(), DataType::Any),
+				BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Any)),
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				print!("{}", args_values[0]);
 				None
 			}) as BuiltinFuncBody,
-			DataType::Any
+			DataType::Primitive (Primitive::Any)
 		));
 		
 		builtin_func_defs.push(BuiltinFuncDef::new(
 			"println",
 			vec![
-				BuiltinFuncArg::new("value".to_string(), DataType::Any),
+				BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Any)),
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				println!("{}", args_values[0]);
 				None
 			}) as BuiltinFuncBody,
-			DataType::Any
+			DataType::Primitive (Primitive::Any)
 		));
 		
 		builtin_func_defs.push(BuiltinFuncDef::new(
@@ -61,13 +61,13 @@ impl Interpreter {
 			Box::new(|_args_values: Vec<Value>| -> Option<Value> {
 				std::process::exit(0)
 			}) as BuiltinFuncBody,
-			DataType::Any
+			DataType::Primitive (Primitive::Any)
 		));
 		
 		builtin_func_defs.push(BuiltinFuncDef::new(
 			"input",
 			vec![
-				BuiltinFuncArg::new("prompt".to_string(), DataType::String),
+				BuiltinFuncArg::new("prompt".to_string(), DataType::Primitive (Primitive::String)),
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				use std::io::{self, Write};
@@ -80,13 +80,13 @@ impl Interpreter {
 				
 				Some(Value::from(input.trim_end().clone()))
 			}) as BuiltinFuncBody,
-			DataType::String
+			DataType::Primitive (Primitive::String)
 		));
 		
 		builtin_func_defs.push(BuiltinFuncDef::new(
 			"str_to_f32",
 			vec![
-				BuiltinFuncArg::new("value".to_string(), DataType::String),
+				BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::String)),
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				let str_value: String = match &args_values[0] {
@@ -96,7 +96,7 @@ impl Interpreter {
 				let result: f32 = str_value.parse::<f32>().unwrap();
 				Some(Value::from(result))
 			}) as BuiltinFuncBody,
-			DataType::Float32
+			DataType::Primitive (Primitive::Float32)
 		));
 		
 		Self {
@@ -362,8 +362,8 @@ mod tests {
 		
 		match int.check_and_run("var a: f32 = \"hello\";") {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::WrongType { 
-				value_data_type: DataType::String, 
-				variable_type: DataType::Float32,
+				value_data_type: DataType::Primitive (Primitive::String), 
+				variable_type: DataType::Primitive (Primitive::Float32),
 				var_name,
 			}), .. } ) if var_name == nt => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
@@ -371,8 +371,8 @@ mod tests {
 		
 		match int.check_and_run("var a: str = 4;") {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::WrongType { 
-				value_data_type: DataType::Float32, 
-				variable_type: DataType::String,
+				value_data_type: DataType::Primitive (Primitive::Float32), 
+				variable_type: DataType::Primitive (Primitive::String),
 				var_name,
 			}), .. } ) if var_name == nt => {},
 			res @ _ => panic!("Wrong result: {:?}", res),

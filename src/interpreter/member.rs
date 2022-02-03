@@ -19,7 +19,7 @@ impl MemberFuncDef {
 		let args: &Vec<BuiltinFuncArg> = func_def.args();
 		assert!(args.len() > 0);
 		assert!(args[0].data_type() == value_type);
-		assert!(args[0].data_type() == DataType::Any);
+		assert!(args[0].data_type() == DataType::Primitive (Primitive::Any));
 		Self::Builtin (func_def)
 	}
 	
@@ -27,7 +27,7 @@ impl MemberFuncDef {
 		let args: &Vec<UserFuncArg> = func_def.args();
 		assert!(args.len() > 0);
 		assert!(args[0].data_type() == value_type);
-		assert!(args[0].data_type() == DataType::Any);
+		assert!(args[0].data_type() == DataType::Primitive (Primitive::Any));
 		Self::UserDefined (func_def)
 	}
 	
