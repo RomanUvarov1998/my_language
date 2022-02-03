@@ -16,12 +16,11 @@ use statement::{StatementsIter, Statement, StatementErr};
 use builtin_func::{BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
 use user_func::UserFuncErr;
 use var_data::VarErr;
-use utils::{CodePos, CharPos};
+use utils::CodePos;
 use context::Context;
 use data_type::{DataType, Primitive};
 use value::Value;
 use primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
-use expr::OperatorErr;
 use struct_def::StructDefErr;
 
 //------------------------ Interpreter --------------------
@@ -154,7 +153,6 @@ pub enum InnerErr {
 	BuiltinFunc (BuiltinFuncErr),
 	UserFunc (UserFuncErr),
 	Statement (StatementErr),
-	Operator (OperatorErr),
 	StructDef (StructDefErr),
 }
 
@@ -217,6 +215,16 @@ impl From<ExprErr> for InterpErr {
 			ExprErr::ExpectedExprButFound (pos) => InterpErr {
 				pos,
 				descr: format!("{}", err),
+				inner: InnerErr::Expr (err),
+			},
+			ExprErr::WrongOperandsTypeForOperator { operator_pos, ref descr } => InterpErr {
+				pos: operator_pos,
+				descr: descr.clone(),
+				inner: InnerErr::Expr (err),
+			},
+			ExprErr::NotEnoughOperandsForOperator { operator_pos, ref descr } => InterpErr {
+				pos: operator_pos,
+				descr: descr.clone(),
 				inner: InnerErr::Expr (err),
 			},
 		}
@@ -339,40 +347,17 @@ impl From<BuiltinFuncErr> for InterpErr {
 	}
 }
 
-impl From<OperatorErr> for InterpErr {
-	fn from(err: OperatorErr) -> InterpErr {
-		let descr: String = format!("{}", err);
-		match err {
-			OperatorErr::WrongType { .. } => InterpErr {
-				pos: CodePos::from(CharPos::new()), // TODO: provide CodePos here
-				descr,
-				inner: InnerErr::Operator (err),
-			},
-			OperatorErr::NotEnoughOperands { .. } => InterpErr {
-				pos: CodePos::from(CharPos::new()), // TODO: provide CodePos here
-				descr,
-				inner: InnerErr::Operator (err),
-			},
-		}
-	}
-}
-
 impl From<StructDefErr> for InterpErr {
 	fn from(err: StructDefErr) -> InterpErr {
 		let descr: String = format!("{}", err);
 		match err {
-			StructDefErr::FieldAlreadyDefined { .. } => InterpErr {
-				pos: CodePos::from(CharPos::new()), // TODO: provide CodePos here
-				descr,
-				inner: InnerErr::StructDef (err),
-			},
-			StructDefErr::BuiltinMemberFuncAlreadyDefined { .. } => InterpErr {
-				pos: CodePos::from(CharPos::new()), // TODO: provide CodePos here
+			StructDefErr::FieldAlreadyDefined { ref name_in_code } => InterpErr {
+				pos: name_in_code.pos(),
 				descr,
 				inner: InnerErr::StructDef (err),
 			},
 			StructDefErr::BuiltinMemberFuncIsNotDefined { ref name } => InterpErr {
-				pos: name.pos(), // TODO: provide CodePos here
+				pos: name.pos(),
 				descr,
 				inner: InnerErr::StructDef (err),
 			},

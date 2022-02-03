@@ -88,14 +88,12 @@ impl StructDefInner {
 	}
 	
 	#[allow(dead_code)]
-	pub fn add_builtin_func_def(&mut self, func_def: BuiltinFuncDef) -> Result<(), StructDefErr> {
+	pub fn add_builtin_func_def(&mut self, func_def: BuiltinFuncDef) {
 		if let Some(_) = self.builtin_funcs.iter().find(|fd| fd.name() == func_def.name()) {
-			return Err( StructDefErr::BuiltinMemberFuncAlreadyDefined { name: func_def.name() } );
+			panic!("Builtin member function '{}' is already defined", func_def.name());
 		}
 		
 		self.builtin_funcs.push(func_def);
-		
-		Ok(())
 	}
 	
 	#[allow(dead_code)]
@@ -122,10 +120,7 @@ pub struct StructFieldDef {
 #[derive(Debug, PartialEq, Eq)]
 pub enum StructDefErr {
 	FieldAlreadyDefined {
-		name: String,
-	},
-	BuiltinMemberFuncAlreadyDefined {
-		name: &'static str,
+		name_in_code: NameToken,
 	},
 	BuiltinMemberFuncIsNotDefined {
 		name: NameToken,
@@ -135,10 +130,8 @@ pub enum StructDefErr {
 impl std::fmt::Display for StructDefErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			StructDefErr::FieldAlreadyDefined { name } => 
-				write!(f, "Member field '{}' is already defined", &name),
-			StructDefErr::BuiltinMemberFuncAlreadyDefined { name } => 
-				write!(f, "Builtin member function '{}' is already defined", name),
+			StructDefErr::FieldAlreadyDefined { name_in_code } => 
+				write!(f, "Member field '{}' is already defined", &name_in_code),
 			StructDefErr::BuiltinMemberFuncIsNotDefined { name } => 
 				write!(f, "Builtin member function '{}' is not defined", &name),
 		}
