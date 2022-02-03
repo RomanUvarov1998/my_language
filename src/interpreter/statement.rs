@@ -984,6 +984,7 @@ mod tests {
 	use super::super::utils::NameToken;
 	use super::super::context::Context;
 	use super::super::builtin_func::BuiltinFuncDef;
+	use super::super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
 	
 	#[test]
 	fn can_parse_comment() {
@@ -1051,7 +1052,10 @@ mod tests {
 		
 		let nt = new_name_token("a");
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let context = Context::new(&builtin_func_defs);
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list);
 		
 		statements_iter.push_string("var a: f32 = 3;".to_string());
 		let st = statements_iter.next().unwrap().unwrap();
@@ -1109,7 +1113,10 @@ mod tests {
 		
 		let nt = new_name_token("print");
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let context = Context::new(&builtin_func_defs);
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list);
 		
 		match st_iter.next().unwrap().unwrap().kind {
 			StatementKind::FuncCall {
@@ -1331,7 +1338,10 @@ mod tests {
 		"#.to_string());	
 			
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let context = Context::new(&builtin_func_defs);
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list);
 		
 		let st = statements_iter.next().unwrap().unwrap();
 		if let StatementKind::VariableDeclareSet {
@@ -1379,7 +1389,10 @@ mod tests {
 				assert_eq!(arg_exprs.len(), 1);
 		
 				let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-				let context = Context::new(&builtin_func_defs);
+				let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+				let context = Context::new(
+					&builtin_func_defs,
+					&primitive_type_member_funcs_list);
 				
 				assert_eq!(
 					arg_exprs[0].check_and_calc_data_type(&context).unwrap(), 
@@ -1397,7 +1410,10 @@ mod tests {
 		let ConditionalBody { condition_expr, statements } = body;
 		
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let context = Context::new(&builtin_func_defs);
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list);
 		
 		assert_eq!(
 			condition_expr.check_and_calc_data_type(&context).unwrap(), 
@@ -1426,7 +1442,10 @@ mod tests {
 		let nt_print = new_name_token("print");
 		
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let context = Context::new(&builtin_func_defs);
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list);
 		
 		match &statement.kind {
 			StatementKind::FuncCall { kind: FuncKind::Builtin, func_name, arg_exprs } => {
@@ -1451,7 +1470,10 @@ mod tests {
 		let mut statements_iter = StatementsIter::new();
 		
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let mut context = Context::new(&builtin_func_defs);
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let mut context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list);
 		
 		statements_iter.push_string(r#"
 		f add_squared(a: f32, b: f32) -> f32 {
@@ -1537,7 +1559,10 @@ mod tests {
 		let mut statements_iter = StatementsIter::new();
 		
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let mut context = Context::new(&builtin_func_defs);
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let mut context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list);
 		
 		statements_iter.push_string(r#"
 		f add_squared(a: f32, b: f32) {

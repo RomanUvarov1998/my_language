@@ -1202,6 +1202,7 @@ fn unpaired_bracket(pos: CodePos) -> InterpErr {
 mod tests {
 	use super::super::token::*;
 	use super::*;
+	use super::super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
 	
 	#[test]
 	fn lookup_array_initialization() {
@@ -1715,7 +1716,10 @@ mod tests {
 			let expr = Expr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
 			
 			let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-			let context = Context::new(&builtin_func_defs);
+			let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+			let context = Context::new(
+				&builtin_func_defs,
+				&primitive_type_member_funcs_list);
 			
 			let ans: Value = expr.calc(&context);
 			

@@ -10,6 +10,7 @@ mod builtin_func;
 mod user_func;
 mod utils;
 mod context;
+mod primitive_type_member_funcs_list;
 
 use statement::{StatementsIter, Statement, StatementErr};
 use builtin_func::{BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
@@ -19,12 +20,14 @@ use utils::CodePos;
 use context::Context;
 use data_type::{DataType, Primitive};
 use value::Value;
+use primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
 
 //------------------------ Interpreter --------------------
 
 pub struct Interpreter {
 	statements_iter: StatementsIter,
 	builtin_func_defs: Vec<BuiltinFuncDef>,
+	primitive_type_member_funcs_list: PrimitiveTypeMemberFuncsList,
 }
 
 impl Interpreter {
@@ -102,6 +105,7 @@ impl Interpreter {
 		Self {
 			statements_iter: StatementsIter::new(),
 			builtin_func_defs,
+			primitive_type_member_funcs_list: PrimitiveTypeMemberFuncsList::new(),
 		}
 	}
 	
@@ -109,7 +113,9 @@ impl Interpreter {
 		self.statements_iter.push_string(code.to_string());
 		
 		let mut statements = Vec::<Statement>::new();
-		let mut check_context = Context::new(&self.builtin_func_defs);
+		let mut check_context = Context::new(
+			&self.builtin_func_defs, 
+			&self.primitive_type_member_funcs_list);
 	
 		while let Some(statement_result) = self.statements_iter.next() {
 			let st: Statement = statement_result?;
@@ -117,7 +123,9 @@ impl Interpreter {
 			statements.push(st);
 		}
 		
-		let mut run_context = Context::new(&self.builtin_func_defs);
+		let mut run_context = Context::new(
+			&self.builtin_func_defs, 
+			&self.primitive_type_member_funcs_list);
 		
 		for st_ref in &statements {
 			st_ref.run(&mut run_context);

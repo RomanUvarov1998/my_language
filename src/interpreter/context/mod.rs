@@ -8,6 +8,7 @@ use super::data_type::DataType;
 use super::var_data::{VarData, VarErr};
 use super::user_func::{UserFuncErr, UserFuncArg, UserFuncDef};
 use super::statement::ReturningBody;
+use super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
 
 //---------------------- Context -----------------------
 
@@ -15,14 +16,19 @@ pub struct Context<'prev_context> {
 	prev_frame_context: Option<&'prev_context CallStackFrame>,
 	frame: CallStackFrame,
 	builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>,
+	primitive_type_member_funcs_list: &'prev_context PrimitiveTypeMemberFuncsList,
 }
 
 impl<'prev_context> Context<'prev_context> {
-	pub fn new(builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>) -> Self {
+	pub fn new(
+		builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>,
+		primitive_type_member_funcs_list: &'prev_context PrimitiveTypeMemberFuncsList
+	) -> Self {
 		Self {
 			prev_frame_context: None,
 			frame: CallStackFrame::new(),
 			builtin_func_defs,
+			primitive_type_member_funcs_list,
 		}
 	}
 	
@@ -31,6 +37,7 @@ impl<'prev_context> Context<'prev_context> {
 			prev_frame_context: Some(&self.frame),
 			frame: CallStackFrame::new(),
 			builtin_func_defs: &self.builtin_func_defs,
+			primitive_type_member_funcs_list: &self.primitive_type_member_funcs_list,
 		}
 	}
 	
@@ -89,6 +96,10 @@ impl<'prev_context> Context<'prev_context> {
 			None => Err( BuiltinFuncErr::NotDefined { name_pos: name.pos() } ),
 		}
 	}
+
+	pub fn find_member_builtin_func_def(&'prev_context self, name: &'prev_context NameToken) -> Result<& 'prev_context BuiltinFuncDef, BuiltinFuncErr> {
+		todo!();
+	}
 }
 
 //---------------------- Tests -----------------------
@@ -101,11 +112,15 @@ mod tests {
 	use super::super::data_type::{DataType, Primitive};
 	use super::super::var_data::VarErr;
 	use super::super::value::Value;
+	use super::super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
 	
 	#[test]
 	fn add_uninit_variable() {
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let mut context = Context::new(&builtin_func_defs);
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let mut context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list);
 		
 		let nt_a = new_name_token("a");
 		let nt_b = new_name_token("b");
@@ -158,7 +173,10 @@ mod tests {
 	#[test]
 	fn add_variable_with_value() {
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let mut context = Context::new(&builtin_func_defs);
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let mut context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list);
 		
 		let nt = new_name_token("a");
 		

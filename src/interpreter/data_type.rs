@@ -9,7 +9,7 @@ pub enum DataType {
 	Complex (StructDef),
 }
 
-impl DataType {	
+impl DataType {
 	pub fn default_value(&self) -> Value {
 		match self {
 			DataType::Primitive (dt) => dt.default_value(),
@@ -29,7 +29,8 @@ impl std::fmt::Display for DataType {
 
 //--------------------------- Primitive -------------------------
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
 pub enum Primitive {
 	Float32,
 	String,
