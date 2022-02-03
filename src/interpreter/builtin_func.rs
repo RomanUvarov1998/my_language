@@ -1,7 +1,7 @@
 use super::data_type::{DataType, Primitive};
 use super::value::Value;
 use super::InterpErr;
-use super::utils::{CodePos, NameToken};
+use super::utils::{CodePos, NameToken, CharPos};
 use super::expr::Expr;
 use super::context::Context;
 
@@ -43,6 +43,47 @@ impl BuiltinFuncDef {
 		let args_data_types: Vec<DataType> = args_data_types_result?;
 		
 		for i in 0..self.args.len() {
+			if !self.args[i].type_check(&args_data_types[i]) {
+				return Err( InterpErr::from( BuiltinFuncErr::ArgType {
+					func_signature: format!("{}", self),
+					arg_name: self.args[i].name.clone(),
+					arg_expr_pos: args_exprs[i].pos(),
+					actual_type: self.args[i].data_type.clone(),
+					given_type: args_data_types[i].clone(),
+				} ) );
+			}
+		}
+		
+		Ok(())
+	}
+	
+	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value: &Value, check_context: &Context) -> Result<(), InterpErr> {
+		if self.args.len() != args_exprs.len() + 1 {
+			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt {
+				func_signature: format!("{}", self),
+				func_name_pos: func_name.pos(),
+				actual_cnt: self.args.len(),
+				given_cnt: args_exprs.len() + 1,
+			} ) );
+		}
+						
+		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
+			.map(|expr| expr.check_and_calc_data_type(check_context))
+			.collect();
+			
+		let args_data_types: Vec<DataType> = args_data_types_result?;
+		
+		if value.get_type().ne(&self.args[0].data_type) {
+			return Err( InterpErr::from( BuiltinFuncErr::ArgType {
+				func_signature: format!("{}", self),
+				arg_name: String::from("value itself"),
+				arg_expr_pos: CodePos::from(CharPos::new()), // TODO: use kinda NameToken to provede position
+				actual_type: self.args[0].data_type.clone(),
+				given_type: value.get_type().clone(),
+			} ) );
+		}
+		
+		for i in 1..self.args.len() {
 			if !self.args[i].type_check(&args_data_types[i]) {
 				return Err( InterpErr::from( BuiltinFuncErr::ArgType {
 					func_signature: format!("{}", self),

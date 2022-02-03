@@ -1,5 +1,8 @@
 use super::value::Value;
-use super::struct_def::StructDef;
+use super::struct_def::{StructDef, StructDefErr};
+use super::utils::NameToken;
+use super::context::Context;
+use super::builtin_func::BuiltinFuncDef;
 
 //--------------------------- DataType -------------------------
 
@@ -14,6 +17,17 @@ impl DataType {
 		match self {
 			DataType::Primitive (dt) => dt.default_value(),
 			DataType::Complex (dt) => dt.inner().default_value(),
+		}
+	}
+	
+	pub fn find_member_builtin_func<'context>(
+		&self, 
+		func_name: &'context NameToken, 
+		context: &'context Context
+	) -> Result<&'context BuiltinFuncDef, StructDefErr> {
+		match self {
+			DataType::Primitive (dt) => context.find_member_builtin_func_def(*dt, func_name),
+			DataType::Complex (_) => todo!(),
 		}
 	}
 }

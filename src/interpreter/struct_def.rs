@@ -108,7 +108,7 @@ pub struct StructFieldDef {
 
 //------------------ StructDefErr ---------------------
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum StructDefErr {
 	FieldAlreadyDefined {
 		name: String,
@@ -119,4 +119,17 @@ pub enum StructDefErr {
 	BuiltinMemberFuncIsNotDefined {
 		name: String,
 	},
+}
+
+impl std::fmt::Display for StructDefErr {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			StructDefErr::FieldAlreadyDefined { name } => 
+				write!(f, "Member field '{}' is already defined", &name),
+			StructDefErr::BuiltinMemberFuncAlreadyDefined { name } => 
+				write!(f, "Builtin member function '{}' is already defined", name),
+			StructDefErr::BuiltinMemberFuncIsNotDefined { name } => 
+				write!(f, "Builtin member function '{}' is not defined", &name),
+		}
+	}
 }

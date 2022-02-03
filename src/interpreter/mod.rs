@@ -16,11 +16,13 @@ use statement::{StatementsIter, Statement, StatementErr};
 use builtin_func::{BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
 use user_func::UserFuncErr;
 use var_data::VarErr;
-use utils::CodePos;
+use utils::{CodePos, CharPos};
 use context::Context;
 use data_type::{DataType, Primitive};
 use value::Value;
 use primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
+use expr::OperatorErr;
+use struct_def::StructDefErr;
 
 //------------------------ Interpreter --------------------
 
@@ -152,6 +154,8 @@ pub enum InnerErr {
 	BuiltinFunc (BuiltinFuncErr),
 	UserFunc (UserFuncErr),
 	Statement (StatementErr),
+	Operator (OperatorErr),
+	StructDef (StructDefErr),
 }
 
 impl InterpErr {
@@ -339,6 +343,49 @@ impl From<BuiltinFuncErr> for InterpErr {
 		}
 	}
 }
+
+impl From<OperatorErr> for InterpErr {
+	fn from(err: OperatorErr) -> InterpErr {
+		let descr: String = format!("{}", err);
+		match err {
+			OperatorErr::WrongType { .. } => InterpErr {
+				pos: CodePos::from(CharPos::new()), // TODO: provide CodePos here
+				descr,
+				inner: InnerErr::Operator (err),
+			},
+			OperatorErr::NotEnoughOperands { .. } => InterpErr {
+				pos: CodePos::from(CharPos::new()), // TODO: provide CodePos here
+				descr,
+				inner: InnerErr::Operator (err),
+			},
+		}
+	}
+}
+
+impl From<StructDefErr> for InterpErr {
+	fn from(err: StructDefErr) -> InterpErr {
+		let descr: String = format!("{}", err);
+		match err {
+			StructDefErr::FieldAlreadyDefined { .. } => InterpErr {
+				pos: CodePos::from(CharPos::new()), // TODO: provide CodePos here
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
+			StructDefErr::BuiltinMemberFuncAlreadyDefined { .. } => InterpErr {
+				pos: CodePos::from(CharPos::new()), // TODO: provide CodePos here
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
+			StructDefErr::BuiltinMemberFuncIsNotDefined { .. } => InterpErr {
+				pos: CodePos::from(CharPos::new()), // TODO: provide CodePos here
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
+		}
+	}
+}
+
+
 
 //------------------------ Tests --------------------
 
@@ -538,6 +585,21 @@ f add2(a: f32, b: f32) -> f32 {
 		}
 	}
 }
+		"#) {
+			Ok(_) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
+
+	#[test]
+	fn can_call_primitive_type_builtin_member_functions() {
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+			var s: str = "Hello";
+			var a: f32 = s.@len();
+			var b: f32 = "Hi!".@len();
+			var abs: f32 = (-123.45).@abs();
+			var sign: f32 = (-123.45).@sign();
 		"#) {
 			Ok(_) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),

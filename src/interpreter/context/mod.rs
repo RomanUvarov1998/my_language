@@ -4,11 +4,12 @@ use call_stack_frame::CallStackFrame;
 use super::builtin_func::{BuiltinFuncDef, BuiltinFuncErr};
 use super::utils::NameToken;
 use super::value::Value;
-use super::data_type::DataType;
+use super::data_type::{DataType, Primitive};
 use super::var_data::{VarData, VarErr};
 use super::user_func::{UserFuncErr, UserFuncArg, UserFuncDef};
 use super::statement::ReturningBody;
 use super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
+use super::struct_def::StructDefErr;
 
 //---------------------- Context -----------------------
 
@@ -97,9 +98,17 @@ impl<'prev_context> Context<'prev_context> {
 		}
 	}
 
-	pub fn find_member_builtin_func_def(&'prev_context self, name: &'prev_context NameToken) -> Result<& 'prev_context BuiltinFuncDef, BuiltinFuncErr> {
-		todo!();
+	pub fn find_member_builtin_func_def(
+		&'prev_context self, 
+		data_type: Primitive,
+		func_name: &'prev_context NameToken
+	) -> Result<& 'prev_context BuiltinFuncDef, StructDefErr> 
+	{
+		self.primitive_type_member_funcs_list.find_func(data_type, func_name)
 	}
+ 
+ // TODO: add find user func for TokenContent::Name
+ // TODO: add find builtin func for TokenContent::BuiltinName
 }
 
 //---------------------- Tests -----------------------

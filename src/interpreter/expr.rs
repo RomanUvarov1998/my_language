@@ -105,48 +105,30 @@ impl Expr {
 	
 	pub fn check_and_calc_data_type(&self, check_context: &Context) -> Result<DataType, InterpErr> {		
 		assert!(self.expr_stack.len() > 0);
-		let mut type_calc_stack = Vec::<DataType>::with_capacity(self.expr_stack.len());
 		
-		for Symbol { kind, pos } in self.expr_stack.iter() {
-			let pos = *pos;
-			match kind {
-				SymbolKind::Operand (ref opnd) => {
-					let opnd_dt: DataType = match opnd {
-						Operand::Value (val) => val.get_type(),
-						Operand::Variable (name) =>
-							check_context.get_variable_value(&NameToken::new_with_pos(&name, pos))?.get_type(),
-						Operand::FuncCall { kind, func_name, arg_exprs } => {
-							match kind {
-								FuncKind::Builtin => {
-									let f: &BuiltinFuncDef = check_context.find_builtin_func_def(&func_name).unwrap();
-							
-									f.check_args(&func_name, arg_exprs, check_context)?;
-									f.return_type().clone()
-								},
-								FuncKind::UserDefined => {
-									let f: &UserFuncDef = check_context.find_func_def(&func_name).unwrap();
-							
-									f.check_args(arg_exprs, check_context)?;
-									f.return_type().clone()
-								},
-							}
-						},
-					};
-					type_calc_stack.push(opnd_dt);
-				},
+		let mut type_calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
+		
+		for sym in self.expr_stack.iter() {
+			match &sym.kind {
+				SymbolKind::Operand (_) => type_calc_stack.push(sym.clone()), // TODO: avoid cloning symbols
 				
 				SymbolKind::LeftBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => {
-					match op.get_result_data_type(&mut type_calc_stack) {
-						Err(err) => return Err( InterpErr::from(ExprErr::Operator { err, pos }) ),
-						Ok(dt) => type_calc_stack.push(dt),
-					}
+					let dt: DataType = op.get_result_data_type(&mut type_calc_stack, check_context)?;
+					type_calc_stack.push(Symbol { 
+						pos: sym.pos, 
+						kind: SymbolKind::Operand (Operand::Value(dt.default_value())),
+					}); // TODO: somehow place DataType here, not a massive symbol
 				}, 
 			}
 		}
 		
-		let result: DataType = type_calc_stack.pop().unwrap();
+		let result: DataType = type_calc_stack.pop()
+			.unwrap()
+			.unwrap_operand()
+			.check_and_calc_data_type_in_place(check_context)
+			.unwrap();
 		assert_eq!(type_calc_stack.pop(), None);
 		
 		Ok(result)
@@ -576,6 +558,13 @@ impl Symbol {
 	fn pos(&self) -> CodePos {
 		self.pos
 	}
+
+	fn unwrap_operand(self) -> Operand {
+		match self.kind {
+			SymbolKind::Operand (op) => op,
+			_ => panic!("Wrong input: {:?}", &self),
+		}
+	}
 }
 
 impl Eq for Symbol {}
@@ -588,7 +577,7 @@ impl PartialEq for Symbol {
 #[derive(Debug, Clone)]
 enum Operand {
 	Value (Value),
-	Variable (String),
+	Variable (String), // TODO: reconfigure symbol struct to enum to place NameToken here
 	FuncCall {
 		kind: FuncKind,
 		func_name: NameToken, 
@@ -612,6 +601,33 @@ impl PartialEq for Operand {
 				_ => false,
 			},
 		}
+	}
+}
+
+impl Operand {
+	fn check_and_calc_data_type_in_place(&self, check_context: &Context) -> Result<DataType, InterpErr> {
+		let dt: DataType = match self {
+			Operand::Value (val) => val.get_type().clone(),
+			Operand::Variable (name) =>
+				check_context.get_variable_value(&NameToken::new_with_pos(&name, CodePos::from(CharPos::new())))?.get_type().clone(), // TODO: use NameToken::pos() here
+			Operand::FuncCall { kind, func_name, arg_exprs } => {
+				match kind {
+					FuncKind::Builtin => {
+						let f: &BuiltinFuncDef = check_context.find_builtin_func_def(&func_name).unwrap();
+				
+						f.check_args(&func_name, arg_exprs, check_context)?;
+						f.return_type().clone()
+					},
+					FuncKind::UserDefined => {
+						let f: &UserFuncDef = check_context.find_func_def(&func_name).unwrap();
+				
+						f.check_args(arg_exprs, check_context)?;
+						f.return_type().clone()
+					},
+				}
+			},
+		};
+		Ok(dt)
 	}
 }
 
@@ -778,32 +794,90 @@ impl ExprOperator {
 		}
 	}
 	
-	fn get_result_data_type(self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
+	fn get_result_data_type(self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
 		use ExprOperator::*;
-		match self {
-			BinPlus => self.get_bin_plus_result_type(calc_stack),
-			BinMinus => self.get_bin_minus_result_type(calc_stack),
-			Div => self.get_bin_div_result_type(calc_stack),
-			Mul => self.get_bin_mul_result_type(calc_stack),
-			Pow => self.get_bin_pow_result_type(calc_stack),
-			UnPlus => self.get_unary_plus_result_type(calc_stack),
-			UnMinus => self.get_unary_minus_result_type(calc_stack),
-			Equal => self.get_equal_result_type(calc_stack),
-			NotEqual => self.get_not_equal_result_type(calc_stack),
-			Not => self.get_not_result_type(calc_stack),
-			Greater => self.get_greater_result_type(calc_stack),
-			GreaterEqual => self.get_greater_equal_result_type(calc_stack),
-			Less => self.get_less_result_type(calc_stack),
-			LessEqual => self.get_less_equal_result_type(calc_stack),
-			LogicalAnd => self.get_logical_and_result_type(calc_stack),
-			LogicalOr => self.get_logical_or_result_type(calc_stack),
-			LogicalXor => self.get_logical_xor_result_type(calc_stack),
-			DotMemberAccess => todo!(),
+		
+		if let DotMemberAccess = self {
+			let rhs: Symbol = calc_stack
+				.pop()
+				.ok_or(InterpErr::from(OperatorErr::NotEnoughOperands { 
+					provided_cnt: 0,
+					required_cnt: 2, 
+				}) )?;
+				
+			let lhs: Symbol = calc_stack
+				.pop()
+				.ok_or(InterpErr::from(OperatorErr::NotEnoughOperands { 
+					provided_cnt: 1,
+					required_cnt: 2, 
+				}) )?;
+				
+			match (lhs.kind, rhs.kind) {
+				(SymbolKind::Operand (Operand::Value (ref value)), SymbolKind::Operand (Operand::FuncCall {
+					ref kind,
+					ref func_name,
+					ref arg_exprs,
+				})) => {
+					match kind {
+						FuncKind::Builtin => {
+							let func_def: &BuiltinFuncDef = value.get_type()
+								.find_member_builtin_func(&func_name, check_context)?;
+							
+							func_def.check_args_as_member_function(func_name, arg_exprs, value, check_context)?;
+							
+							return Ok(func_def.return_type().clone());
+						},
+						
+						FuncKind::UserDefined => todo!(),
+					}
+				},
+				(SymbolKind::Operand (Operand::Variable (ref var_name)), SymbolKind::Operand (Operand::FuncCall {
+					ref kind,
+					ref func_name,
+					ref arg_exprs,
+				})) => {
+					let value: &Value = check_context.get_variable_value(&NameToken::new_with_pos(var_name, CodePos::from(CharPos::new())))?; // TODO: use NameToken instead of string
+					match kind {
+						FuncKind::Builtin => {
+							let func_def: &BuiltinFuncDef = value.get_type()
+								.find_member_builtin_func(&func_name, check_context)?;
+							
+							func_def.check_args_as_member_function(func_name, arg_exprs, value, check_context)?;
+							
+							return Ok(func_def.return_type().clone());
+						},
+						
+						FuncKind::UserDefined => todo!(),
+					}
+				},
+				_ => todo!(),
+			}
+		} else {		
+			match self {
+				BinPlus => self.get_bin_plus_result_type(calc_stack, check_context),
+				BinMinus => self.get_bin_minus_result_type(calc_stack, check_context),
+				Div => self.get_bin_div_result_type(calc_stack, check_context),
+				Mul => self.get_bin_mul_result_type(calc_stack, check_context),
+				Pow => self.get_bin_pow_result_type(calc_stack, check_context),
+				UnPlus => self.get_unary_plus_result_type(calc_stack, check_context),
+				UnMinus => self.get_unary_minus_result_type(calc_stack, check_context),
+				Equal => self.get_equal_result_type(calc_stack, check_context),
+				NotEqual => self.get_not_equal_result_type(calc_stack, check_context),
+				Not => self.get_not_result_type(calc_stack, check_context),
+				Greater => self.get_greater_result_type(calc_stack, check_context),
+				GreaterEqual => self.get_greater_equal_result_type(calc_stack, check_context),
+				Less => self.get_less_result_type(calc_stack, check_context),
+				LessEqual => self.get_less_equal_result_type(calc_stack, check_context),
+				LogicalAnd => self.get_logical_and_result_type(calc_stack, check_context),
+				LogicalOr => self.get_logical_or_result_type(calc_stack, check_context),
+				LogicalXor => self.get_logical_xor_result_type(calc_stack, check_context),
+				DotMemberAccess => unreachable!(),
+			}
 		}
 	}
 	
 	fn apply_bin_plus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 + val2)),
 			(Value::String (val1), Value::String (val2)) => {
@@ -816,7 +890,7 @@ impl ExprOperator {
 	}
 	
 	fn apply_bin_minus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 - val2)),
 			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
@@ -824,7 +898,7 @@ impl ExprOperator {
 	}
 	
 	fn apply_bin_mul(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 * val2)),
 			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
@@ -832,7 +906,7 @@ impl ExprOperator {
 	}
 	
 	fn apply_bin_div(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1 / val2)),
 			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
@@ -840,7 +914,7 @@ impl ExprOperator {
 	}
 	
 	fn apply_bin_pow(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Float32(val1.powf(val2))),
 			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
@@ -848,7 +922,7 @@ impl ExprOperator {
 	}
 	
 	fn apply_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 == val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 == val2)),
@@ -858,7 +932,7 @@ impl ExprOperator {
 	}
 
 	fn apply_not_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 != val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 != val2)),
@@ -868,7 +942,7 @@ impl ExprOperator {
 	}
 
 	fn apply_greater(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 > val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 > val2)),
@@ -877,7 +951,7 @@ impl ExprOperator {
 	}
 
 	fn apply_greater_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 >= val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 >= val2)),
@@ -886,7 +960,7 @@ impl ExprOperator {
 	}
 
 	fn apply_less(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 < val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 < val2)),
@@ -895,7 +969,7 @@ impl ExprOperator {
 	}
 
 	fn apply_less_equal(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Ok(Value::Bool(val1 <= val2)),
 			(Value::String (val1), Value::String (val2)) => Ok(Value::Bool(val1 <= val2)),
@@ -904,7 +978,7 @@ impl ExprOperator {
 	}
 
 	fn apply_logical_and(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 && val2)),
 			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
@@ -912,7 +986,7 @@ impl ExprOperator {
 	}
 
 	fn apply_logical_or(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 || val2)),
 			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
@@ -920,21 +994,21 @@ impl ExprOperator {
 	}
 
 	fn apply_logical_xor(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+		let (lhs, rhs) = Self::take_2_values(calc_stack)?;
 		match (lhs, rhs) {
 			(Value::Bool (val1), Value::Bool (val2)) => Ok(Value::Bool(val1 ^ val2)),
 			ops @ _ => return Err( self.create_value_type_err(&[&ops.0, &ops.1]) ),
 		}
 	}
 	
-	fn take_2_operands<T>(calc_stack: &mut Vec<T>) -> Result<(T, T), OperatorErr> {
-		let rhs: T = calc_stack
+	fn take_2_values(calc_stack: &mut Vec<Value>) -> Result<(Value, Value), OperatorErr> {
+		let rhs: Value = calc_stack
 			.pop()
 			.ok_or(OperatorErr::NotEnoughOperands { 
 				provided_cnt: 0,
 				required_cnt: 2, 
 			} )?;
-		let lhs: T = calc_stack
+		let lhs: Value = calc_stack
 			.pop()
 			.ok_or(OperatorErr::NotEnoughOperands { 
 				provided_cnt: 1,
@@ -945,7 +1019,7 @@ impl ExprOperator {
 	
 	
 	fn apply_unary_plus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let op = Self::take_1_operand(calc_stack)?;
+		let op = Self::take_1_value(calc_stack)?;
 		match op {
 			Value::Float32 (val1) => Ok(Value::Float32(val1)),
 			_ => return Err( self.create_value_type_err(&[&op]) ),
@@ -953,7 +1027,7 @@ impl ExprOperator {
 	}
 	
 	fn apply_unary_minus(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let op = Self::take_1_operand(calc_stack)?;
+		let op = Self::take_1_value(calc_stack)?;
 		match op {
 			Value::Float32 (val1) => Ok(Value::Float32(-val1)),
 			_ => return Err( self.create_value_type_err(&[&op]) ),
@@ -961,15 +1035,15 @@ impl ExprOperator {
 	}
 	
 	fn apply_not(&self, calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
-		let op = Self::take_1_operand(calc_stack)?;
+		let op = Self::take_1_value(calc_stack)?;
 		match op {
 			Value::Bool (val1) => Ok(Value::Bool(!val1)),
 			_ => return Err( self.create_value_type_err(&[&op]) ),
 		}
 	}
 	
-	fn take_1_operand<T>(calc_stack: &mut Vec<T>) -> Result<T, OperatorErr> {
-		let op: T = calc_stack
+	fn take_1_value(calc_stack: &mut Vec<Value>) -> Result<Value, OperatorErr> {
+		let op: Value = calc_stack
 			.pop()
 			.ok_or(OperatorErr::NotEnoughOperands { 
 				provided_cnt: 0,
@@ -994,158 +1068,194 @@ impl ExprOperator {
 	
 	//---------------- Result data type -----------------------
 	
-	fn get_bin_plus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_bin_plus_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
 			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::String)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 	
-	fn get_bin_minus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_bin_minus_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 	
-	fn get_bin_mul_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_bin_mul_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 	
-	fn get_bin_div_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_bin_div_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 	
-	fn get_bin_pow_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_bin_pow_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 	
-	fn get_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_equal_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
 			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
 			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 
-	fn get_not_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_not_equal_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
 			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
 			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 
-	fn get_greater_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_greater_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
 			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 
-	fn get_greater_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_greater_equal_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
 			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 
-	fn get_less_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_less_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
 			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 
-	fn get_less_equal_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_less_equal_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
 			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 
-	fn get_logical_and_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_logical_and_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 
-	fn get_logical_or_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_logical_or_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 
-	fn get_logical_xor_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let (lhs, rhs) = Self::take_2_operands(calc_stack)?;
+	fn get_logical_xor_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let (lhs, rhs): (DataType, DataType) = Self::take_2_operands_as_values_data_types(calc_stack, check_context)?;
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
-			ops @ _ => return Err( self.create_type_err(&[&ops.0, &ops.1]) ),
+			ops @ _ => return Err( self.create_type_err(format!("{:?}", ops)) ),
 		}
 	}
 	
-	fn get_unary_plus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let op = Self::take_1_operand(calc_stack)?;
+	fn take_2_operands_as_values_data_types(calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<(DataType, DataType), InterpErr> {
+		let rhs: DataType = calc_stack
+			.pop()
+			.ok_or(InterpErr::from(OperatorErr::NotEnoughOperands { 
+				provided_cnt: 0,
+				required_cnt: 2, 
+			}) )?
+			.unwrap_operand()
+			.check_and_calc_data_type_in_place(check_context)?;
+			
+		let lhs: DataType = calc_stack
+			.pop()
+			.ok_or(InterpErr::from(OperatorErr::NotEnoughOperands { 
+				provided_cnt: 1,
+				required_cnt: 2, 
+			}) )?
+			.unwrap_operand()
+			.check_and_calc_data_type_in_place(check_context)?;
+			
+		Ok((lhs, rhs))
+	}
+	
+	
+	fn get_unary_plus_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let op = Self::take_1_operand_as_value_data_type(calc_stack, check_context)?;
 		match op {
 			DataType::Primitive (Primitive::Float32) => Ok(DataType::Primitive (Primitive::Float32)),
-			_ => return Err( self.create_type_err(&[&op]) ),
+			_ => return Err( self.create_type_err(format!("{:?}", op)) ),
 		}
 	}
 	
-	fn get_unary_minus_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let op = Self::take_1_operand(calc_stack)?;
+	fn get_unary_minus_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let op = Self::take_1_operand_as_value_data_type(calc_stack, check_context)?;
 		match op {
 			DataType::Primitive (Primitive::Float32) => Ok(DataType::Primitive (Primitive::Float32)),
-			_ => return Err( self.create_type_err(&[&op]) ),
+			_ => return Err( self.create_type_err(format!("{:?}", op)) ),
 		}
 	}
 	
-	fn get_not_result_type(&self, calc_stack: &mut Vec<DataType>) -> Result<DataType, OperatorErr> {
-		let op = Self::take_1_operand(calc_stack)?;
+	fn get_not_result_type(&self, calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let op = Self::take_1_operand_as_value_data_type(calc_stack, check_context)?;
 		match op {
 			DataType::Primitive (Primitive::Bool) => Ok(DataType::Primitive (Primitive::Bool)),
-			_ => return Err( self.create_type_err(&[&op]) ),
+			_ => return Err( self.create_type_err(format!("{:?}", op)) ),
 		}
 	}
 	
-	fn create_type_err(&self, values: &[&DataType]) -> OperatorErr {		
-		OperatorErr::WrongType { 
+	fn take_1_operand_as_value_data_type(calc_stack: &mut Vec<Symbol>, check_context: &Context) -> Result<DataType, InterpErr> {
+		let op: DataType = calc_stack
+			.pop()
+			.ok_or(InterpErr::from(OperatorErr::NotEnoughOperands { 
+				provided_cnt: 0,
+				required_cnt: 1, 
+			}) )?
+			.unwrap_operand()
+			.check_and_calc_data_type_in_place(check_context)?;
+		Ok(op)
+	}
+	
+	
+	fn create_type_err(&self, values_str: String) -> InterpErr {		
+		InterpErr::from( OperatorErr::WrongType { 
 			descr: String::from(format!(
-				"Operator {:?} cannot be applied to type(-s) {:?}", 
+				"Operator {:?} cannot be applied to type(-s) {}", 
 				self, 
-				values))
-		}
+				values_str))
+		} )
 	}
 }
 
@@ -1158,6 +1268,16 @@ pub enum OperatorErr {
 		provided_cnt: u32,
 		required_cnt: u32,
 	},
+}
+
+impl std::fmt::Display for OperatorErr {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			OperatorErr::WrongType { descr } => write!(f, "{}", descr),
+			OperatorErr::NotEnoughOperands { provided_cnt, required_cnt } => 
+				write!(f, "Expected {} operand(-s) for operator, but found {}", required_cnt, provided_cnt),
+		}
+	}
 }
 
 //------------------------------- ExprErr ----------------------------------
@@ -1179,11 +1299,7 @@ impl std::fmt::Display for ExprErr {
 			ExprErr::UnexpectedToken (_) => write!(f, "Unexpected token"),
 			ExprErr::UnpairedBracket (_) => write!(f, "Unpaired bracket"),
 			ExprErr::ExpectedExprButFound (_) => write!(f, "Expected arithmetical expression, but found"),
-			ExprErr::Operator { err, .. } => match err {
-				OperatorErr::WrongType { descr } => write!(f, "{}", descr),
-				OperatorErr::NotEnoughOperands { provided_cnt, required_cnt } => 
-					write!(f, "Expected {} operand(-s) for operator, but found {}", required_cnt, provided_cnt),
-			},
+			ExprErr::Operator { err, .. } => write!(f, "{}", err)
 		}
 	}
 }
