@@ -574,6 +574,8 @@ impl PartialEq for Operand {
 	}
 }
 
+//------------------------------- Operand ----------------------------------
+
 impl Operand {
 	fn check_and_calc_data_type_in_place(&self, check_context: &Context) -> Result<DataType, InterpErr> {
 		let dt: DataType = match self {
@@ -645,6 +647,8 @@ impl Operand {
 		}
 	}
 }
+
+//------------------------------- ExprOperator ----------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
