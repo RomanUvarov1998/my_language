@@ -1688,6 +1688,6 @@ mod tests {
 	}
 
 	fn new_name_token(name: &str) -> NameToken {
-		NameToken::new_with_pos(name, CodePos::from(CharPos::new()))
+		NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()))
 	}
 }

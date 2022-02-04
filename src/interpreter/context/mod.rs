@@ -198,6 +198,6 @@ mod tests {
 
 	fn new_name_token(name: &str) -> NameToken {
 		use super::super::utils::{CodePos, CharPos};
-		NameToken::new_with_pos(name, CodePos::from(CharPos::new()))
+		NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()))
 	}
 }

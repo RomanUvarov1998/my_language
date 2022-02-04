@@ -345,13 +345,13 @@ impl Expr {
 					}
 				}
 				
-				let func_name = NameToken::new_with_pos_own_string(name, pos);
+				let func_name = NameToken::new_with_pos(name, pos);
 				
 				let sym = Symbol::new_func_call(kind, func_name, arg_exprs);
 				Ok(sym)
 			},
 			_ => {
-				let name = NameToken::new_with_pos_own_string(name, pos);
+				let name = NameToken::new_with_pos(name, pos);
 				let sym = Symbol::new_name(name);
 				Ok(sym)
 			},
@@ -1715,7 +1715,7 @@ mod tests {
 	}
 	
 	fn new_name_token(name: &str) -> NameToken {
-		NameToken::new_with_pos(name, CodePos::from(CharPos::new()))
+		NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()))
 	}
 
 	#[test]

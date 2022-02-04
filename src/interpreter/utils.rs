@@ -27,7 +27,7 @@ impl NameToken {
 		}
 	}
 	
-	pub fn new_with_pos_own_string(name: String, pos: CodePos) -> Self {
+	pub fn new_with_pos(name: String, pos: CodePos) -> Self {
 		Self {
 			name,
 			pos,
