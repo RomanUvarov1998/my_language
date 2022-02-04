@@ -4,12 +4,14 @@ use call_stack_frame::CallStackFrame;
 use super::builtin_func::{BuiltinFuncDef, BuiltinFuncErr};
 use super::utils::NameToken;
 use super::value::Value;
-use super::data_type::{DataType, Primitive};
+use super::data_type::{DataType, Primitive, DataTypeErr};
 use super::var_data::{VarData, VarErr};
 use super::user_func::{UserFuncErr, UserFuncArg, UserFuncDef};
 use super::statement::ReturningBody;
 use super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
-use super::struct_def::StructDefErr;
+use super::struct_def::{StructDef, StructFieldDef, StructDefErr};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 //---------------------- Context -----------------------
 
@@ -18,18 +20,23 @@ pub struct Context<'prev_context> {
 	frame: CallStackFrame,
 	builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>,
 	primitive_type_member_funcs_list: &'prev_context PrimitiveTypeMemberFuncsList,
+	struct_defs: Rc<RefCell<Vec<StructDef>>>,
+	is_root: bool,
 }
 
 impl<'prev_context> Context<'prev_context> {
 	pub fn new(
 		builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>,
-		primitive_type_member_funcs_list: &'prev_context PrimitiveTypeMemberFuncsList
+		primitive_type_member_funcs_list: &'prev_context PrimitiveTypeMemberFuncsList,
+		struct_defs: Vec<StructDef>
 	) -> Self {
 		Self {
 			prev_frame_context: None,
 			frame: CallStackFrame::new(),
 			builtin_func_defs,
 			primitive_type_member_funcs_list,
+			struct_defs: Rc::new(RefCell::new(struct_defs)),
+			is_root: true,
 		}
 	}
 	
@@ -39,6 +46,8 @@ impl<'prev_context> Context<'prev_context> {
 			frame: CallStackFrame::new(),
 			builtin_func_defs: &self.builtin_func_defs,
 			primitive_type_member_funcs_list: &self.primitive_type_member_funcs_list,
+			struct_defs: Rc::clone(&self.struct_defs),
+			is_root: false,
 		}
 	}
 	
@@ -68,7 +77,37 @@ impl<'prev_context> Context<'prev_context> {
 		self.frame.get_upper_scope_mut()
 			.add_user_func(name, args, return_type, body)
 	}
-		
+	
+	pub fn find_type_by_name(&self, name: &NameToken) -> Result<DataType, DataTypeErr> {
+		if let Some(dt) = DataType::primitive_from_name(name) {
+			Ok(dt)
+		} else if let Some(dt) = self.struct_defs.borrow().iter().find(|sd| sd.inner().name().value() == name.value()) {
+			Ok( DataType::Complex (dt.clone()) )
+		} else {
+			Err( DataTypeErr::NotDefined { name: name.clone() } )
+		}		
+	}
+	
+	pub fn add_user_struct(&mut self, name: NameToken, fields: Vec<StructFieldDef>) -> Result<(), StructDefErr> {
+		if self.is_root {
+			let mut defs = self.struct_defs.borrow_mut();
+			
+			if let Some(struct_def) = defs.iter().find(|sd| sd.inner().name().value() == name.value()) {
+				return Err( StructDefErr::StructDefIsAlreadyDefined {
+					defined_name: name.clone(),
+				} );
+			}
+			
+			defs.push(StructDef::new(name, fields)?);
+			
+			Ok(())
+		} else {
+			Err( StructDefErr::StructDefNotInRootContext {
+				struct_pos: name.pos(),
+			} )
+		}
+	}
+	
 	pub fn push_scope(&mut self) {
 		self.frame.push_scope();
 	}
@@ -107,8 +146,7 @@ impl<'prev_context> Context<'prev_context> {
 		self.primitive_type_member_funcs_list.find_func(data_type, func_name)
 	}
  
- // TODO: add find user func for TokenContent::Name
- // TODO: add find builtin func for TokenContent::BuiltinName
+ // TODO: add find user member func for TokenContent::Name
 }
 
 //---------------------- Tests -----------------------

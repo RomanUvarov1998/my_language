@@ -9,15 +9,23 @@ use super::builtin_func::BuiltinFuncDef;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataType {
 	Primitive (Primitive),
-	#[allow(dead_code)]
 	Complex (StructDef),
 }
 
 impl DataType {
+	pub fn primitive_from_name(name: &NameToken) -> Option<Self> {
+		match name.value() {
+			"f32" => Some( DataType::Primitive (Primitive::Float32) ),
+			"str" => Some( DataType::Primitive (Primitive::String) ),
+			"bool" => Some( DataType::Primitive (Primitive::Bool) ),
+			_ => None,
+		}
+	}
+	
 	pub fn default_value(&self) -> Value {
 		match self {
 			DataType::Primitive (dt) => dt.default_value(),
-			DataType::Complex (dt) => dt.inner().default_value(),
+			DataType::Complex (dt) => todo!(), // TODO: do not use this function for check purposes
 		}
 	}
 	
@@ -75,5 +83,12 @@ impl std::fmt::Display for Primitive {
 			Primitive::Any => write!(f, "Any"),
 			Primitive::None => write!(f, "None"),
 		}
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataTypeErr {
+	NotDefined {
+		name: NameToken,
 	}
 }

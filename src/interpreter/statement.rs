@@ -49,19 +49,18 @@ impl StatementsIter {
 		
 		self.tokens_iter.next_expect_colon()?;
 		
-		let type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
-		let data_type = self.parse_data_type(&type_name)?;
+		let data_type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 		
 		let tok_assign = self.tokens_iter.next_or_end_reached_err()?;
 		match tok_assign {
 			Token { content: TokenContent::Operator (Operator::Assign), .. } => {},
 			Token { content: TokenContent::StatementOp ( StatementOp::Semicolon ), .. } => return 
 				Ok ( Statement {
+					pos: CodePos::new(begin_pos, data_type_name.pos().end()),
 					kind: StatementKind::VariableDeclare {
 						var_name, 
-						data_type, 
+						data_type_name, 
 					},
-					pos: CodePos::new(begin_pos, type_name.pos().end()),
 				} ),
 			found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound { 
 							expected: vec![
@@ -82,7 +81,7 @@ impl StatementsIter {
 		Ok ( Statement {
 			kind: StatementKind::VariableDeclareSet {
 				var_name, 
-				data_type, 
+				data_type_name, 
 				value_expr,
 			},
 			pos,
@@ -247,7 +246,7 @@ impl StatementsIter {
 		
 		self.tokens_iter.next_expect_left_bracket()?;
 		
-		let mut args = Vec::<UserFuncArg>::new();
+		let mut args = Vec::<ParsedFuncArgDef>::new();
 		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_end_reached_err()?.content() {
 			self.tokens_iter.next_or_end_reached_err().unwrap();
 		} else {
@@ -256,10 +255,9 @@ impl StatementsIter {
 				
 				self.tokens_iter.next_expect_colon()?;
 				
-				let type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
-				let data_type: DataType = self.parse_data_type(&type_name)?;
+				let data_type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 				
-				args.push(UserFuncArg::new(arg_name, data_type));
+				args.push(ParsedFuncArgDef::new(arg_name, data_type_name));
 				
 				match self.tokens_iter.next_or_end_reached_err()? {
 					Token { content: TokenContent::StatementOp (StatementOp::Comma), .. } => continue,
@@ -275,14 +273,14 @@ impl StatementsIter {
 			}
 		}
 		
-		let return_type: DataType = match self.tokens_iter.peek_or_end_reached_err()? {
+		let return_type_name: Option<NameToken> = match self.tokens_iter.peek_or_end_reached_err()? {
 			Token { content: TokenContent::StatementOp (StatementOp::ThinArrow), .. } => { // function returns value
 				self.tokens_iter.next_or_end_reached_err().unwrap(); // skip ThinArrow
 				let return_type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
-				self.parse_data_type(&return_type_name)?
+				Some(return_type_name)
 			},
 			Token { content: TokenContent::Bracket (Bracket::LeftCurly), .. } => { // function doesn't return value
-				DataType::Primitive (Primitive::None)
+				None
 			},
 			found @ _ => return Err( InterpErr::from(TokenErr::ExpectedButFound {
 				expected: vec![
@@ -305,7 +303,7 @@ impl StatementsIter {
 			kind: StatementKind::UserDefinedFuncDeclare {
 				name,
 				args, 
-				return_type,
+				return_type_name,
 				body: ReturningBody::new(statements),
 			},
 			pos,
@@ -332,15 +330,6 @@ impl StatementsIter {
 			kind: StatementKind::UserDefinedFuncReturn { return_expr },
 			pos,
 		} )
-	}
-
-	fn parse_data_type(&mut self, data_type_name: &NameToken) -> Result<DataType, VarErr> {
-		match data_type_name.value() {
-			"f32" => Ok( DataType::Primitive (Primitive::Float32) ),
-			"str" => Ok( DataType::Primitive (Primitive::String) ),
-			"bool" => Ok( DataType::Primitive (Primitive::Bool) ),
-			_ => Err( VarErr::UnknownType { name: data_type_name.clone() } ),
-		}
 	}
 
 	fn parse_next_statement(&mut self) -> Option<Result<Statement, InterpErr>> {
@@ -409,22 +398,26 @@ pub struct Statement {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum StatementKind {
 	Comment (String),
-	VariableDeclare { var_name: NameToken, data_type: DataType },
-	VariableDeclareSet { var_name: NameToken, data_type: DataType, value_expr: Expr },
+	VariableDeclare { var_name: NameToken, data_type_name: NameToken },
+	VariableDeclareSet { var_name: NameToken, data_type_name: NameToken, value_expr: Expr },
 	VariableSet { var_name: NameToken, value_expr: Expr },
 	UserDefinedFuncReturn { 
 		return_expr: Option<Expr>,
 	},
 	UserDefinedFuncDeclare {
 		name: NameToken,
-		args: Vec<UserFuncArg>,
-		return_type: DataType,
+		args: Vec<ParsedFuncArgDef>,
+		return_type_name: Option<NameToken>,
 		body: ReturningBody,
 	},
 	FuncCall {
 		kind: FuncKind,
 		func_name: NameToken, 
 		arg_exprs: Vec<Expr>,
+	},
+	UserStructDeclare {
+		type_name: NameToken,
+		fields: Vec<ParsedStructFieldDef>,
 	},
 	BranchingIfElse {
 		if_bodies: Vec<ConditionalBody>,
@@ -444,12 +437,14 @@ impl Statement {
 		match &self.kind {
 			StatementKind::Comment (_) => {},
 				
-			StatementKind::VariableDeclare { var_name, data_type } => {
-					check_context.add_variable(var_name.clone(), data_type.clone(),  None)?;
-				},
+			StatementKind::VariableDeclare { var_name, data_type_name } => {
+				todo!();
+				//check_context.add_variable(var_name.clone(), data_type.clone(),  None)?;
+			},
 					
-			StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
-				check_context.add_variable(var_name.clone(), data_type.clone(), Some(data_type.default_value()))?;
+			StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
+				todo!();
+				/*check_context.add_variable(var_name.clone(), data_type.clone(), Some(data_type.default_value()))?;
 				
 				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_context)?;
 				if data_type.clone() != expr_data_type {
@@ -458,11 +453,12 @@ impl Statement {
 						variable_type: data_type.clone(),
 						var_name: var_name.clone(),
 					}));
-				}
+				}*/
 			},
 			
 			StatementKind::VariableSet { var_name, value_expr } => {
-				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_context)?;
+				todo!();
+				/*let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_context)?;
 				let var_def: &mut VarData = check_context.get_variable_mut(var_name)?;
 				var_def.set(expr_data_type.default_value())?;
 				
@@ -474,7 +470,7 @@ impl Statement {
 						variable_type: variable_type.clone(),
 						var_name: var_name.clone(),
 					}));
-				}
+				}*/
 			},
 			
 			StatementKind::FuncCall { kind, func_name, arg_exprs } => {
@@ -502,8 +498,9 @@ impl Statement {
 				}
 			},
 			
-			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
-				check_context.add_user_func(name.clone(), args.clone(), return_type.clone(), body.clone())?;
+			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {
+				todo!();
+				/*check_context.add_user_func(name.clone(), args.clone(), return_type.clone(), body.clone())?;
 				
 				let mut next_check_context = check_context.new_stack_frame_context();
 				
@@ -514,13 +511,19 @@ impl Statement {
 						Some(arg_ref.data_type().default_value()))?;
 				}
 				
-				body.check(return_type, &mut next_check_context)?;
+				body.check(return_type, &mut next_check_context)?;*/
 			},
 			
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
 				if let Some(ref expr) = return_expr {
 					expr.check_and_calc_data_type(check_context)?;
 				}
+			},
+		
+			StatementKind::UserStructDeclare { type_name, fields } => {
+				todo!();
+				// // TODO: avoid cloning
+				// check_context.add_user_struct(type_name.clone(), fields.clone())?;
 			},
 		
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
@@ -530,6 +533,7 @@ impl Statement {
 				
 				else_body.check(check_context)?;
 			},
+			
 			StatementKind::BranchingWhile { body } => body.check(check_context)?,
 		}
 		Ok(())
@@ -539,20 +543,22 @@ impl Statement {
 		match &self.kind {
 			StatementKind::Comment (_) => {},
 			
-			StatementKind::VariableDeclare { var_name, data_type } => 
-				context.add_variable(var_name.clone(), data_type.clone(), None).unwrap(),
+			StatementKind::VariableDeclare { var_name, data_type_name } => todo!(),
+				//context.add_variable(var_name.clone(), data_type.clone(), None).unwrap(),
 					
-			StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
-				let value: Value = value_expr.calc(context);
-				context.add_variable(
-					var_name.clone(), 
-					data_type.clone(),
-					Some(value)).unwrap();
+			StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
+				todo!();
+				// let value: Value = value_expr.calc(context);
+				// context.add_variable(
+					// var_name.clone(), 
+					// data_type.clone(),
+					// Some(value)).unwrap();
 			},
 				
 			StatementKind::VariableSet { var_name, value_expr } => {
-				let value: Value = value_expr.calc(context);
-				context.set_variable(&var_name, value).unwrap();
+				todo!();
+				// let value: Value = value_expr.calc(context);
+				// context.set_variable(&var_name, value).unwrap();
 			},
 			
 			StatementKind::FuncCall { kind, func_name, arg_exprs } => {
@@ -594,8 +600,9 @@ impl Statement {
 					}
 				},
 				
-			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
-				context.add_user_func(name.clone(), args.clone(), return_type.clone(), body.clone()).unwrap();
+			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {
+				todo!();
+				// context.add_user_func(name.clone(), args.clone(), return_type.clone(), body.clone()).unwrap();
 			},
 				
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
@@ -606,6 +613,12 @@ impl Statement {
 					},
 					None => Some(Value::None),
 				}
+			},
+			
+			StatementKind::UserStructDeclare { type_name, fields } => {
+				todo!();
+				// // TODO: avoid cloning
+				// context.add_user_struct(type_name.clone(), fields.clone()).unwrap();
 			},
 			
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
@@ -643,21 +656,22 @@ impl std::fmt::Display for Statement {
 		match &self.kind {
 			StatementKind::Comment (comment) => writeln!(f, "//{}", comment),
 				
-			StatementKind::VariableDeclare { var_name, data_type } => writeln!(f, "declare {}: {}", var_name, data_type),
+			StatementKind::VariableDeclare { var_name, data_type_name } => writeln!(f, "declare {}: {}", var_name, data_type_name),
 					
-			StatementKind::VariableDeclareSet { var_name, data_type, .. } => writeln!(f, "declare {}: {} = expr", var_name, data_type),
+			StatementKind::VariableDeclareSet { var_name, data_type_name, .. } => writeln!(f, "declare {}: {} = expr", var_name, data_type_name),
 				
 			StatementKind::VariableSet { var_name, .. } => writeln!(f, "set {} = expr", var_name),
 			
 			StatementKind::FuncCall { kind, func_name, .. } => writeln!(f, "call {} func {}(...)", kind, func_name),
 				
-			StatementKind::UserDefinedFuncDeclare { name, return_type, body, .. } => {
+			StatementKind::UserDefinedFuncDeclare { name, return_type_name, body, .. } => {
 				write!(f, "define user func {}(...)", name)?;
 				
-				match return_type {
-					DataType::Primitive (Primitive::None) => writeln!(f, " ")?,
-					dt @ _ => writeln!(f, " -> {}", dt)?,
-				}
+				todo!();
+				// match return_type_name {
+					// DataType::Primitive (Primitive::None) => writeln!(f, " ")?,
+					// dt @ _ => writeln!(f, " -> {}", dt)?,
+				// }
 				
 				for st_ref in body.statements().iter() {
 					writeln!(f, "\t{}", st_ref)?;
@@ -667,6 +681,8 @@ impl std::fmt::Display for Statement {
 			},
 			
 			StatementKind::UserDefinedFuncReturn { .. } => writeln!(f, "return ..."),
+		
+			StatementKind::UserStructDeclare { type_name, fields } => todo!(),
 		
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
 				let mut is_not_first = false;
@@ -855,6 +871,7 @@ impl ReturningBody {
 				| StatementKind::VariableSet { .. }
 				| StatementKind::UserDefinedFuncDeclare { .. }
 				| StatementKind::FuncCall { .. }
+				| StatementKind::UserStructDeclare { .. }
 			=> Ok(false),
 			
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
@@ -938,6 +955,40 @@ impl ReturningBody {
 	
 	pub fn statements(&self) -> &Vec<Statement> {
 		&self.statements
+	}
+}
+
+//------------------- ParsedFuncArgDef --------------------
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ParsedFuncArgDef {
+	name: NameToken,
+	data_type_name: NameToken,
+}
+
+impl ParsedFuncArgDef {
+	pub fn new(name: NameToken, data_type_name: NameToken) -> Self {
+		Self {
+			name,
+			data_type_name,
+		}
+	}
+}
+
+//------------------- ParsedStructFieldDef --------------------
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ParsedStructFieldDef {
+	name: NameToken,
+	data_type_name: NameToken,
+}
+
+impl ParsedStructFieldDef {
+	pub fn new(name: NameToken, data_type_name: NameToken) -> Self {
+		Self {
+			name,
+			data_type_name,
+		}
 	}
 }
 
@@ -1485,7 +1536,7 @@ mod tests {
 		
 		let st = statements_iter.next().unwrap().unwrap();
 		match st.kind {
-			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
+			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {
 				assert_eq!(name, new_name_token("add_squared"));
 				assert_eq!(
 					args,
@@ -1501,7 +1552,7 @@ mod tests {
 				context.add_variable(new_name_token("b"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[0].kind {
-					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2"));
 						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
@@ -1517,7 +1568,7 @@ mod tests {
 				context.add_variable(new_name_token("a2"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[1].kind {
-					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2"));
 						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
@@ -1575,7 +1626,7 @@ mod tests {
 		
 		let st = statements_iter.next().unwrap().unwrap();
 		match st.kind {
-			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
+			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {
 				assert_eq!(name, new_name_token("add_squared"));
 				assert_eq!(
 					args,
@@ -1591,7 +1642,7 @@ mod tests {
 				context.add_variable(new_name_token("b"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[0].kind {
-					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2"));
 						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
@@ -1607,7 +1658,7 @@ mod tests {
 				context.add_variable(new_name_token("a2"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[1].kind {
-					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2"));
 						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();

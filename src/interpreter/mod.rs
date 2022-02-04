@@ -21,7 +21,7 @@ use context::Context;
 use data_type::{DataType, Primitive};
 use value::Value;
 use primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
-use struct_def::StructDefErr;
+use struct_def::{StructDef, StructDefErr};
 
 //------------------------ Interpreter --------------------
 
@@ -114,9 +114,11 @@ impl Interpreter {
 		self.statements_iter.push_string(code.to_string());
 		
 		let mut statements = Vec::<Statement>::new();
+		let mut struct_defs = Vec::<StructDef>::new();
 		let mut check_context = Context::new(
 			&self.builtin_func_defs, 
-			&self.primitive_type_member_funcs_list);
+			&self.primitive_type_member_funcs_list,
+			struct_defs);
 	
 		while let Some(statement_result) = self.statements_iter.next() {
 			let st: Statement = statement_result?;
@@ -124,9 +126,11 @@ impl Interpreter {
 			statements.push(st);
 		}
 		
+		let mut struct_defs = Vec::<StructDef>::new();
 		let mut run_context = Context::new(
 			&self.builtin_func_defs, 
-			&self.primitive_type_member_funcs_list);
+			&self.primitive_type_member_funcs_list,
+			struct_defs);
 		
 		for st_ref in &statements {
 			st_ref.run(&mut run_context);
@@ -351,12 +355,27 @@ impl From<StructDefErr> for InterpErr {
 	fn from(err: StructDefErr) -> InterpErr {
 		let descr: String = format!("{}", err);
 		match err {
+			StructDefErr::StructDefNotInRootContext { struct_pos } => InterpErr {
+				pos: struct_pos,
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
+			StructDefErr::StructDefIsAlreadyDefined { ref defined_name } => InterpErr {
+				pos: defined_name.pos(),
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
 			StructDefErr::FieldAlreadyDefined { ref name_in_code } => InterpErr {
 				pos: name_in_code.pos(),
 				descr,
 				inner: InnerErr::StructDef (err),
 			},
 			StructDefErr::BuiltinMemberFuncIsNotDefined { ref name } => InterpErr {
+				pos: name.pos(),
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
+			StructDefErr::StructIsAlreadyDefined { ref name } => InterpErr {
 				pos: name.pos(),
 				descr,
 				inner: InnerErr::StructDef (err),
