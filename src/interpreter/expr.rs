@@ -201,6 +201,7 @@ impl Expr {
 				
 				TokenContent::Keyword (kw) => match kw {
 					Keyword::Var | 
+						Keyword::Struct | 
 						Keyword::If | 
 						Keyword::Else | 
 						Keyword::While | 
@@ -421,6 +422,7 @@ impl ExprContext {
 			TokenContent::Keyword (kw) => match kw {
 				Keyword::Var | 
 					Keyword::If | 
+					Keyword::Struct | 
 					Keyword::Else | 
 					Keyword::While | 
 					Keyword::F | 

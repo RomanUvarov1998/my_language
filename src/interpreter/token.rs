@@ -257,6 +257,7 @@ impl TokensIter {
 		
 		let token = match name.as_str() {
 			"var" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::Var )),
+			"struct" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::Struct )),
 			"if" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::If )),
 			"else" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::Else )),
 			"while" => Token::new(first_char.pos(), pos_end, TokenContent::Keyword ( Keyword::While )),
@@ -537,6 +538,7 @@ impl std::fmt::Display for TokenContent {
 			},
 			TokenContent::Keyword (kw) => match kw {
 				Keyword::Var => write!(f, "'{}'", "var"),
+				Keyword::Struct => write!(f, "'{}'", "struct"),
 				Keyword::If => write!(f, "'{}'", "if"),
 				Keyword::Else => write!(f, "'{}'", "else"),
 				Keyword::While => write!(f, "'{}'", "while"),
@@ -632,6 +634,7 @@ pub enum StatementOp {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Keyword {
 	Var,
+	Struct,
 	If,
 	Else,
 	While,
@@ -709,6 +712,7 @@ mod tests {
 		test_token_content_detection("//23rwrer2", TokenContent::StatementOp (StatementOp::Comment (String::from("23rwrer2"))));
 		test_token_content_detection("->", TokenContent::StatementOp (StatementOp::ThinArrow));
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
+		test_token_content_detection("struct", TokenContent::Keyword ( Keyword::Struct ));
 		test_token_content_detection("if", TokenContent::Keyword ( Keyword::If ));
 		test_token_content_detection("else", TokenContent::Keyword ( Keyword::Else ));
 		test_token_content_detection("while", TokenContent::Keyword ( Keyword::While ));
@@ -730,7 +734,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 f return var_1var\"vasya\">>=<<===!=!land lor lxor:;,->(){}if else while//sdsdfd".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 f return var struct var_1var\"vasya\">>=<<===!=!land lor lxor:;,->(){}if else while//sdsdfd".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -743,6 +747,8 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (9_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword (Keyword::F));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword (Keyword::Return));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword (Keyword::Var));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword (Keyword::Struct));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var_1var")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
@@ -821,6 +827,7 @@ mod tests {
 		return
 		var_1
 		var
+		struct
 		"vasya"
 		>
 		
@@ -861,6 +868,7 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword (Keyword::Return));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Name (String::from("var_1")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Var ));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Struct ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StringLiteral (String::from("vasya")));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Greater));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::GreaterEqual));
