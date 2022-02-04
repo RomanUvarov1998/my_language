@@ -34,6 +34,13 @@ impl NameToken {
 		}
 	}
 	
+	pub fn new_with_pos_own_string(name: String, pos: CodePos) -> Self {
+		Self {
+			name,
+			pos,
+		}
+	}
+	
 	pub fn value(&self) -> &str { &self.name }
 	pub fn pos(&self) -> CodePos { self.pos }
 }

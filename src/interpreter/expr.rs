@@ -345,13 +345,14 @@ impl Expr {
 					}
 				}
 				
-				let func_name = NameToken::new_with_pos(&name, pos);
+				let func_name = NameToken::new_with_pos_own_string(name, pos);
 				
 				let sym = Symbol::new_func_call(kind, func_name, arg_exprs);
 				Ok(sym)
 			},
 			_ => {
-				let sym = Symbol::new_name(name, pos);
+				let name = NameToken::new_with_pos_own_string(name, pos);
+				let sym = Symbol::new_name(name);
 				Ok(sym)
 			},
 		}
@@ -470,10 +471,10 @@ impl Symbol {
 			pos,
 		}
 	}
-	fn new_name(name: String, pos: CodePos) -> Self {
+	fn new_name(name_tok: NameToken) -> Self {
 		Self {
-			kind: SymbolKind::Operand( Operand::Variable (name) ),
-			pos,
+			pos: name_tok.pos(),
+			kind: SymbolKind::Operand( Operand::Variable (name_tok) ),
 		}
 	}
 	fn new_func_call(kind: FuncKind, func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
@@ -536,7 +537,7 @@ impl PartialEq for Symbol {
 #[derive(Debug, Clone)]
 enum Operand {
 	Value (Value),
-	Variable (String), // TODO: reconfigure symbol struct to enum to place NameToken here
+	Variable (NameToken),
 	FuncCall {
 		kind: FuncKind,
 		func_name: NameToken, 
@@ -568,7 +569,7 @@ impl Operand {
 		let dt: DataType = match self {
 			Operand::Value (val) => val.get_type().clone(),
 			Operand::Variable (name) =>
-				check_context.get_variable_value(&NameToken::new_with_pos(&name, CodePos::from(CharPos::new())))?.get_type().clone(), // TODO: use NameToken::pos() here
+				check_context.get_variable_value(&name)?.get_type().clone(),
 			Operand::FuncCall { kind, func_name, arg_exprs } => {
 				match kind {
 					FuncKind::Builtin => {
@@ -592,7 +593,7 @@ impl Operand {
 	fn calc_in_place(&self, context: &Context) -> Value {
 		match self {
 			Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
-			Operand::Variable (name) => context.get_variable_value(&NameToken::new_with_pos(&name, CodePos::from(CharPos::new()))).unwrap().clone(), // TODO: use NameToken::pos() here
+			Operand::Variable (name) => context.get_variable_value(&name).unwrap().clone(),
 			Operand::FuncCall { kind, func_name, arg_exprs } => {
 				match kind {
 					FuncKind::Builtin => {
@@ -815,7 +816,7 @@ impl ExprOperator {
 					ref func_name,
 					ref arg_exprs,
 				})) => {
-					let value: &Value = context.get_variable_value(&NameToken::new_with_pos(var_name, CodePos::from(CharPos::new()))).unwrap(); // TODO: use NameToken instead of string
+					let value: &Value = context.get_variable_value(var_name).unwrap();
 					match kind {
 						FuncKind::Builtin => {
 							let func_def: &BuiltinFuncDef = value.get_type()
@@ -894,7 +895,7 @@ impl ExprOperator {
 					ref func_name,
 					ref arg_exprs,
 				})) => {
-					let value: &Value = check_context.get_variable_value(&NameToken::new_with_pos(var_name, CodePos::from(CharPos::new())))?; // TODO: use NameToken instead of string
+					let value: &Value = check_context.get_variable_value(&var_name)?;
 					match kind {
 						FuncKind::Builtin => {
 							let func_def: &BuiltinFuncDef = value.get_type()
@@ -1558,7 +1559,7 @@ mod tests {
 		let zero_pos = CodePos::from(CharPos::new());
 		
 		test_expr_and_its_stack_eq("a + add(2, 4) + @add(4, 9);", vec![
-			SymbolKind::Operand (Operand::Variable (String::from ("a"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("a"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("add"),
@@ -1618,14 +1619,14 @@ mod tests {
 		]);
 		
 		test_expr_and_its_stack_eq("a.foo1() + b.foo2();", vec![
-			SymbolKind::Operand (Operand::Variable (String::from ("a"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("a"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo1"),
 				arg_exprs: Vec::new(),
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
-			SymbolKind::Operand (Operand::Variable (String::from ("b"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("b"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo2"),
@@ -1647,7 +1648,7 @@ mod tests {
 				arg_exprs: Vec::new(),
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
-			SymbolKind::Operand (Operand::Variable (String::from ("b"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("b"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo2"),
@@ -1659,7 +1660,7 @@ mod tests {
 		
 		test_expr_and_its_stack_eq("2 * a.foo1(c.foo3().foo5() - 3) ^ b.foo2() / d.foo4();", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Variable (String::from ("a"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("a"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo1"),
@@ -1668,7 +1669,7 @@ mod tests {
 					Expr {
 						pos: zero_pos,
 						expr_stack: vec![						
-							Symbol { kind: SymbolKind::Operand (Operand::Variable (String::from ("c"))), pos: zero_pos, },
+							Symbol { kind: SymbolKind::Operand (Operand::Variable (new_name_token("c"))), pos: zero_pos, },
 							Symbol { kind: SymbolKind::Operand (Operand::FuncCall {
 								kind: FuncKind::UserDefined,
 								func_name: new_name_token("foo3"),
@@ -1689,7 +1690,7 @@ mod tests {
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
 			
-			SymbolKind::Operand (Operand::Variable (String::from ("b"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("b"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo2"),
@@ -1701,7 +1702,7 @@ mod tests {
 			
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 			
-			SymbolKind::Operand (Operand::Variable (String::from ("d"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("d"))),
 			SymbolKind::Operand (Operand::FuncCall {
 				kind: FuncKind::UserDefined,
 				func_name: new_name_token("foo4"),
