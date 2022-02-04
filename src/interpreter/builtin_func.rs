@@ -1,7 +1,7 @@
 use super::data_type::{DataType, Primitive};
 use super::value::Value;
 use super::InterpErr;
-use super::utils::{CodePos, NameToken, CharPos};
+use super::utils::{CodePos, NameToken};
 use super::expr::Expr;
 use super::context::Context;
 
@@ -57,7 +57,7 @@ impl BuiltinFuncDef {
 		Ok(())
 	}
 	
-	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value: &Value, check_context: &Context) -> Result<(), InterpErr> {
+	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value: &Value, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() + 1 {
 			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
@@ -77,7 +77,7 @@ impl BuiltinFuncDef {
 			return Err( InterpErr::from( BuiltinFuncErr::ArgType {
 				func_signature: format!("{}", self),
 				arg_name: String::from("value itself"),
-				arg_expr_pos: CodePos::from(CharPos::new()), // TODO: use kinda NameToken to provede position
+				arg_expr_pos: caller_pos,
 				actual_type: self.args[0].data_type.clone(),
 				given_type: value.get_type().clone(),
 			} ) );

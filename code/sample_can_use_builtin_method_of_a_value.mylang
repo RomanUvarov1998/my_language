@@ -21,7 +21,10 @@ var a: f32 = -3;
 
 // str
 
-var s: str = "hello";
+var s: str = "hello!@#$%^&*()_+1234567890-=|\/`~_";
+@print("s is '");
+@print(s);
+@println("'");
 @print("s.@len() == ");
 @println(s.@len());
 

@@ -882,7 +882,7 @@ impl ExprOperator {
 							let func_def: &BuiltinFuncDef = value.get_type()
 								.find_member_builtin_func(&func_name, check_context)?;
 							
-							func_def.check_args_as_member_function(func_name, arg_exprs, value, check_context)?;
+							func_def.check_args_as_member_function(func_name, arg_exprs, value, lhs.pos, check_context)?;
 							
 							return Ok(func_def.return_type().clone());
 						},
@@ -901,7 +901,7 @@ impl ExprOperator {
 							let func_def: &BuiltinFuncDef = value.get_type()
 								.find_member_builtin_func(&func_name, check_context)?;
 							
-							func_def.check_args_as_member_function(func_name, arg_exprs, value, check_context)?;
+							func_def.check_args_as_member_function(func_name, arg_exprs, value, lhs.pos, check_context)?;
 							
 							return Ok(func_def.return_type().clone());
 						},

@@ -142,7 +142,6 @@ pub enum CharKind {
 	NewLine,
 	Control,
 	Invalid,
-	// TODO: add all other printable characters, for example underscore '_'
 }
 
 impl From<char> for CharKind {

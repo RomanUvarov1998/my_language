@@ -140,7 +140,7 @@ impl Interpreter {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct InterpErr {
-	pos: CodePos, // TODO: add many position-descrioption pairs
+	pos: CodePos,
 	descr: String,
 	inner: InnerErr,
 }

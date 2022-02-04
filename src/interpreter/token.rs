@@ -208,7 +208,7 @@ impl TokensIter {
 					CharKind::Underscore |
 					CharKind::Punctuation (_) |
 					CharKind::Whitespace |
-					CharKind::Invalid => { // TODO: somehow \r includes into string literal and fails the output
+					CharKind::Invalid => {
 						self.iter.next().unwrap();
 						string_content.push(parsed_char.ch());
 					},
