@@ -7,11 +7,11 @@ use super::user_func::{UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
 use super::statement::FuncKind;
 use super::context::Context;
+use std::rc::Rc;
 
-// TODO: make Expr not clonable
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Expr {
-	expr_stack: Vec<Symbol>,
+	expr_stack: Rc<Vec<Symbol>>,
 	pos: CodePos,
 }
 
@@ -29,7 +29,7 @@ impl Expr {
 		}
 		
 		Ok( Self { 
-			expr_stack,
+			expr_stack: Rc::new(expr_stack),
 			pos: CodePos::new(pos_begin, pos_end),
 		} )
 	}
@@ -360,9 +360,19 @@ impl Expr {
 }
 
 impl Eq for Expr {}
+
 impl PartialEq for Expr {
 	fn eq(&self, other: &Self) -> bool {
-		self.expr_stack == other.expr_stack
+		Vec::<Symbol>::eq(&*self.expr_stack, &*other.expr_stack)
+	}
+}
+
+impl Clone for Expr {
+	fn clone(&self) -> Self {
+		Self {
+			pos: self.pos,
+			expr_stack: Rc::clone(&self.expr_stack),
+		}
 	}
 }
 
@@ -1567,23 +1577,23 @@ mod tests {
 					// arg 1
 					Expr { 
 						pos: zero_pos,
-						expr_stack: vec![
+						expr_stack: Rc::new(vec![
 							Symbol {
 								kind: SymbolKind::Operand (Operand::Value (Value::from(2_f32))),
 								pos: zero_pos,
 							},
-						],
+						]),
 					},
 					
 					// arg 2
 					Expr {
 						pos: zero_pos,
-						expr_stack: vec![
+						expr_stack: Rc::new(vec![
 							Symbol {
 								kind: SymbolKind::Operand (Operand::Value (Value::from(4_f32))),
 								pos: zero_pos,
 							},
-						],
+						]),
 					},
 				],
 			}),
@@ -1595,23 +1605,23 @@ mod tests {
 					// arg 1
 					Expr { 
 						pos: zero_pos,
-						expr_stack: vec![
+						expr_stack: Rc::new(vec![
 							Symbol {
 								kind: SymbolKind::Operand (Operand::Value (Value::from(4_f32))),
 								pos: zero_pos,
 							},
-						],
+						]),
 					},
 					
 					// arg 2
 					Expr {
 						pos: zero_pos,
-						expr_stack: vec![
+						expr_stack: Rc::new(vec![
 							Symbol {
 								kind: SymbolKind::Operand (Operand::Value (Value::from(9_f32))),
 								pos: zero_pos,
 							},
-						],
+						]),
 					},
 				],
 			}),
@@ -1668,7 +1678,7 @@ mod tests {
 					// arg 1
 					Expr {
 						pos: zero_pos,
-						expr_stack: vec![						
+						expr_stack: Rc::new(vec![
 							Symbol { kind: SymbolKind::Operand (Operand::Variable (new_name_token("c"))), pos: zero_pos, },
 							Symbol { kind: SymbolKind::Operand (Operand::FuncCall {
 								kind: FuncKind::UserDefined,
@@ -1684,7 +1694,7 @@ mod tests {
 							Symbol { kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess), pos: zero_pos, },
 							Symbol { kind: SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))), pos: zero_pos, },
 							Symbol { kind: SymbolKind::ExprOperator (ExprOperator::BinMinus), pos: zero_pos, },
-						],
+						]),
 					},
 				],
 			}),
