@@ -1,5 +1,5 @@
 use super::token::*;
-use super::expr::{Expr, ExprContextKind};
+use super::parsed_expr::{ParsedExpr, ParsedExprContextKind};
 use super::InterpErr;
 use super::value::Value;
 use super::data_type::{DataType, Primitive};
@@ -72,9 +72,9 @@ impl ParsedStatementsIter {
 						} ) ),
 		};
 		
-		let value_expr = Expr::new(
+		let value_expr = ParsedExpr::new(
 			&mut self.tokens_iter, 
-			ExprContextKind::ValueToAssign)?;
+			ParsedExprContextKind::ValueToAssign)?;
 
 		self.tokens_iter.next_expect_semicolon()?;
 		
@@ -96,9 +96,9 @@ impl ParsedStatementsIter {
 		};
 		
 		loop {
-			let condition_expr = Expr::new(
+			let condition_expr = ParsedExpr::new(
 				&mut self.tokens_iter,
-				ExprContextKind::IfCondition)?;
+				ParsedExprContextKind::IfCondition)?;
 			
 			let mut statements = Vec::<ParsedStatement>::new();
 			self.parse_body(&mut statements)?;
@@ -143,9 +143,9 @@ impl ParsedStatementsIter {
 	}
 	
 	fn parse_while_statement(&mut self, begin_pos: CharPos) -> Result<ParsedStatement, InterpErr> {
-		let condition_expr = Expr::new(
+		let condition_expr = ParsedExpr::new(
 			&mut self.tokens_iter,
-			ExprContextKind::IfCondition)?;
+			ParsedExprContextKind::IfCondition)?;
 		
 		let mut statements = Vec::<ParsedStatement>::new();
 		self.parse_body(&mut statements)?;
@@ -181,9 +181,9 @@ impl ParsedStatementsIter {
 		}
 	
 	fn parse_variable_set(&mut self, var_name: NameToken, _is_builtin: bool) -> Result<ParsedStatement, InterpErr> {		
-		let value_expr = Expr::new(
+		let value_expr = ParsedExpr::new(
 			&mut self.tokens_iter,
-			ExprContextKind::ValueToAssign)?;
+			ParsedExprContextKind::ValueToAssign)?;
 		
 		self.tokens_iter.next_expect_semicolon()?;
 		
@@ -198,15 +198,15 @@ impl ParsedStatementsIter {
 	}
 
 	fn parse_func_call(&mut self, func_name: NameToken, is_builtin: bool) -> Result<ParsedStatement, InterpErr> {
-		let mut arg_exprs = Vec::<Expr>::new();
+		let mut arg_exprs = Vec::<ParsedExpr>::new();
 		
 		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_end_reached_err()?.content() {
 			self.tokens_iter.next_or_end_reached_err().unwrap();
 		} else {
 			loop {			
-				arg_exprs.push(Expr::new(
+				arg_exprs.push(ParsedExpr::new(
 					&mut self.tokens_iter,
-					ExprContextKind::FunctionArg)?);
+					ParsedExprContextKind::FunctionArg)?);
 					
 				match self.tokens_iter.next_or_end_reached_err()? {
 					Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
@@ -313,16 +313,16 @@ impl ParsedStatementsIter {
 	}
 
 	fn parse_return_statement(&mut self, return_keyword_pos: CodePos) -> Result<ParsedStatement, InterpErr> {
-		let (return_expr, pos): (Option<Expr>, CodePos) = 
+		let (return_expr, pos): (Option<ParsedExpr>, CodePos) = 
 			if let TokenContent::StatementOp (StatementOp::Semicolon) = 
 				self.tokens_iter.peek_or_end_reached_err()?.content() 
 			{
 				self.tokens_iter.next_or_end_reached_err().unwrap(); // skip semicolon
 				(None, return_keyword_pos)
 			} else {
-				let expr: Expr = Expr::new(
+				let expr: ParsedExpr = ParsedExpr::new(
 					&mut self.tokens_iter, 
-					ExprContextKind::ToReturn)?;
+					ParsedExprContextKind::ToReturn)?;
 				self.tokens_iter.next_expect_semicolon()?;
 				let pos_end: CharPos = expr.pos().end();
 				(Some(expr), CodePos::new(return_keyword_pos.begin(), pos_end))
@@ -410,10 +410,10 @@ pub struct ParsedStatement {
 pub enum ParsedStatementKind {
 	Comment (String),
 	VariableDeclare { var_name: NameToken, data_type: DataType },
-	VariableDeclareSet { var_name: NameToken, data_type: DataType, value_expr: Expr },
-	VariableSet { var_name: NameToken, value_expr: Expr },
+	VariableDeclareSet { var_name: NameToken, data_type: DataType, value_expr: ParsedExpr },
+	VariableSet { var_name: NameToken, value_expr: ParsedExpr },
 	UserDefinedFuncReturn { 
-		return_expr: Option<Expr>,
+		return_expr: Option<ParsedExpr>,
 	},
 	UserDefinedFuncDeclare {
 		name: NameToken,
@@ -424,7 +424,7 @@ pub enum ParsedStatementKind {
 	FuncCall {
 		kind: FuncKind,
 		func_name: NameToken, 
-		arg_exprs: Vec<Expr>,
+		arg_exprs: Vec<ParsedExpr>,
 	},
 	BranchingIfElse {
 		if_bodies: Vec<ConditionalBody>,
@@ -722,12 +722,12 @@ impl std::fmt::Display for FuncKind {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ConditionalBody {
-	condition_expr: Expr,
+	condition_expr: ParsedExpr,
 	statements: Vec<ParsedStatement>,
 }
 
 impl ConditionalBody {
-	pub fn condition_expr(&self) -> &Expr {
+	pub fn condition_expr(&self) -> &ParsedExpr {
 		&self.condition_expr
 	}
 	

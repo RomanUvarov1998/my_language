@@ -2,7 +2,7 @@ use super::data_type::{DataType, Primitive};
 use super::value::Value;
 use super::InterpErr;
 use super::utils::{CodePos, NameToken};
-use super::expr::Expr;
+use super::parsed_expr::ParsedExpr;
 use super::context::Context;
 
 //------------------------- BuiltinFuncDef -----------------------
@@ -26,7 +26,7 @@ impl BuiltinFuncDef {
 		}
 	}
 	
-	pub fn check_args(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
+	pub fn check_args(&self, func_name: &NameToken, args_exprs: &Vec<ParsedExpr>, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() {
 			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
@@ -57,7 +57,7 @@ impl BuiltinFuncDef {
 		Ok(())
 	}
 	
-	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value: &Value, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
+	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<ParsedExpr>, value: &Value, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() + 1 {
 			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),

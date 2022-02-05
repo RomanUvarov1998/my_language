@@ -1,4 +1,4 @@
-mod expr;
+mod parsed_expr;
 mod string_char;
 mod token;
 mod parsed_statement;
@@ -198,7 +198,7 @@ impl From<TokenErr> for InterpErr {
 	}
 }
 
-use expr::ExprErr;
+use parsed_expr::ExprErr;
 impl From<ExprErr> for InterpErr {
 	fn from(err: ExprErr) -> InterpErr {
 		match err {
