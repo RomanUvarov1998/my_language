@@ -332,6 +332,53 @@ impl StatementsIter {
 		} )
 	}
 
+	fn parse_struct_declaration(&mut self, struct_keyword_pos: CodePos) -> Result<Statement, InterpErr> {
+		let type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
+		
+		self.tokens_iter.next_expect_left_curly_bracket()?;
+		
+		let mut fields = Vec::<ParsedStructFieldDef>::new();
+		
+		// TODO: allow use trailing comma: 
+		// struct A { a: f32, b: bool, }
+		//                           ^
+		let last_pos: CharPos = if let Token { content: TokenContent::Bracket (Bracket::RightCurly), pos } = self.tokens_iter.peek_or_end_reached_err()? {
+			let last_pos: CharPos = pos.end();
+			self.tokens_iter.next_or_end_reached_err().unwrap();
+			last_pos
+		} else {
+			loop {
+				let field_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
+				
+				self.tokens_iter.next_expect_colon()?;
+				
+				let data_type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
+				
+				fields.push(ParsedStructFieldDef::new(field_name, data_type_name));
+				
+				match self.tokens_iter.next_or_end_reached_err()? {
+					Token { content: TokenContent::StatementOp (StatementOp::Comma), .. } => continue,
+					Token { content: TokenContent::Bracket (Bracket::RightCurly), pos } => break pos.end(),
+					found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound {
+						expected: vec![
+							TokenContent::StatementOp (StatementOp::Comma),
+							TokenContent::Bracket (Bracket::Right),
+						],
+						found,
+					} ) ),
+				}
+			}
+		};
+		
+		Ok ( Statement {
+			kind: StatementKind::UserStructDeclare {
+				type_name,
+				fields,
+			},
+			pos: CodePos::new(struct_keyword_pos.begin(), last_pos),
+		} )
+	}
+
 	fn parse_next_statement(&mut self) -> Option<Result<Statement, InterpErr>> {
 		let first: Token = match self.tokens_iter.next()? {
 			Ok(tok) => tok,
@@ -358,6 +405,9 @@ impl StatementsIter {
 				
 			Token { content: TokenContent::Keyword ( Keyword::Return ), pos } =>
 				self.parse_return_statement(pos),	
+				
+			Token { content: TokenContent::Keyword ( Keyword::Struct ), pos } =>
+				self.parse_struct_declaration(pos),	
 			
 			Token { content: TokenContent::Name(_), .. } => 
 				self.parse_variable_set_or_func_call(NameToken::from_or_err(first).unwrap(), false),
@@ -1739,6 +1789,55 @@ mod tests {
 						panic!("Err!");
 					},
 				}
+			},
+			_ => {
+				println!("Wrong statement:");
+				dbg!(st);
+				panic!("Err!");
+			},
+		}
+	}
+	
+	#[test]
+	fn can_parse_struct_declaration() {
+		let mut statements_iter = StatementsIter::new();
+		
+		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let mut context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list,
+			Vec::<StructDef>::new());
+		
+		statements_iter.push_string(r#"
+		struct Human {
+			name: str,
+			age: f32,
+			is_married: bool
+		}
+		"#.to_string());
+		
+		let st = statements_iter.next().unwrap().unwrap();
+		match st.kind {
+			StatementKind::UserStructDeclare {
+				type_name,
+				fields,
+			} => {
+				assert_eq!(type_name, new_name_token("Human"));
+				
+				assert_eq!(fields.len(), 3);
+				
+				assert_eq!(fields[0], ParsedStructFieldDef::new(
+					new_name_token("name"),
+					new_name_token("str")));
+				
+				assert_eq!(fields[1], ParsedStructFieldDef::new(
+					new_name_token("age"),
+					new_name_token("f32")));
+				
+				assert_eq!(fields[2], ParsedStructFieldDef::new(
+					new_name_token("is_married"),
+					new_name_token("bool")));
 			},
 			_ => {
 				println!("Wrong statement:");
