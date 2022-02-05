@@ -9,13 +9,13 @@ use super::user_func::{UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
 use super::context::Context;
 
-pub struct StatementsIter {
+pub struct ParsedStatementsIter {
 	tokens_iter: TokensIter,
 }
 
-impl StatementsIter {
+impl ParsedStatementsIter {
 	pub fn new() -> Self {
-		StatementsIter { 
+		ParsedStatementsIter { 
 			tokens_iter: TokensIter::new(),
 		}
 	}
@@ -24,7 +24,7 @@ impl StatementsIter {
 		self.tokens_iter.push_string(text);
 	}	
 	
-	fn parse_variable_set_or_func_call(&mut self, name: NameToken, is_builtin: bool) -> Result<Statement, InterpErr> {
+	fn parse_variable_set_or_func_call(&mut self, name: NameToken, is_builtin: bool) -> Result<ParsedStatement, InterpErr> {
 		let second = self.tokens_iter.next_or_end_reached_err()?;
 		let statement = match second {
 			Token { content: TokenContent::Bracket(Bracket::Left), .. } => 
@@ -44,7 +44,7 @@ impl StatementsIter {
 		Ok(statement)
 	}
 	
-	fn parse_varable_declaration(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {	
+	fn parse_varable_declaration(&mut self, begin_pos: CharPos) -> Result<ParsedStatement, InterpErr> {	
 		let var_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 		
 		self.tokens_iter.next_expect_colon()?;
@@ -56,8 +56,8 @@ impl StatementsIter {
 		match tok_assign {
 			Token { content: TokenContent::Operator (Operator::Assign), .. } => {},
 			Token { content: TokenContent::StatementOp ( StatementOp::Semicolon ), .. } => return 
-				Ok ( Statement {
-					kind: StatementKind::VariableDeclare {
+				Ok ( ParsedStatement {
+					kind: ParsedStatementKind::VariableDeclare {
 						var_name, 
 						data_type, 
 					},
@@ -79,8 +79,8 @@ impl StatementsIter {
 		self.tokens_iter.next_expect_semicolon()?;
 		
 		let pos = CodePos::new(begin_pos, value_expr.pos().end());
-		Ok ( Statement {
-			kind: StatementKind::VariableDeclareSet {
+		Ok ( ParsedStatement {
+			kind: ParsedStatementKind::VariableDeclareSet {
 				var_name, 
 				data_type, 
 				value_expr,
@@ -89,7 +89,7 @@ impl StatementsIter {
 		}	)
 	}
 	
-	fn parse_if_else_statement(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {
+	fn parse_if_else_statement(&mut self, begin_pos: CharPos) -> Result<ParsedStatement, InterpErr> {
 		let mut if_bodies = Vec::<ConditionalBody>::new();
 		let mut else_body = UnconditionalBody {
 			statements: Vec::new(),
@@ -100,7 +100,7 @@ impl StatementsIter {
 				&mut self.tokens_iter,
 				ExprContextKind::IfCondition)?;
 			
-			let mut statements = Vec::<Statement>::new();
+			let mut statements = Vec::<ParsedStatement>::new();
 			self.parse_body(&mut statements)?;
 			
 			if_bodies.push(ConditionalBody {
@@ -136,18 +136,18 @@ impl StatementsIter {
 			CodePos::new(begin_pos, begin_pos)
 		};
 		
-		Ok( Statement {
-			kind: StatementKind::BranchingIfElse { if_bodies, else_body },
+		Ok( ParsedStatement {
+			kind: ParsedStatementKind::BranchingIfElse { if_bodies, else_body },
 			pos,
 		} )
 	}
 	
-	fn parse_while_statement(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {
+	fn parse_while_statement(&mut self, begin_pos: CharPos) -> Result<ParsedStatement, InterpErr> {
 		let condition_expr = Expr::new(
 			&mut self.tokens_iter,
 			ExprContextKind::IfCondition)?;
 		
-		let mut statements = Vec::<Statement>::new();
+		let mut statements = Vec::<ParsedStatement>::new();
 		self.parse_body(&mut statements)?;
 			
 		let body = ConditionalBody { condition_expr, statements };
@@ -157,13 +157,13 @@ impl StatementsIter {
 		} else {
 			CodePos::new(begin_pos, begin_pos)
 		};
-		Ok( Statement {
-			kind: StatementKind::BranchingWhile { body },
+		Ok( ParsedStatement {
+			kind: ParsedStatementKind::BranchingWhile { body },
 			pos,
 		} )
 	}
 	
-	fn parse_body(&mut self, body: &mut Vec<Statement>) -> Result<(), InterpErr> {
+	fn parse_body(&mut self, body: &mut Vec<ParsedStatement>) -> Result<(), InterpErr> {
 			self.tokens_iter.next_expect_left_curly_bracket()?;
 			
 			loop {
@@ -174,13 +174,13 @@ impl StatementsIter {
 					},
 					_ => match self.parse_next_statement() {
 						Some(statement_result) => body.push(statement_result?),
-						None => break Err( InterpErr::from( StatementErr::UnfinishedBody (self.tokens_iter.pos()) ) ),
+						None => break Err( InterpErr::from( ParsedStatementErr::UnfinishedBody (self.tokens_iter.pos()) ) ),
 					},
 				}
 			}
 		}
 	
-	fn parse_variable_set(&mut self, var_name: NameToken, _is_builtin: bool) -> Result<Statement, InterpErr> {		
+	fn parse_variable_set(&mut self, var_name: NameToken, _is_builtin: bool) -> Result<ParsedStatement, InterpErr> {		
 		let value_expr = Expr::new(
 			&mut self.tokens_iter,
 			ExprContextKind::ValueToAssign)?;
@@ -188,8 +188,8 @@ impl StatementsIter {
 		self.tokens_iter.next_expect_semicolon()?;
 		
 		let pos = CodePos::new(var_name.pos().begin(), value_expr.pos().end());
-		Ok ( Statement {
-			kind: StatementKind::VariableSet {
+		Ok ( ParsedStatement {
+			kind: ParsedStatementKind::VariableSet {
 				var_name, 
 				value_expr,
 			},
@@ -197,7 +197,7 @@ impl StatementsIter {
 		} )
 	}
 
-	fn parse_func_call(&mut self, func_name: NameToken, is_builtin: bool) -> Result<Statement, InterpErr> {
+	fn parse_func_call(&mut self, func_name: NameToken, is_builtin: bool) -> Result<ParsedStatement, InterpErr> {
 		let mut arg_exprs = Vec::<Expr>::new();
 		
 		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_end_reached_err()?.content() {
@@ -232,8 +232,8 @@ impl StatementsIter {
 		} else {
 			CodePos::new(func_name.pos().begin(), func_name.pos().begin())
 		};
-		Ok ( Statement {
-			kind: StatementKind::FuncCall {
+		Ok ( ParsedStatement {
+			kind: ParsedStatementKind::FuncCall {
 				kind: if is_builtin { FuncKind::Builtin } else { FuncKind::UserDefined },
 				func_name, 
 				arg_exprs,
@@ -242,7 +242,7 @@ impl StatementsIter {
 		} )
 	}
 
-	fn parse_user_func_def(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {
+	fn parse_user_func_def(&mut self, begin_pos: CharPos) -> Result<ParsedStatement, InterpErr> {
 		let name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 		
 		self.tokens_iter.next_expect_left_bracket()?;
@@ -293,7 +293,7 @@ impl StatementsIter {
 			} ) ),
 		};
 		
-		let mut statements = Vec::<Statement>::new();
+		let mut statements = Vec::<ParsedStatement>::new();
 		self.parse_body(&mut statements)?;
 		
 		let pos = if let Some(st) = statements.last() {
@@ -301,8 +301,8 @@ impl StatementsIter {
 		} else {
 			CodePos::new(begin_pos, begin_pos)
 		};
-		Ok ( Statement {
-			kind: StatementKind::UserDefinedFuncDeclare {
+		Ok ( ParsedStatement {
+			kind: ParsedStatementKind::UserDefinedFuncDeclare {
 				name,
 				args, 
 				return_type,
@@ -312,7 +312,7 @@ impl StatementsIter {
 		} )
 	}
 
-	fn parse_return_statement(&mut self, return_keyword_pos: CodePos) -> Result<Statement, InterpErr> {
+	fn parse_return_statement(&mut self, return_keyword_pos: CodePos) -> Result<ParsedStatement, InterpErr> {
 		let (return_expr, pos): (Option<Expr>, CodePos) = 
 			if let TokenContent::StatementOp (StatementOp::Semicolon) = 
 				self.tokens_iter.peek_or_end_reached_err()?.content() 
@@ -328,8 +328,8 @@ impl StatementsIter {
 				(Some(expr), CodePos::new(return_keyword_pos.begin(), pos_end))
 			};
 		
-		Ok ( Statement {
-			kind: StatementKind::UserDefinedFuncReturn { return_expr },
+		Ok ( ParsedStatement {
+			kind: ParsedStatementKind::UserDefinedFuncReturn { return_expr },
 			pos,
 		} )
 	}
@@ -343,7 +343,7 @@ impl StatementsIter {
 		}
 	}
 
-	fn parse_next_statement(&mut self) -> Option<Result<Statement, InterpErr>> {
+	fn parse_next_statement(&mut self) -> Option<Result<ParsedStatement, InterpErr>> {
 		let first: Token = match self.tokens_iter.next()? {
 			Ok(tok) => tok,
 			Err(err) => return Some(Err(InterpErr::from(err))),
@@ -351,9 +351,9 @@ impl StatementsIter {
 		
 		let begin_pos: CharPos = first.pos().begin();
 		
-		let statement_result: Result<Statement, InterpErr> = match first {
+		let statement_result: Result<ParsedStatement, InterpErr> = match first {
 			Token { content: TokenContent::StatementOp ( StatementOp::Comment (content) ), pos } => 
-				Ok( Statement { kind: StatementKind::Comment (content), pos } ),
+				Ok( ParsedStatement { kind: ParsedStatementKind::Comment (content), pos } ),
 				
 			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => 
 				self.parse_varable_declaration(begin_pos),	
@@ -390,24 +390,24 @@ impl StatementsIter {
 	}
 }
 
-impl Iterator for StatementsIter {
-	type Item = Result<Statement, InterpErr>;
+impl Iterator for ParsedStatementsIter {
+	type Item = Result<ParsedStatement, InterpErr>;
 	
 	fn next(&mut self) -> Option<Self::Item> {
 		self.parse_next_statement()
 	}	
 }
 
-//------------------- Statement --------------------
+//------------------- ParsedStatement --------------------
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Statement {
+pub struct ParsedStatement {
 	pos: CodePos,
-	kind: StatementKind,
+	kind: ParsedStatementKind,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum StatementKind {
+pub enum ParsedStatementKind {
 	Comment (String),
 	VariableDeclare { var_name: NameToken, data_type: DataType },
 	VariableDeclareSet { var_name: NameToken, data_type: DataType, value_expr: Expr },
@@ -435,20 +435,20 @@ pub enum StatementKind {
 	},
 }
 
-impl Statement {
+impl ParsedStatement {
 	pub fn check(
 		&self, 
 		check_context: &mut Context
 	) -> Result<(), InterpErr> 
 	{
 		match &self.kind {
-			StatementKind::Comment (_) => {},
+			ParsedStatementKind::Comment (_) => {},
 				
-			StatementKind::VariableDeclare { var_name, data_type } => {
+			ParsedStatementKind::VariableDeclare { var_name, data_type } => {
 					check_context.add_variable(var_name.clone(), data_type.clone(),  None)?;
 				},
 					
-			StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+			ParsedStatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 				check_context.add_variable(var_name.clone(), data_type.clone(), Some(data_type.default_value()))?;
 				
 				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_context)?;
@@ -461,7 +461,7 @@ impl Statement {
 				}
 			},
 			
-			StatementKind::VariableSet { var_name, value_expr } => {
+			ParsedStatementKind::VariableSet { var_name, value_expr } => {
 				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_context)?;
 				let var_def: &mut VarData = check_context.get_variable_mut(var_name)?;
 				var_def.set(expr_data_type.default_value())?;
@@ -477,7 +477,7 @@ impl Statement {
 				}
 			},
 			
-			StatementKind::FuncCall { kind, func_name, arg_exprs } => {
+			ParsedStatementKind::FuncCall { kind, func_name, arg_exprs } => {
 				match kind {
 					FuncKind::UserDefined => {
 						let func_def: &UserFuncDef = check_context.find_func_def(func_name)?;
@@ -502,7 +502,7 @@ impl Statement {
 				}
 			},
 			
-			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
+			ParsedStatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
 				check_context.add_user_func(name.clone(), args.clone(), return_type.clone(), body.clone())?;
 				
 				let mut next_check_context = check_context.new_stack_frame_context();
@@ -517,32 +517,32 @@ impl Statement {
 				body.check(return_type, &mut next_check_context)?;
 			},
 			
-			StatementKind::UserDefinedFuncReturn { return_expr } => {
+			ParsedStatementKind::UserDefinedFuncReturn { return_expr } => {
 				if let Some(ref expr) = return_expr {
 					expr.check_and_calc_data_type(check_context)?;
 				}
 			},
 		
-			StatementKind::BranchingIfElse { if_bodies, else_body } => {
+			ParsedStatementKind::BranchingIfElse { if_bodies, else_body } => {
 				for body in if_bodies.iter() {
 					body.check(check_context)?;
 				}
 				
 				else_body.check(check_context)?;
 			},
-			StatementKind::BranchingWhile { body } => body.check(check_context)?,
+			ParsedStatementKind::BranchingWhile { body } => body.check(check_context)?,
 		}
 		Ok(())
 	}
 	
 	pub fn run(&self, context: &mut Context) -> Option<Value> {
 		match &self.kind {
-			StatementKind::Comment (_) => {},
+			ParsedStatementKind::Comment (_) => {},
 			
-			StatementKind::VariableDeclare { var_name, data_type } => 
+			ParsedStatementKind::VariableDeclare { var_name, data_type } => 
 				context.add_variable(var_name.clone(), data_type.clone(), None).unwrap(),
 					
-			StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+			ParsedStatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 				let value: Value = value_expr.calc(context);
 				context.add_variable(
 					var_name.clone(), 
@@ -550,12 +550,12 @@ impl Statement {
 					Some(value)).unwrap();
 			},
 				
-			StatementKind::VariableSet { var_name, value_expr } => {
+			ParsedStatementKind::VariableSet { var_name, value_expr } => {
 				let value: Value = value_expr.calc(context);
 				context.set_variable(&var_name, value).unwrap();
 			},
 			
-			StatementKind::FuncCall { kind, func_name, arg_exprs } => {
+			ParsedStatementKind::FuncCall { kind, func_name, arg_exprs } => {
 					match kind {
 						FuncKind::Builtin => {
 							let f: &BuiltinFuncDef = context.find_builtin_func_def(func_name).unwrap();
@@ -594,11 +594,11 @@ impl Statement {
 					}
 				},
 				
-			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
+			ParsedStatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
 				context.add_user_func(name.clone(), args.clone(), return_type.clone(), body.clone()).unwrap();
 			},
 				
-			StatementKind::UserDefinedFuncReturn { return_expr } => {
+			ParsedStatementKind::UserDefinedFuncReturn { return_expr } => {
 				return match return_expr {
 					Some(expr) => {
 						let value: Value = expr.calc(context);
@@ -608,7 +608,7 @@ impl Statement {
 				}
 			},
 			
-			StatementKind::BranchingIfElse { if_bodies, else_body } => {
+			ParsedStatementKind::BranchingIfElse { if_bodies, else_body } => {
 				for body in if_bodies {
 					if let (true, value_op) = body.run_if_true(context) {
 						return value_op;
@@ -618,7 +618,7 @@ impl Statement {
 				return else_body.run(context);
 			},
 			
-			StatementKind::BranchingWhile { body } => {
+			ParsedStatementKind::BranchingWhile { body } => {
 				return loop {
 					match body.run_if_true(context) {
 						(false, _) => break None,
@@ -637,21 +637,21 @@ impl Statement {
 	}
 }
 
-impl std::fmt::Display for Statement {
+impl std::fmt::Display for ParsedStatement {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "[{}, {}] ", self.pos().begin(), self.pos().end())?;
 		match &self.kind {
-			StatementKind::Comment (comment) => writeln!(f, "//{}", comment),
+			ParsedStatementKind::Comment (comment) => writeln!(f, "//{}", comment),
 				
-			StatementKind::VariableDeclare { var_name, data_type } => writeln!(f, "declare {}: {}", var_name, data_type),
+			ParsedStatementKind::VariableDeclare { var_name, data_type } => writeln!(f, "declare {}: {}", var_name, data_type),
 					
-			StatementKind::VariableDeclareSet { var_name, data_type, .. } => writeln!(f, "declare {}: {} = expr", var_name, data_type),
+			ParsedStatementKind::VariableDeclareSet { var_name, data_type, .. } => writeln!(f, "declare {}: {} = expr", var_name, data_type),
 				
-			StatementKind::VariableSet { var_name, .. } => writeln!(f, "set {} = expr", var_name),
+			ParsedStatementKind::VariableSet { var_name, .. } => writeln!(f, "set {} = expr", var_name),
 			
-			StatementKind::FuncCall { kind, func_name, .. } => writeln!(f, "call {} func {}(...)", kind, func_name),
+			ParsedStatementKind::FuncCall { kind, func_name, .. } => writeln!(f, "call {} func {}(...)", kind, func_name),
 				
-			StatementKind::UserDefinedFuncDeclare { name, return_type, body, .. } => {
+			ParsedStatementKind::UserDefinedFuncDeclare { name, return_type, body, .. } => {
 				write!(f, "define user func {}(...)", name)?;
 				
 				match return_type {
@@ -666,9 +666,9 @@ impl std::fmt::Display for Statement {
 				writeln!(f, "------------------")
 			},
 			
-			StatementKind::UserDefinedFuncReturn { .. } => writeln!(f, "return ..."),
+			ParsedStatementKind::UserDefinedFuncReturn { .. } => writeln!(f, "return ..."),
 		
-			StatementKind::BranchingIfElse { if_bodies, else_body } => {
+			ParsedStatementKind::BranchingIfElse { if_bodies, else_body } => {
 				let mut is_not_first = false;
 				for body in if_bodies.iter() {
 					if is_not_first {
@@ -690,7 +690,7 @@ impl std::fmt::Display for Statement {
 				writeln!(f, "------------------")
 			},
 			
-			StatementKind::BranchingWhile { body } => {
+			ParsedStatementKind::BranchingWhile { body } => {
 				writeln!(f, "while (...):")?;
 				for st_ref in body.statements().iter() {
 					writeln!(f, "\t{}", st_ref)?;
@@ -723,7 +723,7 @@ impl std::fmt::Display for FuncKind {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ConditionalBody {
 	condition_expr: Expr,
-	statements: Vec<Statement>,
+	statements: Vec<ParsedStatement>,
 }
 
 impl ConditionalBody {
@@ -731,14 +731,14 @@ impl ConditionalBody {
 		&self.condition_expr
 	}
 	
-	pub fn statements(&self) -> &Vec<Statement> {
+	pub fn statements(&self) -> &Vec<ParsedStatement> {
 		&self.statements
 	}
 	
 	pub fn check(&self, check_context: &mut Context) -> Result<(), InterpErr> {
 		match self.condition_expr.check_and_calc_data_type(check_context)? {
 			DataType::Primitive (Primitive::Bool) => {},
-			_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
+			_ => return Err( InterpErr::from( ParsedStatementErr::IfConditionType { 
 										pos: self.condition_expr().pos(),
 									} ) ),
 		}
@@ -778,11 +778,11 @@ impl ConditionalBody {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct UnconditionalBody {
-	statements: Vec<Statement>,
+	statements: Vec<ParsedStatement>,
 }
 
 impl UnconditionalBody {
-	pub fn statements(&self) -> &Vec<Statement> {
+	pub fn statements(&self) -> &Vec<ParsedStatement> {
 		&self.statements
 	}
 	
@@ -816,11 +816,11 @@ impl UnconditionalBody {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ReturningBody {
-	statements: Vec<Statement>,
+	statements: Vec<ParsedStatement>,
 }
 
 impl ReturningBody {
-	pub fn new(statements: Vec<Statement>) -> Self {
+	pub fn new(statements: Vec<ParsedStatement>) -> Self {
 		Self {
 			statements,
 		}
@@ -835,7 +835,7 @@ impl ReturningBody {
 		}
 		
 		if !has_return && return_type.ne(&DataType::Primitive (Primitive::None)) {
-			return Err( InterpErr::from(StatementErr::UserFuncNotAllFuncPathsReturn {
+			return Err( InterpErr::from(ParsedStatementErr::UserFuncNotAllFuncPathsReturn {
 				last_statement_pos: CodePos::from(CharPos::new()),
 			}) );
 		}
@@ -847,17 +847,17 @@ impl ReturningBody {
 		Ok(())
 	}
 	
-	fn returns(statement: &Statement, declared_return_type: &DataType, check_context: &Context) -> Result<bool, InterpErr> {
+	fn returns(statement: &ParsedStatement, declared_return_type: &DataType, check_context: &Context) -> Result<bool, InterpErr> {
 		match &statement.kind {
-			StatementKind::Comment (_) 
-				| StatementKind::VariableDeclare { .. }
-				| StatementKind::VariableDeclareSet { .. }
-				| StatementKind::VariableSet { .. }
-				| StatementKind::UserDefinedFuncDeclare { .. }
-				| StatementKind::FuncCall { .. }
+			ParsedStatementKind::Comment (_) 
+				| ParsedStatementKind::VariableDeclare { .. }
+				| ParsedStatementKind::VariableDeclareSet { .. }
+				| ParsedStatementKind::VariableSet { .. }
+				| ParsedStatementKind::UserDefinedFuncDeclare { .. }
+				| ParsedStatementKind::FuncCall { .. }
 			=> Ok(false),
 			
-			StatementKind::UserDefinedFuncReturn { return_expr } => {
+			ParsedStatementKind::UserDefinedFuncReturn { return_expr } => {
 				let returned_type: DataType = match return_expr {
 					Some(expr) => {
 						let dt: DataType = expr.check_and_calc_data_type(check_context)?;
@@ -866,7 +866,7 @@ impl ReturningBody {
 					None => DataType::Primitive (Primitive::None),
 				};
 				if returned_type.ne(declared_return_type) {
-					Err( InterpErr::from(StatementErr::UserFuncReturnType {
+					Err( InterpErr::from(ParsedStatementErr::UserFuncReturnType {
 						return_expr_pos: statement.pos(),
 						declared_return_type: declared_return_type.clone(),
 						returned_type,
@@ -876,7 +876,7 @@ impl ReturningBody {
 				}
 			},
 			
-			StatementKind::BranchingIfElse { if_bodies, else_body } => {
+			ParsedStatementKind::BranchingIfElse { if_bodies, else_body } => {
 				let mut all_bodies_return = true;
 				
 				for body_ref in if_bodies.iter() {
@@ -908,7 +908,7 @@ impl ReturningBody {
 				};
 			},
 				
-			StatementKind::BranchingWhile { body } => {
+			ParsedStatementKind::BranchingWhile { body } => {
 				let mut body_returns = false;
 				for st_ref in body.statements().iter() {
 					if Self::returns(st_ref, declared_return_type, check_context)? {
@@ -936,15 +936,15 @@ impl ReturningBody {
 		None
 	}
 	
-	pub fn statements(&self) -> &Vec<Statement> {
+	pub fn statements(&self) -> &Vec<ParsedStatement> {
 		&self.statements
 	}
 }
 
-//------------------- StatementErr --------------------
+//------------------- ParsedStatementErr --------------------
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StatementErr {
+pub enum ParsedStatementErr {
 	UnfinishedBody (CharPos),
 	IfConditionType { 
 		pos: CodePos,
@@ -959,16 +959,16 @@ pub enum StatementErr {
 	},
 }
 
-impl std::fmt::Display for StatementErr {
+impl std::fmt::Display for ParsedStatementErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			StatementErr::UnfinishedBody (_) => 
+			ParsedStatementErr::UnfinishedBody (_) => 
 				write!(f, "Unfinished body"),
-			StatementErr::IfConditionType { .. } => 
+			ParsedStatementErr::IfConditionType { .. } => 
 				write!(f, "'If' condition expression data type must be bool"),
-			StatementErr::UserFuncReturnType { declared_return_type, returned_type, .. } =>
+			ParsedStatementErr::UserFuncReturnType { declared_return_type, returned_type, .. } =>
 				write!(f, "User-defined function return type must be '{}', but found '{}'", declared_return_type, returned_type),
-			StatementErr::UserFuncNotAllFuncPathsReturn { .. } =>
+			ParsedStatementErr::UserFuncNotAllFuncPathsReturn { .. } =>
 				write!(f, "Not all user-defined function paths return"),
 		}
 	}
@@ -988,20 +988,20 @@ mod tests {
 	
 	#[test]
 	fn can_parse_comment() {
-		let mut statements_iter = StatementsIter::new();
+		let mut statements_iter = ParsedStatementsIter::new();
 		
 		statements_iter.push_string("//var a: f32;\nvar a: f32;//d".to_string());	
 		
 		assert_eq!(
 			statements_iter.next().unwrap().unwrap().kind, 
-			StatementKind::Comment (String::from("var a: f32;")) 
+			ParsedStatementKind::Comment (String::from("var a: f32;")) 
 		);
 		
 		let nt = new_name_token("a");
 		
 		assert_eq!(
 			statements_iter.next().unwrap().unwrap().kind, 
-			StatementKind::VariableDeclare {
+			ParsedStatementKind::VariableDeclare {
 					var_name: nt, 
 					data_type: DataType::Primitive (Primitive::Float32), 
 			} 
@@ -1009,7 +1009,7 @@ mod tests {
 		
 		assert_eq!(
 			statements_iter.next().unwrap().unwrap().kind, 
-			StatementKind::Comment (String::from("d")) 
+			ParsedStatementKind::Comment (String::from("d")) 
 		);
 		
 		assert!(statements_iter.next().is_none());
@@ -1017,13 +1017,13 @@ mod tests {
 	
 	#[test]
 	fn can_make_variable_declare_statement() {
-		let mut statements_iter = StatementsIter::new();
+		let mut statements_iter = ParsedStatementsIter::new();
 		
 		let nt = new_name_token("a");
 		
 		statements_iter.push_string("var a: f32;".to_string());		
 		let st = statements_iter.next().unwrap().unwrap();
-		assert_eq!(st.kind, StatementKind::VariableDeclare {
+		assert_eq!(st.kind, ParsedStatementKind::VariableDeclare {
 			var_name: nt.clone(), 
 			data_type: DataType::Primitive (Primitive::Float32), 
 		});		
@@ -1031,7 +1031,7 @@ mod tests {
 		
 		statements_iter.push_string("var a: str;".to_string());
 		let st = statements_iter.next().unwrap().unwrap();
-		assert_eq!(st.kind, StatementKind::VariableDeclare {
+		assert_eq!(st.kind, ParsedStatementKind::VariableDeclare {
 			var_name: nt.clone(), 
 			data_type: DataType::Primitive (Primitive::String), 
 		});		
@@ -1039,7 +1039,7 @@ mod tests {
 		
 		statements_iter.push_string("var a: bool;".to_string());
 		let st = statements_iter.next().unwrap().unwrap();
-		assert_eq!(st.kind, StatementKind::VariableDeclare {
+		assert_eq!(st.kind, ParsedStatementKind::VariableDeclare {
 			var_name: nt.clone(), 
 			data_type: DataType::Primitive (Primitive::Bool), 
 		});		
@@ -1048,7 +1048,7 @@ mod tests {
 	
 	#[test]
 	fn can_make_variable_declare_set_statement() {
-		let mut statements_iter = StatementsIter::new();
+		let mut statements_iter = ParsedStatementsIter::new();
 		
 		let nt = new_name_token("a");
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
@@ -1060,7 +1060,7 @@ mod tests {
 		statements_iter.push_string("var a: f32 = 3;".to_string());
 		let st = statements_iter.next().unwrap().unwrap();
 		match st.kind {
-			StatementKind::VariableDeclareSet {
+			ParsedStatementKind::VariableDeclareSet {
 					var_name, 
 					data_type: DataType::Primitive (Primitive::Float32), 
 					value_expr
@@ -1076,7 +1076,7 @@ mod tests {
 		statements_iter.push_string("var a: str = \"hello\";".to_string());
 		let st = statements_iter.next().unwrap().unwrap();
 		match st.kind {
-			StatementKind::VariableDeclareSet {
+			ParsedStatementKind::VariableDeclareSet {
 					var_name, 
 					data_type: DataType::Primitive (Primitive::String), 
 					value_expr
@@ -1092,7 +1092,7 @@ mod tests {
 		statements_iter.push_string("var a: bool = True;".to_string());
 		let st = statements_iter.next().unwrap().unwrap();
 		match st.kind {
-			StatementKind::VariableDeclareSet {
+			ParsedStatementKind::VariableDeclareSet {
 					var_name, 
 					data_type: DataType::Primitive (Primitive::Bool), 
 					value_expr
@@ -1108,7 +1108,7 @@ mod tests {
 	
 	#[test]
 	fn can_parse_builtin_funcs_call() {
-		let mut st_iter = StatementsIter::new();
+		let mut st_iter = ParsedStatementsIter::new();
 		st_iter.push_string("@print(1.2 + 3.45);".to_string());
 		
 		let nt = new_name_token("print");
@@ -1119,7 +1119,7 @@ mod tests {
 			&primitive_type_member_funcs_list);
 		
 		match st_iter.next().unwrap().unwrap().kind {
-			StatementKind::FuncCall {
+			ParsedStatementKind::FuncCall {
 				kind: FuncKind::Builtin,
 				func_name, 
 				arg_exprs
@@ -1146,13 +1146,13 @@ mod tests {
 
 	#[test]
 	fn can_parse_builtin_parameterless_funcs_call() {
-		let mut st_iter = StatementsIter::new();
+		let mut st_iter = ParsedStatementsIter::new();
 		st_iter.push_string("@print();".to_string());
 		
 		let nt = new_name_token("print");
 		
 		match st_iter.next().unwrap().unwrap().kind {
-			StatementKind::FuncCall {
+			ParsedStatementKind::FuncCall {
 				kind: FuncKind::Builtin,
 				func_name, 
 				arg_exprs
@@ -1172,7 +1172,7 @@ mod tests {
 	
 	#[test]
 	fn can_parse_branching_if_else_statement() {
-		let mut statements_iter = StatementsIter::new();
+		let mut statements_iter = ParsedStatementsIter::new();
 		
 		//--------------------- if ---------------------
 		statements_iter.push_string(r#"
@@ -1184,7 +1184,7 @@ mod tests {
 		"#.to_string());	
 		
 		let st = statements_iter.next().unwrap().unwrap();
-		let (if_bodies, else_body) = if let StatementKind::BranchingIfElse { if_bodies, else_body } = &st.kind {
+		let (if_bodies, else_body) = if let ParsedStatementKind::BranchingIfElse { if_bodies, else_body } = &st.kind {
 			(if_bodies, else_body) 
 		} else {
 			panic!("Not IfElse: {:?}", st);
@@ -1211,7 +1211,7 @@ mod tests {
 		} 
 		@print("End!");"#.to_string());	
 		let st = statements_iter.next().unwrap().unwrap();	
-		let (if_bodies, else_body) = if let StatementKind::BranchingIfElse { if_bodies, else_body } = &st.kind {
+		let (if_bodies, else_body) = if let ParsedStatementKind::BranchingIfElse { if_bodies, else_body } = &st.kind {
 			(if_bodies, else_body)
 		} else {
 			dbg!(st); panic!("Not IfElse: ");
@@ -1238,7 +1238,7 @@ mod tests {
 		}
 		@print("End!");"#.to_string());	
 		let st = statements_iter.next().unwrap().unwrap();
-		let (if_bodies, else_body) = if let StatementKind::BranchingIfElse { if_bodies, else_body } = &st.kind {
+		let (if_bodies, else_body) = if let ParsedStatementKind::BranchingIfElse { if_bodies, else_body } = &st.kind {
 			(if_bodies, else_body)
 		} else {
 			dbg!(st); panic!("Not IfElse: ");
@@ -1269,7 +1269,7 @@ mod tests {
 		}
 		@print("End!");"#.to_string());	
 		let st = statements_iter.next().unwrap().unwrap();
-		let (if_bodies, else_body) = if let StatementKind::BranchingIfElse { if_bodies, else_body } = &st.kind {
+		let (if_bodies, else_body) = if let ParsedStatementKind::BranchingIfElse { if_bodies, else_body } = &st.kind {
 			(if_bodies, else_body)
 		} else {
 			dbg!(st); panic!("Not IfElse: ");
@@ -1303,7 +1303,7 @@ mod tests {
 		}
 		@print("End!");"#.to_string());	
 		let st = statements_iter.next().unwrap().unwrap();
-		let (if_bodies, else_body) = if let StatementKind::BranchingIfElse { if_bodies, else_body } = &st.kind {
+		let (if_bodies, else_body) = if let ParsedStatementKind::BranchingIfElse { if_bodies, else_body } = &st.kind {
 			(if_bodies, else_body)
 		} else {
 			dbg!(st); panic!("Not IfElse: ");
@@ -1326,7 +1326,7 @@ mod tests {
 	
 	#[test]
 	fn can_parse_branching_while_statement() {
-		let mut statements_iter = StatementsIter::new();
+		let mut statements_iter = ParsedStatementsIter::new();
 		
 		statements_iter.push_string(r#"
 		var a: f32 = 3;
@@ -1344,7 +1344,7 @@ mod tests {
 			&primitive_type_member_funcs_list);
 		
 		let st = statements_iter.next().unwrap().unwrap();
-		if let StatementKind::VariableDeclareSet {
+		if let ParsedStatementKind::VariableDeclareSet {
 			var_name,
 			data_type,
 			value_expr,
@@ -1364,7 +1364,7 @@ mod tests {
 		};
 		
 		let st = statements_iter.next().unwrap().unwrap();
-		let body = if let StatementKind::BranchingWhile { body } = &st.kind { 
+		let body = if let ParsedStatementKind::BranchingWhile { body } = &st.kind { 
 			body
 		} else {
 			panic!("Wrong statement: {:?}", st);
@@ -1375,11 +1375,11 @@ mod tests {
 		check_is_exit_call(&st);
 	}
 	
-	fn check_is_exit_call(st: &Statement) {
+	fn check_is_exit_call(st: &ParsedStatement) {
 		let nt_exit = new_name_token("print");
 		
 		match &st.kind {
-			StatementKind::FuncCall { 
+			ParsedStatementKind::FuncCall { 
 				kind: FuncKind::Builtin,
 				func_name, 
 				arg_exprs,
@@ -1438,7 +1438,7 @@ mod tests {
 		check_statement(&statements[1], value2);
 	}
 	
-	fn check_statement(statement: &Statement, value: &Value) {
+	fn check_statement(statement: &ParsedStatement, value: &Value) {
 		let nt_print = new_name_token("print");
 		
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
@@ -1448,7 +1448,7 @@ mod tests {
 			&primitive_type_member_funcs_list);
 		
 		match &statement.kind {
-			StatementKind::FuncCall { kind: FuncKind::Builtin, func_name, arg_exprs } => {
+			ParsedStatementKind::FuncCall { kind: FuncKind::Builtin, func_name, arg_exprs } => {
 				assert_eq!(*func_name, nt_print);
 				
 				assert_eq!(arg_exprs.len(), 1);
@@ -1467,7 +1467,7 @@ mod tests {
 	
 	#[test]
 	fn can_parse_user_func_def_statement() {
-		let mut statements_iter = StatementsIter::new();
+		let mut statements_iter = ParsedStatementsIter::new();
 		
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
 		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
@@ -1485,7 +1485,7 @@ mod tests {
 		
 		let st = statements_iter.next().unwrap().unwrap();
 		match st.kind {
-			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
+			ParsedStatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
 				assert_eq!(name, new_name_token("add_squared"));
 				assert_eq!(
 					args,
@@ -1501,7 +1501,7 @@ mod tests {
 				context.add_variable(new_name_token("b"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[0].kind {
-					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+					ParsedStatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2"));
 						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
@@ -1517,7 +1517,7 @@ mod tests {
 				context.add_variable(new_name_token("a2"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[1].kind {
-					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+					ParsedStatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2"));
 						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
@@ -1533,7 +1533,7 @@ mod tests {
 				context.add_variable(new_name_token("b2"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[2].kind {
-					StatementKind::UserDefinedFuncReturn { return_expr } => {
+					ParsedStatementKind::UserDefinedFuncReturn { return_expr } => {
 						let dt: Option<DataType> = return_expr.as_ref()
 							.map(|expr| expr.check_and_calc_data_type(&context).unwrap());
 							
@@ -1556,7 +1556,7 @@ mod tests {
 	
 	#[test]
 	fn can_parse_user_func_def_statement_that_returns_nothing() {
-		let mut statements_iter = StatementsIter::new();
+		let mut statements_iter = ParsedStatementsIter::new();
 		
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
 		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
@@ -1575,7 +1575,7 @@ mod tests {
 		
 		let st = statements_iter.next().unwrap().unwrap();
 		match st.kind {
-			StatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
+			ParsedStatementKind::UserDefinedFuncDeclare { name, args, return_type, body } => {
 				assert_eq!(name, new_name_token("add_squared"));
 				assert_eq!(
 					args,
@@ -1591,7 +1591,7 @@ mod tests {
 				context.add_variable(new_name_token("b"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[0].kind {
-					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+					ParsedStatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2"));
 						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
@@ -1607,7 +1607,7 @@ mod tests {
 				context.add_variable(new_name_token("a2"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[1].kind {
-					StatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
+					ParsedStatementKind::VariableDeclareSet { var_name, data_type, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2"));
 						assert_eq!(data_type.clone(), DataType::Primitive (Primitive::Float32));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
@@ -1623,7 +1623,7 @@ mod tests {
 				context.add_variable(new_name_token("b2"), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
 				
 				match &body.statements()[2].kind {
-					StatementKind::FuncCall { kind, func_name, arg_exprs } => {
+					ParsedStatementKind::FuncCall { kind, func_name, arg_exprs } => {
 						assert_eq!(*kind, FuncKind::Builtin);
 						assert_eq!(*func_name, new_name_token("println"));
 						assert_eq!(arg_exprs.len(), 1);
@@ -1638,7 +1638,7 @@ mod tests {
 				}
 				
 				match &body.statements()[3].kind {
-					StatementKind::UserDefinedFuncReturn { return_expr } => {
+					ParsedStatementKind::UserDefinedFuncReturn { return_expr } => {
 						let dt: Option<DataType> = return_expr.as_ref()
 							.map(|expr| expr.check_and_calc_data_type(&context).unwrap());
 							
@@ -1662,7 +1662,7 @@ mod tests {
 	#[test]
 	fn cannot_make_unfinished_statement() {		
 		let check_end_reached = |code: &str| {
-			let mut statements_iter = StatementsIter::new();
+			let mut statements_iter = ParsedStatementsIter::new();
 			statements_iter.push_string(code.to_string());				
 			match statements_iter.next() {
 				Some(Err(InterpErr { inner: InnerErr::Token( TokenErr::EndReached { .. }), .. } )) => {},

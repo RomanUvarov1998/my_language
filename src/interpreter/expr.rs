@@ -5,7 +5,7 @@ use super::data_type::{DataType, Primitive};
 use super::builtin_func::BuiltinFuncDef;
 use super::user_func::{UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
-use super::statement::FuncKind;
+use super::parsed_statement::FuncKind;
 use super::context::Context;
 use std::rc::Rc;
 

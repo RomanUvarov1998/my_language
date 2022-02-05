@@ -7,7 +7,7 @@ use super::value::Value;
 use super::data_type::{DataType, Primitive};
 use super::var_data::{VarData, VarErr};
 use super::user_func::{UserFuncErr, UserFuncArg, UserFuncDef};
-use super::statement::ReturningBody;
+use super::parsed_statement::ReturningBody;
 use super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
 use super::struct_def::StructDefErr;
 
