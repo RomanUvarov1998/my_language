@@ -11,6 +11,7 @@ mod user_func;
 mod utils;
 mod context;
 mod primitive_type_member_funcs_list;
+mod run_statement;
 
 use parsed_statement::{ParsedStatementsIter, ParsedStatement, ParsedStatementErr};
 use builtin_func::{BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
