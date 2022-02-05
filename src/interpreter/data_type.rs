@@ -86,9 +86,20 @@ impl std::fmt::Display for Primitive {
 	}
 }
 
+//--------------------------- DataTypeErr -------------------------
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataTypeErr {
 	NotDefined {
 		name: NameToken,
+	}
+}
+
+impl std::fmt::Display for DataTypeErr {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			DataTypeErr::NotDefined { name } => 
+				write!(f, "DataType '{}' is not defined", name.value()),
+		}
 	}
 }

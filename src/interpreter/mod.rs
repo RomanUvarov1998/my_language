@@ -158,6 +158,7 @@ pub enum InnerErr {
 	UserFunc (UserFuncErr),
 	Statement (StatementErr),
 	StructDef (StructDefErr),
+	DataType (DataTypeErr),
 }
 
 impl InterpErr {
@@ -379,6 +380,20 @@ impl From<StructDefErr> for InterpErr {
 				pos: name.pos(),
 				descr,
 				inner: InnerErr::StructDef (err),
+			},
+		}
+	}
+}
+
+use data_type::DataTypeErr;
+impl From<DataTypeErr> for InterpErr {
+	fn from(err: DataTypeErr) -> InterpErr {
+		let descr: String = format!("{}", err);
+		match err {
+			DataTypeErr::NotDefined { ref name } => InterpErr {
+				pos: name.pos(),
+				descr,
+				inner: InnerErr::DataType (err),
 			},
 		}
 	}

@@ -160,6 +160,7 @@ mod tests {
 	use super::super::var_data::VarErr;
 	use super::super::value::Value;
 	use super::super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
+	use super::super::struct_def::StructDef;
 	
 	#[test]
 	fn add_uninit_variable() {
@@ -167,7 +168,8 @@ mod tests {
 		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
 		let mut context = Context::new(
 			&builtin_func_defs,
-			&primitive_type_member_funcs_list);
+			&primitive_type_member_funcs_list,
+			Vec::<StructDef>::new());
 		
 		let nt_a = new_name_token("a");
 		let nt_b = new_name_token("b");
@@ -223,7 +225,8 @@ mod tests {
 		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
 		let mut context = Context::new(
 			&builtin_func_defs,
-			&primitive_type_member_funcs_list);
+			&primitive_type_member_funcs_list,
+			Vec::<StructDef>::new());
 		
 		let nt = new_name_token("a");
 		

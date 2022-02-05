@@ -1358,6 +1358,7 @@ mod tests {
 	use super::super::token::*;
 	use super::*;
 	use super::super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
+	use super::super::struct_def::StructDef;
 	
 	#[test]
 	fn lookup_array_initialization() {
@@ -1874,7 +1875,8 @@ mod tests {
 			let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
 			let context = Context::new(
 				&builtin_func_defs,
-				&primitive_type_member_funcs_list);
+				&primitive_type_member_funcs_list,
+				Vec::<StructDef>::new());
 			
 			let ans: Value = expr.calc(&context);
 			
