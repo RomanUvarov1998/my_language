@@ -638,6 +638,24 @@ struct B {
 		}
 	}
 
+	#[test]
+	fn can_assign_defined_struct() {
+		// TODO: make possible to create struct with a field of a type of itself:
+		// struct A { a: A }
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+struct A {
+	a: f32,
+	b: bool
+}
+
+var a: A = A { a: 4.5, b: False, };
+		"#) {
+			Ok(_) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
+
 	fn new_name_token(name: &str) -> NameToken {
 		NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()))
 	}
