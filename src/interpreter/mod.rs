@@ -619,6 +619,8 @@ f add2(a: f32, b: f32) -> f32 {
 
 	#[test]
 	fn can_define_struct() {
+		// TODO: make possible to create struct with a field of a type of itself:
+		// struct A { a: A }
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
 struct A {
