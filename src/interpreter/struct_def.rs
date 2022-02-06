@@ -111,6 +111,15 @@ pub struct StructFieldDef {
 	data_type: DataType,
 }
 
+impl StructFieldDef {
+	pub fn new(name: NameToken, data_type: DataType) -> Self {
+		Self {
+			name,
+			data_type,
+		}
+	}
+}
+
 //------------------ StructDefErr ---------------------
 
 #[derive(Debug, PartialEq, Eq)]

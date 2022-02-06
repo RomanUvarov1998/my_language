@@ -617,6 +617,25 @@ f add2(a: f32, b: f32) -> f32 {
 		}
 	}
 
+	#[test]
+	fn can_define_struct() {
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+struct A {
+	a: f32,
+	b: bool
+}
+
+struct B {
+	a: A,
+	b: bool
+}
+		"#) {
+			Ok(_) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
+
 	fn new_name_token(name: &str) -> NameToken {
 		NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()))
 	}

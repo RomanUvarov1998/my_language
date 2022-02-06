@@ -8,6 +8,7 @@ use super::builtin_func::BuiltinFuncDef;
 use super::user_func::{UserFuncArg, UserFuncDef};
 use super::utils::{CharPos, CodePos, NameToken};
 use super::context::Context;
+use super::struct_def::StructFieldDef;
 
 pub struct StatementsIter {
 	tokens_iter: TokensIter,
@@ -333,7 +334,7 @@ impl StatementsIter {
 	}
 
 	fn parse_struct_declaration(&mut self, struct_keyword_pos: CodePos) -> Result<Statement, InterpErr> {
-		let type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
+		let new_type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 		
 		self.tokens_iter.next_expect_left_curly_bracket()?;
 		
@@ -372,7 +373,7 @@ impl StatementsIter {
 		
 		Ok ( Statement {
 			kind: StatementKind::UserStructDeclare {
-				type_name,
+				new_type_name,
 				fields,
 			},
 			pos: CodePos::new(struct_keyword_pos.begin(), last_pos),
@@ -466,7 +467,7 @@ pub enum StatementKind {
 		arg_exprs: Vec<Expr>,
 	},
 	UserStructDeclare {
-		type_name: NameToken,
+		new_type_name: NameToken,
 		fields: Vec<ParsedStructFieldDef>,
 	},
 	BranchingIfElse {
@@ -588,10 +589,14 @@ impl Statement {
 				}
 			},
 		
-			StatementKind::UserStructDeclare { type_name, fields } => {
-				todo!();
-				// // TODO: avoid cloning
-				// check_context.add_user_struct(type_name.clone(), fields.clone())?;
+			StatementKind::UserStructDeclare { new_type_name, fields } => {
+				let mut typed_fields = Vec::<StructFieldDef>::new();
+				for field in fields.iter() {
+					let data_type: DataType = check_context.find_type_by_name(&field.data_type_name)?;					
+					typed_fields.push(StructFieldDef::new(
+						field.name.clone(), data_type));
+				}
+				check_context.add_user_struct(new_type_name.clone(), typed_fields)?;
 			},
 		
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
@@ -696,10 +701,14 @@ impl Statement {
 				}
 			},
 			
-			StatementKind::UserStructDeclare { type_name, fields } => {
-				todo!();
-				// // TODO: avoid cloning
-				// context.add_user_struct(type_name.clone(), fields.clone()).unwrap();
+			StatementKind::UserStructDeclare { new_type_name, fields } => {
+				let mut typed_fields = Vec::<StructFieldDef>::new();
+				for field in fields.iter() {
+					let data_type: DataType = context.find_type_by_name(&field.data_type_name).unwrap();					
+					typed_fields.push(StructFieldDef::new(
+						field.name.clone(), data_type));
+				}
+				context.add_user_struct(new_type_name.clone(), typed_fields).unwrap();
 			},
 			
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
@@ -762,7 +771,8 @@ impl std::fmt::Display for Statement {
 			
 			StatementKind::UserDefinedFuncReturn { .. } => writeln!(f, "return ..."),
 		
-			StatementKind::UserStructDeclare { type_name, fields } => todo!(),
+			StatementKind::UserStructDeclare { new_type_name, fields } => 
+				writeln!(f, "struct '{}' with fields {:?}", new_type_name.value(), fields),
 		
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
 				let mut is_not_first = false;
@@ -1820,10 +1830,10 @@ mod tests {
 		let st = statements_iter.next().unwrap().unwrap();
 		match st.kind {
 			StatementKind::UserStructDeclare {
-				type_name,
+				new_type_name,
 				fields,
 			} => {
-				assert_eq!(type_name, new_name_token("Human"));
+				assert_eq!(new_type_name, new_name_token("Human"));
 				
 				assert_eq!(fields.len(), 3);
 				
