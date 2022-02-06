@@ -1,13 +1,19 @@
-use super::data_type::{DataType, Primitive};
+use super::data_type::{DataType, Primitive, DataTypeErr};
+use super::struct_def::StructDef;
+use std::collections::HashMap;
+
+//------------------- Value -------------------
 
 #[derive(Debug, Clone)]
 pub enum Value {
 	Float32 (f32),
 	String (String),
 	Bool (bool),
+	// TODO: make a struct with a value
 	Struct {
-		data_type: DataType,
-		fields: Vec<Value>,
+		struct_def: StructDef,
+		// TODO: try use &str for key to not to copy the whole string
+		fields: HashMap<String, Value>,
 	},
 	None,
 }
@@ -18,7 +24,7 @@ impl Value {
 			Value::Float32 (_) => DataType::Primitive (Primitive::Float32),
 			Value::String (_) => DataType::Primitive (Primitive::String),
 			Value::Bool (_) => DataType::Primitive (Primitive::Bool),
-			Value::Struct { data_type, .. } => data_type.clone(),
+			Value::Struct { struct_def, .. } => DataType::Complex(struct_def.clone()), // TODO: try avoid cloning and return reference
 			Value::None => DataType::Primitive (Primitive::None),
 		}
 	}
@@ -41,8 +47,8 @@ impl PartialEq for Value {
 				Value::Bool (b2) => b1 == b2,
 				_ => false,
 			},
-			Value::Struct { data_type: data_type1, .. } => match other {
-				Value::Struct { data_type: data_type2, .. } => data_type1 == data_type2,
+			Value::Struct { struct_def: sd1, .. } => match other {
+				Value::Struct { struct_def: sd2, .. } => sd1 == sd2,
 				_ => false,
 			},
 			Value::None => match other {
@@ -63,7 +69,13 @@ impl std::fmt::Display for Value {
 			} else {
 				write!(f, "False")
 			},
-			Value::Struct { data_type, .. } => write!(f, "Struct '{}'", data_type),
+			Value::Struct { struct_def, fields } => {
+				writeln!(f, "Value of struct '{}' {{", struct_def.inner().name().value())?;
+				for (key, val) in fields {
+					writeln!(f, "\t{}: {},", key, val)?;
+				}
+				writeln!(f, "}}")
+			},
 			Value::None => write!(f, "None"),
 		}
 	}

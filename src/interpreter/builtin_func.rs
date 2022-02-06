@@ -28,12 +28,12 @@ impl BuiltinFuncDef {
 	
 	pub fn check_args(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() {
-			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt {
+			return Err( BuiltinFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
 				func_name_pos: func_name.pos(),
 				actual_cnt: self.args.len(),
 				given_cnt: args_exprs.len(),
-			} ) );
+			}.into() );
 		}
 						
 		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
@@ -44,13 +44,13 @@ impl BuiltinFuncDef {
 		
 		for i in 0..self.args.len() {
 			if !self.args[i].type_check(&args_data_types[i]) {
-				return Err( InterpErr::from( BuiltinFuncErr::ArgType {
+				return Err( BuiltinFuncErr::ArgType {
 					func_signature: format!("{}", self),
 					arg_name: self.args[i].name.clone(),
 					arg_expr_pos: args_exprs[i].pos(),
 					actual_type: self.args[i].data_type.clone(),
 					given_type: args_data_types[i].clone(),
-				} ) );
+				}.into() );
 			}
 		}
 		
@@ -59,12 +59,12 @@ impl BuiltinFuncDef {
 	
 	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value: &Value, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() + 1 {
-			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt {
+			return Err( BuiltinFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
 				func_name_pos: func_name.pos(),
 				actual_cnt: self.args.len(),
 				given_cnt: args_exprs.len() + 1,
-			} ) );
+			}.into() );
 		}
 						
 		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
@@ -74,24 +74,24 @@ impl BuiltinFuncDef {
 		let args_data_types: Vec<DataType> = args_data_types_result?;
 		
 		if value.get_type().ne(&self.args[0].data_type) {
-			return Err( InterpErr::from( BuiltinFuncErr::ArgType {
+			return Err( BuiltinFuncErr::ArgType {
 				func_signature: format!("{}", self),
 				arg_name: String::from("value itself"),
 				arg_expr_pos: caller_pos,
 				actual_type: self.args[0].data_type.clone(),
 				given_type: value.get_type().clone(),
-			} ) );
+			}.into() );
 		}
 		
 		for i in 1..self.args.len() {
 			if !self.args[i].type_check(&args_data_types[i]) {
-				return Err( InterpErr::from( BuiltinFuncErr::ArgType {
+				return Err( BuiltinFuncErr::ArgType {
 					func_signature: format!("{}", self),
 					arg_name: self.args[i].name.clone(),
 					arg_expr_pos: args_exprs[i].pos(),
 					actual_type: self.args[i].data_type.clone(),
 					given_type: args_data_types[i].clone(),
-				} ) );
+				}.into() );
 			}
 		}
 		

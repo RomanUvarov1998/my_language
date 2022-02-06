@@ -90,6 +90,15 @@ impl TokensIter {
 		}
 	}
 		
+	pub fn next_expect_right_bracket(&mut self) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::Bracket (Bracket::Right)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
+	}
+		
 	fn parse_number_or_dot(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
 		let (mut value, mut has_dot): (f32, bool) = match first_char.kind() {
 			CharKind::Digit (d1) => (d1 as f32, false), // X
@@ -317,7 +326,7 @@ impl TokensIter {
 							}
 						};
 						
-						Ok( Token::new(first_char.pos(), last_char.pos(), TokenContent::StatementOp ( StatementOp::Comment (content) )) )
+						Ok( Token::new(first_char.pos(), last_char.pos(), TokenContent::Comment (content)) )
 					},
 					_ => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Div )) ),
 				},
@@ -402,17 +411,13 @@ impl TokensIter {
 			} )
 		}
 	}
-}
 
-impl Iterator for TokensIter {
-	type Item = Result<Token, TokenErr>;
-	
-	fn next(&mut self) -> Option<Self::Item> {
+	fn parse_next_token(&mut self) -> Option<Result<Token, TokenErr>> {
 		if let Some(token) =  self.peeked_tokens.pop_front() {
 			return Some(Ok(token));
 		}
 		
-		for ch in self.iter.by_ref() {			
+		for ch in self.iter.by_ref() {
 			let token_result = match ch.kind() {
 				CharKind::Digit (_) | CharKind::Dot => self.parse_number_or_dot(ch),
 				
@@ -459,6 +464,23 @@ impl Iterator for TokensIter {
 	}
 }
 
+impl Iterator for TokensIter {
+	type Item = Result<Token, TokenErr>;
+	
+	// skips Comment tokens
+	fn next(&mut self) -> Option<Self::Item> {
+		loop {
+			match self.parse_next_token()? {
+				Ok(token) => match token.content() {
+					TokenContent::Comment(_) => {},
+					_ => break Some(Ok(token)),
+				},
+				Err(err) => break Some(Err(err)),
+			}
+		}
+	}
+}
+
 //---------------------------- Token --------------------------------
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -497,6 +519,7 @@ pub enum TokenContent {
 	Bracket (Bracket),
 	StatementOp (StatementOp),
 	Keyword (Keyword),
+	Comment (String),
 }
 
 impl std::fmt::Display for TokenContent {
@@ -534,7 +557,6 @@ impl std::fmt::Display for TokenContent {
 				StatementOp::Colon => write!(f, "'{}'", ":"),
 				StatementOp::Semicolon => write!(f, "'{}'", ";"),
 				StatementOp::Comma => write!(f, "'{}'", ","),
-				StatementOp::Comment (content) => write!(f, "Comment //'{}'", content),
 				StatementOp::ThinArrow => write!(f, "->"),
 				StatementOp::Dot => write!(f, "."),
 			},
@@ -549,6 +571,7 @@ impl std::fmt::Display for TokenContent {
 				Keyword::True => write!(f, "'{}'", "True"),
 				Keyword::False => write!(f, "'{}'", "False"),
 			},
+			TokenContent::Comment (content) => write!(f, "Comment //'{}'", content),
 		}
 	}
 }
@@ -556,6 +579,10 @@ impl std::fmt::Display for TokenContent {
 impl PartialEq for TokenContent {
 	fn eq(&self, other: &Self) -> bool {
 		match self {
+			TokenContent::Comment (c1) => match other {
+				TokenContent::Comment (c2) => c1 == c2,
+				_ => false,
+			},
 			TokenContent::Number (f1) => match other {
 				TokenContent::Number (f2) => (f1 - f2).abs() <= std::f32::EPSILON,
 				_ => false,
@@ -629,7 +656,6 @@ pub enum StatementOp {
 	Semicolon,
 	Comma,
 	Dot,
-	Comment (String),
 	ThinArrow,
 }
 
@@ -692,6 +718,18 @@ mod tests {
 			}
 		};
 		
+		// Doesn't yield tokens by default
+		let mut tokens_iter = TokensIter::new();
+		tokens_iter.push_string("//23rwrer2".to_string());
+					
+		assert_eq!(tokens_iter.next(), None);
+		
+		match tokens_iter.next_or_end_reached_err().unwrap_err() {
+			TokenErr::EndReached { .. } => {},
+			err @ _ => panic!("Unexpected err: {:?}", err),
+		}
+		
+		// But yields other tokens
 		test_token_content_detection("123", TokenContent::Number (123_f32));
 		test_token_content_detection("123.456", TokenContent::Number (123.456_f32));
 		test_token_content_detection("123.", TokenContent::Number (123_f32));
@@ -711,7 +749,6 @@ mod tests {
 		test_token_content_detection(";", TokenContent::StatementOp (StatementOp::Semicolon));
 		test_token_content_detection(",", TokenContent::StatementOp (StatementOp::Comma));
 		test_token_content_detection(".", TokenContent::StatementOp (StatementOp::Dot));
-		test_token_content_detection("//23rwrer2", TokenContent::StatementOp (StatementOp::Comment (String::from("23rwrer2"))));
 		test_token_content_detection("->", TokenContent::StatementOp (StatementOp::ThinArrow));
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
 		test_token_content_detection("struct", TokenContent::Keyword ( Keyword::Struct ));
@@ -774,7 +811,10 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::If ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Else ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::While ));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from("sdsdfd"))));
+		
+		// Doesn't yield tokens by default
+		//assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Comment (String::from("sdsdfd")));
+		
 		assert_eq!(tokens_iter.next(), None);
 		
 		let mut tokens_iter = TokensIter::new();
@@ -893,7 +933,10 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::If ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Else ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::While ));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from(" sdfsdfs "))));
+		
+		// Doesn't yield tokens by default
+		// assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Comment (String::from(" sdfsdfs ")));
+		
 		assert_eq!(tokens_iter.next(), None);
 	}
 }

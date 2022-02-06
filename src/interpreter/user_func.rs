@@ -28,12 +28,12 @@ impl UserFuncDef {
 	
 	pub fn check_args(&self, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() {
-			return Err( InterpErr::from( UserFuncErr::ArgsCnt {
+			return Err(UserFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
 				func_name_pos: self.name.pos(),
 				actual_cnt: self.args.len(),
 				given_cnt: args_exprs.len(),
-			} ) );
+			}.into());
 		}
 						
 		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
@@ -44,13 +44,13 @@ impl UserFuncDef {
 		
 		for i in 0..self.args.len() {
 			if !self.args[i].type_check(&args_data_types[i]) {
-				return Err( InterpErr::from( UserFuncErr::ArgType {
+				return Err(UserFuncErr::ArgType {
 					func_signature: format!("{}", self),
 					arg_name: self.args[i].name.clone(),
 					arg_expr_pos: args_exprs[i].pos(),
 					actual_type: self.args[i].data_type.clone(),
 					given_type: args_data_types[i].clone(),
-				} ) );
+				}.into());
 			}
 		}
 		

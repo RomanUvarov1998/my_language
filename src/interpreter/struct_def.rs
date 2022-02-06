@@ -1,10 +1,14 @@
-use super::data_type::DataType;
+use super::data_type::{DataType, DataTypeErr};
 use super::user_func::UserFuncDef;
 use super::builtin_func::BuiltinFuncDef;
 use super::utils::{CodePos, NameToken};
+use super::context::Context;
+use super::expr::StructLiteralField;
+use super::InterpErr;
 use std::cell::{RefCell, Ref, RefMut};
 use std::rc::Rc;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::collections::hash_map::Values;
 
 //------------------ StructDef ---------------------
 
@@ -38,6 +42,37 @@ impl StructDef {
 	
 	pub fn inner_mut(&self) -> RefMut<'_, StructDefInner> {
 		self.inner.borrow_mut()
+	}
+	
+	pub fn check_fields_set(&self, struct_name_in_code: &NameToken, fields: &Vec<StructLiteralField>, check_context: &Context) -> Result<(), InterpErr> {
+		let mut defined_fields = HashSet::<String>::new();
+		let inner = self.inner();
+		for field in fields {
+			// TODO: try use &str or Cow to not to copy String
+			let field_name: String = field.field_name().value().to_string();
+			match inner.fields.get(&field_name) {
+				Some(field_def_ref) => {
+					if !defined_fields.insert(field_name.clone()) {
+						return Err( StructDefErr::FieldAlreadySet { name_in_code: field.field_name().clone() }.into() );
+					}
+					let expr_data_type: DataType = field.value_expr().check_and_calc_data_type(check_context)?;
+					if field_def_ref.data_type != expr_data_type {
+						return Err( StructDefErr::FieldSetTypeErr { 
+							name_in_code: field.field_name().clone(),
+							declared_type: field_def_ref.data_type.clone(),
+							set_type: expr_data_type,
+						}.into() );
+					}
+				},
+				None => return Err( StructDefErr::FieldDoesNotExist { name_in_code: field.field_name().clone() }.into() ),
+			}
+		}
+		
+		if defined_fields.len() != fields.len() {
+			return Err( StructDefErr::NotAllFieldsSet { name_in_code: struct_name_in_code.clone() }.into() );
+		}
+		
+		Ok(())
 	}
 }
 
@@ -86,7 +121,11 @@ impl StructDefInner {
 	pub fn name(&self) -> &NameToken {
 		&self.name
 	}
-		
+	
+	pub fn field_defs(&self) -> Values<'_, String, StructFieldDef> {
+		self.fields.values()
+	}
+	
 	pub fn add_builtin_func_def(&mut self, func_def: BuiltinFuncDef) {
 		if let Some(_) = self.builtin_funcs.iter().find(|fd| fd.name() == func_def.name()) {
 			panic!("Builtin member function '{}' is already defined", func_def.name());
@@ -118,10 +157,19 @@ impl StructFieldDef {
 			data_type,
 		}
 	}
+	
+	pub fn name(&self) -> &NameToken {
+		&self.name
+	}
+
+	pub fn data_type(&self) -> &DataType {
+		&self.data_type
+	}
 }
 
 //------------------ StructDefErr ---------------------
 
+// TODO: refactor fields' names
 #[derive(Debug, PartialEq, Eq)]
 pub enum StructDefErr {
 	StructDefNotInRootContext {
@@ -131,6 +179,20 @@ pub enum StructDefErr {
 		defined_name: NameToken,
 	},
 	FieldAlreadyDefined {
+		name_in_code: NameToken,
+	},
+	FieldAlreadySet {
+		name_in_code: NameToken,
+	},
+	FieldSetTypeErr {
+		name_in_code: NameToken,
+		declared_type: DataType,
+		set_type: DataType,
+	},
+	NotAllFieldsSet {
+		name_in_code: NameToken,
+	},
+	FieldDoesNotExist {
 		name_in_code: NameToken,
 	},
 	BuiltinMemberFuncIsNotDefined {
@@ -150,6 +212,15 @@ impl std::fmt::Display for StructDefErr {
 				write!(f, "Struct '{}' is alresdy defined", defined_name.value()),
 			StructDefErr::FieldAlreadyDefined { name_in_code } => 
 				write!(f, "Member field '{}' is already defined", &name_in_code),
+			StructDefErr::FieldAlreadySet { name_in_code } => 
+				write!(f, "Member field '{}' is already set", &name_in_code),
+			StructDefErr::FieldSetTypeErr { name_in_code, declared_type, set_type } => 
+				write!(f, "Member field '{}' has '{}' type buts its expression is '{}'", 
+					&name_in_code, declared_type, set_type),
+			StructDefErr::NotAllFieldsSet { name_in_code } => 
+				write!(f, "Not all fields of struct '{}' are set", &name_in_code),
+			StructDefErr::FieldDoesNotExist { name_in_code } => 
+				write!(f, "Member field '{}' is not declared", &name_in_code),
 			StructDefErr::BuiltinMemberFuncIsNotDefined { name } => 
 				write!(f, "Builtin member function '{}' is not defined", &name),
 			StructDefErr::StructIsAlreadyDefined { name } => 

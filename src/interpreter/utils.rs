@@ -19,10 +19,10 @@ impl NameToken {
 				name,
 				pos,
 			} ),
-			found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound {
+			found @ _ => return Err(TokenErr::ExpectedButFound {
 							expected: vec![TokenContent::Name ("<name>".to_string())], 
 							found,
-						} ) ),
+						}.into()),
 		}
 	}
 	

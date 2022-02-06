@@ -241,10 +241,10 @@ impl ExprOperator {
 		
 		if let DotMemberAccess = self {
 			let rhs: Symbol = calc_stack.pop()
-				.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 0, 2)) )?;
+				.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 0, 2)))?;
 				
 			let lhs: Symbol = calc_stack.pop()
-				.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 1, 2)) )?;
+				.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 1, 2)))?;
 				
 			match (lhs.kind(), rhs.kind()) {
 				(SymbolKind::Operand (Operand::Value (ref value)), SymbolKind::Operand (Operand::FuncCall {
@@ -290,12 +290,12 @@ impl ExprOperator {
 			match OP_ATTRS[self as usize].arity {
 				OpArity::Binary => {
 					let rhs: DataType = calc_stack.pop()
-						.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 0, 2)) )?
+						.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 0, 2)))?
 						.unwrap_operand()
 						.check_and_calc_data_type_in_place(check_context)?;
 						
 					let lhs: DataType = calc_stack.pop()
-						.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 1, 2)) )?
+						.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 1, 2)))?
 						.unwrap_operand()
 						.check_and_calc_data_type_in_place(check_context)?;
 					
@@ -319,14 +319,14 @@ impl ExprOperator {
 					
 					match result {
 						Ok(dt) => Ok(dt),
-						Err(()) => Err( InterpErr::from(ExprErr::wrong_operands_type_for_operator(
-							self, operator_pos, &[&lhs, &rhs])) ),
+						Err(()) => Err(ExprErr::wrong_operands_type_for_operator(
+							self, operator_pos, &[&lhs, &rhs]).into()),
 					}
 				},
 				OpArity::Unary => {
 					let op: DataType = calc_stack
 						.pop()
-						.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 0, 1)) )?
+						.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 0, 1)))?
 						.unwrap_operand()
 						.check_and_calc_data_type_in_place(check_context)?;
 					
@@ -339,8 +339,8 @@ impl ExprOperator {
 					
 					match result {
 						Ok(dt) => Ok(dt),
-						Err(()) => Err( InterpErr::from(ExprErr::wrong_operands_type_for_operator(
-							self, operator_pos, &[&op])) ),
+						Err(()) => Err(ExprErr::wrong_operands_type_for_operator(
+							self, operator_pos, &[&op]).into()),
 					}
 				},
 			}

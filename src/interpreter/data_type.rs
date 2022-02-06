@@ -3,6 +3,7 @@ use super::struct_def::{StructDef, StructDefErr};
 use super::utils::NameToken;
 use super::context::Context;
 use super::builtin_func::BuiltinFuncDef;
+use std::collections::HashMap;
 
 //--------------------------- DataType -------------------------
 
@@ -25,7 +26,19 @@ impl DataType {
 	pub fn default_value(&self) -> Value {
 		match self {
 			DataType::Primitive (dt) => dt.default_value(),
-			DataType::Complex (dt) => todo!(), // TODO: do not use this function for check purposes
+			DataType::Complex (sd) => {
+				let mut fields = HashMap::<String, Value>::new();
+				let sd_inner = sd.inner();
+				for field_def in sd_inner.field_defs() {
+					fields.insert(
+						field_def.name().value().to_string(),
+						field_def.data_type().default_value());
+				}
+				Value::Struct {
+					struct_def: sd.clone(),
+					fields, 
+				}
+			}, // TODO: do not use this function for check purposes
 		}
 	}
 	
@@ -92,7 +105,10 @@ impl std::fmt::Display for Primitive {
 pub enum DataTypeErr {
 	NotDefined {
 		name: NameToken,
-	}
+	},
+	PrimitiveTypeInitializedAsComplex {
+		type_name_in_code: NameToken,
+	},
 }
 
 impl std::fmt::Display for DataTypeErr {
@@ -100,6 +116,8 @@ impl std::fmt::Display for DataTypeErr {
 		match self {
 			DataTypeErr::NotDefined { name } => 
 				write!(f, "DataType '{}' is not defined", name.value()),
+			DataTypeErr::PrimitiveTypeInitializedAsComplex { type_name_in_code } => 
+				write!(f, "DataType '{}' value is primitive, but declared as struct", type_name_in_code.value()),
 		}
 	}
 }

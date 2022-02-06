@@ -13,6 +13,8 @@ use symbol::{Symbol, SymbolKind, Operand};
 use expr_operator::{ExprOperator, OpAssot};
 use std::rc::Rc;
 
+pub use symbol::StructLiteralField;
+
 #[derive(Debug)]
 pub struct Expr {
 	expr_stack: Rc<Vec<Symbol>>,
@@ -21,8 +23,7 @@ pub struct Expr {
 
 impl Expr {	
 	pub fn new(tokens_iter: &mut TokensIter, context_kind: ExprContextKind) -> Result<Self, InterpErr> {
-		let context = ExprContext::new(context_kind);
-		let expr_stack = Self::create_stack(tokens_iter, context)?;
+		let expr_stack = Self::create_stack(tokens_iter, context_kind)?;
 		
 		let mut pos_begin: CharPos = expr_stack[0].pos().begin();
 		let mut pos_end: CharPos = expr_stack[0].pos().end();
@@ -46,6 +47,7 @@ impl Expr {
 				SymbolKind::Operand (_) => calc_stack.push(sym.clone()), // TODO: avoid cloning symbols
 				
 				SymbolKind::LeftBracket => unreachable!(),
+				SymbolKind::RightBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => {
 					let value: Value = op.apply(&mut calc_stack, context);
@@ -76,6 +78,7 @@ impl Expr {
 				SymbolKind::Operand (_) => type_calc_stack.push(sym.clone()), // TODO: avoid cloning symbols
 				
 				SymbolKind::LeftBracket => unreachable!(),
+				SymbolKind::RightBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => {
 					let dt: DataType = op.get_result_data_type(&mut type_calc_stack, check_context, sym.pos())?;
@@ -101,266 +104,135 @@ impl Expr {
 		self.pos
 	}
 	
-	fn create_stack(tokens_iter: &mut TokensIter, mut context: ExprContext) -> Result<Vec<Symbol>, InterpErr> {
+	fn create_stack(tokens_iter: &mut TokensIter, context_kind: ExprContextKind) -> Result<Vec<Symbol>, InterpErr> {
+		use std::cmp::Ordering;
+		
+		let mut context = ExprContext::new(context_kind);
 		let mut tmp_stack = Vec::<Symbol>::new();
 		let mut expr_stack = Vec::<Symbol>::new();
 		let mut prev_is_operand = false;
 		
-		loop {
-			let next_token_ref = tokens_iter.peek_or_end_reached_err()?;
-			
-			if context.check_expr_end(next_token_ref)? {		
-				if expr_stack.len() == 0 {
-					let found_token = tokens_iter.next_or_end_reached_err()?;
-					return Err( InterpErr::from(ExprErr::ExpectedExprButFound(found_token.pos())) );
-				}
-				break;
-			}
-			
-			let token = tokens_iter.next().unwrap()?;
-			
-			let Token { pos, content } = token;
-			
-			match content {	
-				TokenContent::Number (num) => {
+		'outer: while let Some(symbol) = Symbol::next_from(tokens_iter, &mut context, 
+			prev_is_operand)? 
+		{
+			match symbol.kind() {
+				SymbolKind::Operand(_) => {
 					if prev_is_operand {
-						return Err(unexpected(pos));
+						return Err(unexpected(symbol.pos()));
 					}
-					
-					let sym = Symbol::new_number(num, pos);
-					expr_stack.push(sym);
-					
+					expr_stack.push(symbol);
 					prev_is_operand = true;
 				},
 				
-				TokenContent::BuiltinName (name) => {
-					if prev_is_operand {
-						return Err(unexpected(pos));
-					}
-					
-					let sym = Self::parse_func_call_or_name(FuncKind::Builtin, &mut prev_is_operand, tokens_iter, name, pos)?;
-					expr_stack.push(sym);
-				},
-				
-				TokenContent::Name (name) => {
-					if prev_is_operand {
-						return Err(unexpected(pos));
-					}
-					
-					let sym = Self::parse_func_call_or_name(FuncKind::UserDefined, &mut prev_is_operand, tokens_iter, name, pos)?;
-					expr_stack.push(sym);
-				},
-				
-				TokenContent::StringLiteral (s) => {
-					if prev_is_operand {
-						return Err(unexpected(pos));
-					}
-					
-					let sym = Symbol::new_string_literal(s, pos);
-					expr_stack.push(sym);
-					
-					prev_is_operand = true;					
-				},
-				
-				TokenContent::Operator (ref tok_op) => {
-					match tok_op {
-						Operator::Plus | Operator::Minus => {
-							if prev_is_operand {
-								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, pos, content)?;
-							} else {
-								tmp_stack.push(Symbol::new_un_pref_op(content, pos));
-							}
-						},
-						Operator::Mul 
-							| Operator::Div 
-							| Operator::Pow 
-							| Operator::Greater 
-							| Operator::GreaterEqual
-							| Operator::Less
-							| Operator::LessEqual
-							| Operator::Not
-							| Operator::Equal
-							| Operator::NotEqual
-							| Operator::LogicalAnd
-							| Operator::LogicalOr
-							| Operator::LogicalXor
-							=> {
-								Self::add_bin_op(&mut expr_stack, &mut tmp_stack, pos, content)?;
-						},
-						Operator::Assign => return Err(unexpected(pos)),
-					};
-					
+				SymbolKind::LeftBracket => {
+					tmp_stack.push(symbol);
 					prev_is_operand = false;
 				},
 				
-				TokenContent::Bracket (tok_br) => {					
-					prev_is_operand = match tok_br {
-						Bracket::Right => true,
-						Bracket::Left => false,
-						Bracket::LeftCurly | Bracket::RightCurly => return Err(unexpected(pos)),
-					};
-					
-					Self::add_bracket(&mut expr_stack, &mut tmp_stack, pos, tok_br)?;
-				},
-				
-				TokenContent::Keyword (kw) => match kw {
-					Keyword::Var | 
-						Keyword::Struct | 
-						Keyword::If | 
-						Keyword::Else | 
-						Keyword::While | 
-						Keyword::F | 
-						Keyword::Return => return Err(unexpected(pos)),
-					Keyword::True | Keyword::False => {
-						if prev_is_operand {
-							return Err(unexpected(pos));
+				SymbolKind::RightBracket => {
+					while let Some(top_sym) = tmp_stack.pop() {
+						match top_sym.kind() {
+							SymbolKind::Operand (..) => unreachable!(),
+							SymbolKind::LeftBracket => {
+								prev_is_operand = true;
+								continue 'outer;
+							},
+							SymbolKind::RightBracket => unreachable!(),
+							SymbolKind::ExprOperator (..) => expr_stack.push(top_sym),
 						}
-						
-						let sym = Symbol::new_bool_literal(kw, pos);
-						expr_stack.push(sym);
-						prev_is_operand = true;
-					},
+					}
+					
+					return Err(ExprErr::UnpairedBracket (symbol.pos()).into());
 				},
 				
-				TokenContent::StatementOp (ref st_op) => match st_op {
-					StatementOp::Dot => {
-						Self::add_bin_op(&mut expr_stack, &mut tmp_stack, pos, content)?;
-						prev_is_operand = false;
-					},
-					_ => return Err(unexpected(pos)),
+				SymbolKind::ExprOperator (ref optr) => {
+					match optr {
+						ExprOperator::UnPlus
+						| ExprOperator::UnMinus
+						| ExprOperator::Not 
+						=> {
+							prev_is_operand = false;
+							tmp_stack.push(symbol);
+						},
+						
+						ExprOperator::LogicalOr
+						| ExprOperator::LogicalAnd
+						| ExprOperator::LogicalXor
+						
+						| ExprOperator::Equal
+						| ExprOperator::NotEqual
+						
+						| ExprOperator::Less
+						| ExprOperator::LessEqual
+						| ExprOperator::Greater
+						| ExprOperator::GreaterEqual
+						
+						| ExprOperator::BinPlus
+						| ExprOperator::BinMinus
+						
+						| ExprOperator::Div
+						| ExprOperator::Mul
+						
+						| ExprOperator::Pow
+						
+						| ExprOperator::DotMemberAccess
+						=> {
+							while let Some(top_tok_sym) = tmp_stack.last() {
+								match top_tok_sym.kind() {
+									SymbolKind::Operand (..) => unreachable!(),
+									
+									SymbolKind::LeftBracket => break,
+									
+									SymbolKind::RightBracket => unreachable!(),
+									
+									SymbolKind::ExprOperator ( top_ref ) => {
+										let cmp_result: Ordering = top_ref.rank().cmp(&optr.rank());
+										
+										match cmp_result {
+											Ordering::Greater => {
+												let popped: Symbol = tmp_stack.pop().unwrap();
+												expr_stack.push(popped);
+											},
+											
+											Ordering::Equal => match (top_ref.assot(), optr.assot()) {
+												(OpAssot::Right, OpAssot::Right) => break,
+												
+												_ => {
+													let popped: Symbol = tmp_stack.pop().unwrap();
+													expr_stack.push(popped);
+												},
+											},
+											
+											Ordering::Less => break,
+										}
+									}
+								}
+							}
+							
+							tmp_stack.push(symbol);
+							
+							prev_is_operand = false;
+						},
+					}
 				},
 			}
 		}
-		
+				
 		while let Some(top_sym) = tmp_stack.pop() {
 			match top_sym.kind() {
 				SymbolKind::Operand (..) => expr_stack.push(top_sym),
 				SymbolKind::LeftBracket => return Err( unpaired_bracket(top_sym.pos()) ),
+				SymbolKind::RightBracket => unreachable!(),
 				SymbolKind::ExprOperator (..) => expr_stack.push(top_sym),
 			}
 		}
+		
+		if expr_stack.len() == 0 {
+			let found_token = tokens_iter.next_or_end_reached_err()?;
+			return Err(ExprErr::ExpectedExprButFound(found_token.pos()).into());
+		}
 				
 		Ok(expr_stack)
-	}
-	
-	fn add_bin_op(
-		expr_stack: &mut Vec<Symbol>, 
-		tmp_stack: &mut Vec<Symbol>, 
-		pos: CodePos, tc: TokenContent
-		) -> Result<(), InterpErr> 
-	{
-		let next_kind = ExprOperator::new_bin(tc);
-		
-		use std::cmp::Ordering;
-		
-		loop {
-			let top_tok_sym: Symbol = 
-				match tmp_stack.last() {
-					Some(top_ref) => 
-						match top_ref.kind() {
-							SymbolKind::Operand (..) => return Err(unexpected(tmp_stack.pop().unwrap().pos())),
-								
-							SymbolKind::LeftBracket => break,
-							
-							SymbolKind::ExprOperator ( top_ref ) => {
-								match next_kind.rank().cmp(&top_ref.rank()) {
-									Ordering::Less => tmp_stack.pop().unwrap(),
-									Ordering::Equal => match (top_ref.assot(), next_kind.assot()) {
-										(OpAssot::Right, OpAssot::Right) => break,
-										_ => tmp_stack.pop().unwrap(),
-									},
-									Ordering::Greater => break,
-								}
-							},
-						},
-						
-					None => break,
-				};
-			
-			expr_stack.push(top_tok_sym);
-		}
-			
-		tmp_stack.push(Symbol { kind: SymbolKind::ExprOperator (next_kind), pos });
-		
-		Ok(())
-	}
-	
-	fn add_bracket(
-		expr_stack: &mut Vec<Symbol>, 
-		tmp_stack: &mut Vec<Symbol>, 
-		pos: CodePos, br: Bracket
-	) -> Result<(), InterpErr> 
-	{
-		match br {
-			Bracket::Left => {
-				tmp_stack.push(Symbol::new_left_bracket(pos));
-			},
-			Bracket::Right => {
-				'out: loop {
-					match tmp_stack.pop() {
-						Some( sym ) => match sym.kind() {
-								SymbolKind::LeftBracket => break 'out,
-								SymbolKind::Operand (..) | SymbolKind::ExprOperator (..) => expr_stack.push(sym),
-							},
-						None => return Err( InterpErr::from( ExprErr::UnpairedBracket (pos) ) ),
-					};
-				};
-			},
-			Bracket::LeftCurly => return Err(unexpected(pos)),
-			Bracket::RightCurly => return Err(unexpected(pos)),
-		};
-		
-		Ok(())
-	}
-
-	fn parse_func_call_or_name(kind: FuncKind, prev_is_operand: &mut bool, tokens_iter: &mut TokensIter, name: String, pos: CodePos) -> Result<Symbol, InterpErr> {
-		if *prev_is_operand {
-			return Err(unexpected(pos));
-		}
-		*prev_is_operand = true;
-		
-		match tokens_iter.peek_or_end_reached_err()?.content() {
-			TokenContent::Bracket (Bracket::Left) => {
-				tokens_iter.next_or_end_reached_err().unwrap();
-				
-				let mut arg_exprs = Vec::<Expr>::new();
-				
-				if let TokenContent::Bracket (Bracket::Right) = tokens_iter.peek_or_end_reached_err()?.content() {
-					tokens_iter.next_or_end_reached_err().unwrap();
-				} else {
-					loop {			
-						arg_exprs.push(Expr::new(
-							tokens_iter,
-							ExprContextKind::FunctionArg)?);
-							
-						match tokens_iter.next_or_end_reached_err()? {
-							Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
-							
-							Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
-							
-							found @ _ => 
-								return Err( InterpErr::from( TokenErr::ExpectedButFound { 
-									expected: vec![
-										TokenContent::StatementOp(StatementOp::Comma),
-										TokenContent::Bracket ( Bracket::Right ),
-									], 
-									found
-								} ) ),
-						}
-					}
-				}
-				
-				let func_name = NameToken::new_with_pos(name, pos);
-				
-				let sym = Symbol::new_func_call(kind, func_name, arg_exprs);
-				Ok(sym)
-			},
-			_ => {
-				let name = NameToken::new_with_pos(name, pos);
-				let sym = Symbol::new_name(name);
-				Ok(sym)
-			},
-		}
 	}
 }
 
@@ -389,6 +261,7 @@ pub enum ExprContextKind {
 	ToReturn,
 	FunctionArg,
 	IfCondition,
+	StructField,
 }
 
 pub struct ExprContext {
@@ -406,6 +279,8 @@ impl ExprContext {
 	
 	fn check_expr_end(&mut self, tok: &Token) -> Result<bool, InterpErr> {
 		match tok.content() {
+			// iterator doesn't give comment tokens by default
+			TokenContent::Comment (_) => unreachable!(),
 			TokenContent::Number (..) | 
 				TokenContent::Operator (..) | 
 				TokenContent::Name (..) |
@@ -416,22 +291,26 @@ impl ExprContext {
 				=> self.check_brackets(tok),
 			TokenContent::StatementOp (st_op) => match st_op {
 				StatementOp::Dot => Ok(false),
-				StatementOp::Colon | StatementOp::Comment (_) | StatementOp::ThinArrow => Err(unexpected(tok.pos())),
+				StatementOp::Colon | StatementOp::ThinArrow => Err(unexpected(tok.pos())),
 				StatementOp::Comma => match self.kind {
-					ExprContextKind::ValueToAssign | ExprContextKind::IfCondition | ExprContextKind::ToReturn => Err(unexpected(tok.pos())),
+					ExprContextKind::ValueToAssign => Err(unexpected(tok.pos())),
+					ExprContextKind::IfCondition => Err(unexpected(tok.pos())),
+					ExprContextKind::ToReturn => Err(unexpected(tok.pos())),
 					ExprContextKind::FunctionArg => Ok(true),
+					ExprContextKind::StructField => Ok(true),
 				},
 				StatementOp::Semicolon => Ok(true),
 			},
 			TokenContent::Keyword (kw) => match kw {
 				Keyword::Var | 
 					Keyword::If | 
-					Keyword::Struct | 
 					Keyword::Else | 
 					Keyword::While | 
 					Keyword::F | 
 					Keyword::Return => Err(unexpected(tok.pos())),
-				Keyword::True | Keyword::False => Ok(false),
+				Keyword::Struct => Ok(false),
+				Keyword::True => Ok(false),
+				Keyword::False => Ok(false),
 			},
 		}
 	}
@@ -449,16 +328,28 @@ impl ExprContext {
 						Ok(false)
 					} else {
 						match self.kind {
-							ExprContextKind::ValueToAssign | ExprContextKind::IfCondition | ExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
+							ExprContextKind::ValueToAssign => Err( unpaired_bracket(br_tok.pos()) ),
+							ExprContextKind::IfCondition => Ok(true),
+							ExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
+							ExprContextKind::StructField => Err( unpaired_bracket(br_tok.pos()) ),
 							ExprContextKind::FunctionArg => Ok(true),
 						}
 					}
 				},
 				Bracket::LeftCurly => match self.kind {
-					ExprContextKind::IfCondition => Ok(true),
-					ExprContextKind::ValueToAssign | ExprContextKind::FunctionArg | ExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
+					ExprContextKind::IfCondition => Ok(false),
+					ExprContextKind::ValueToAssign => Ok(false),
+					ExprContextKind::FunctionArg => Ok(false),
+					ExprContextKind::ToReturn => Ok(false),
+					ExprContextKind::StructField => Ok(true),
 				},
-				_ => Err( unexpected(br_tok.pos()) ),
+				Bracket::RightCurly => match self.kind {
+					ExprContextKind::IfCondition => Ok(false),
+					ExprContextKind::ValueToAssign => Ok(false),
+					ExprContextKind::FunctionArg => Ok(false),
+					ExprContextKind::ToReturn => Ok(false),
+					ExprContextKind::StructField => Ok(true),
+				},
 			},
 			_ => unreachable!(),
 		}
@@ -963,7 +854,7 @@ mod tests {
 		
 		let expr_stack: Vec<Symbol> = Expr::create_stack(
 			&mut tokens_iter, 
-			ExprContext::new(ExprContextKind::ValueToAssign)).unwrap();
+			ExprContextKind::ValueToAssign).unwrap();
 		
 		let syms_expr_stack: Vec<SymbolKind> = expr_stack.iter().map(|Symbol { kind, .. }| kind.clone()).collect();
 		
@@ -1020,7 +911,7 @@ mod tests {
 		
 		let expr_stack: Vec<Symbol> = Expr::create_stack(
 			&mut tokens_iter, 
-			ExprContext::new(ExprContextKind::ValueToAssign)).unwrap();
+			ExprContextKind::ValueToAssign).unwrap();
 		
 		let syms_expr_stack: Vec<SymbolKind> = expr_stack.iter().map(|Symbol { kind, .. }| kind.clone()).collect();
 		

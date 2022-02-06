@@ -370,6 +370,26 @@ impl From<StructDefErr> for InterpErr {
 				descr,
 				inner: InnerErr::StructDef (err),
 			},
+			StructDefErr::FieldAlreadySet { ref name_in_code } => InterpErr {
+				pos: name_in_code.pos(),
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
+			StructDefErr::FieldSetTypeErr { ref name_in_code, .. } => InterpErr {
+				pos: name_in_code.pos(),
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
+			StructDefErr::NotAllFieldsSet { ref name_in_code } => InterpErr {
+				pos: name_in_code.pos(),
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
+			StructDefErr::FieldDoesNotExist { ref name_in_code } => InterpErr {
+				pos: name_in_code.pos(),
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
 			StructDefErr::BuiltinMemberFuncIsNotDefined { ref name } => InterpErr {
 				pos: name.pos(),
 				descr,
@@ -391,6 +411,11 @@ impl From<DataTypeErr> for InterpErr {
 		match err {
 			DataTypeErr::NotDefined { ref name } => InterpErr {
 				pos: name.pos(),
+				descr,
+				inner: InnerErr::DataType (err),
+			},
+			DataTypeErr::PrimitiveTypeInitializedAsComplex { ref type_name_in_code } => InterpErr {
+				pos: type_name_in_code.pos(),
 				descr,
 				inner: InnerErr::DataType (err),
 			},
@@ -469,7 +494,7 @@ mod tests {
 	fn if_statement() {
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
-		if 2 == 2 { 
+		if (2 == 2) { 
 			@print("2 == 2"); 
 			@print("Cool!"); 
 		} 
@@ -481,7 +506,7 @@ mod tests {
 		
 		let mut int = Interpreter::new();
 		match int.check_and_run(r#"
-		if 4 { 
+		if (4) { 
 			@print("2 == 2"); 
 			@print("Cool!"); 
 		} 
@@ -497,12 +522,12 @@ mod tests {
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
 f add2(a: f32, b: f32) -> f32 {
-	if a < b { // 1.1
+	if (a < b) { // 1.1
 		a = 4;
 		return a;
 	} else {
 		b = 4;
-		if a < b {
+		if (a < b) {
 			return 4;
 		} else {
 			return 3;
@@ -517,12 +542,12 @@ f add2(a: f32, b: f32) -> f32 {
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
 f add2(a: f32, b: f32) -> f32 {
-	if a < b { // 1.1
+	if (a < b) { // 1.1
 		a = 4;
 		// Not returning
 	} else {
 		b = 4;
-		if a < b {
+		if (a < b) {
 			return 4;
 		} else {
 			return 3;
@@ -537,12 +562,12 @@ f add2(a: f32, b: f32) -> f32 {
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
 f add2(a: f32, b: f32) -> f32 {
-	if a < b { // 1.1
+	if (a < b) { // 1.1
 		a = 4;
 		return a;
 	} else {
 		b = 4;
-		if a < b {
+		if (a < b) {
 			a = 4; 
 			// Not returning
 		} else {
@@ -558,12 +583,12 @@ f add2(a: f32, b: f32) -> f32 {
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
 f add2(a: f32, b: f32) -> f32 {
-	if a < b { // 1.1
+	if (a < b) { // 1.1
 		a = 4;
 		return a;
 	} else {
 		b = 4;
-		if a < b {
+		if (a < b) {
 			a = 4; 
 			return 3;
 		} else {
@@ -581,13 +606,13 @@ f add2(a: f32, b: f32) -> f32 {
 		match int.check_and_run(r#"
 f add2(a: f32, b: f32) -> f32 {
 	return a;
-	if a < b { // 1.1
+	if (a < b) { // 1.1
 		a = 4;
 		// Not returning
 	} else {
 		b = 4;
 		// Not returning
-		if a < b {
+		if (a < b) {
 			a = 4; 
 			// Not returning
 		} else {

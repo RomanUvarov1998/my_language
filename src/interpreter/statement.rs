@@ -63,13 +63,13 @@ impl StatementsIter {
 						data_type_name, 
 					},
 				} ),
-			found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound { 
+			found @ _ => return Err(TokenErr::ExpectedButFound { 
 							expected: vec![
 								TokenContent::Operator (Operator::Assign),
 								TokenContent::StatementOp ( StatementOp::Semicolon ),
 							], 
 							found
-						} ) ),
+						}.into()),
 		};
 		
 		let value_expr = Expr::new(
@@ -96,9 +96,13 @@ impl StatementsIter {
 		};
 		
 		loop {
+			self.tokens_iter.next_expect_left_bracket()?;
+			
 			let condition_expr = Expr::new(
 				&mut self.tokens_iter,
 				ExprContextKind::IfCondition)?;
+			
+			self.tokens_iter.next_expect_right_bracket()?;
 			
 			let mut statements = Vec::<Statement>::new();
 			self.parse_body(&mut statements)?;
@@ -143,9 +147,13 @@ impl StatementsIter {
 	}
 	
 	fn parse_while_statement(&mut self, begin_pos: CharPos) -> Result<Statement, InterpErr> {
+		self.tokens_iter.next_expect_left_bracket()?;
+		
 		let condition_expr = Expr::new(
 			&mut self.tokens_iter,
 			ExprContextKind::IfCondition)?;
+			
+		self.tokens_iter.next_expect_right_bracket()?;
 		
 		let mut statements = Vec::<Statement>::new();
 		self.parse_body(&mut statements)?;
@@ -165,7 +173,7 @@ impl StatementsIter {
 	
 	fn parse_body(&mut self, body: &mut Vec<Statement>) -> Result<(), InterpErr> {
 			self.tokens_iter.next_expect_left_curly_bracket()?;
-			
+						
 			loop {
 				match self.tokens_iter.peek_or_end_reached_err()? {
 					Token { content: TokenContent::Bracket (Bracket::RightCurly), .. } => {
@@ -174,7 +182,7 @@ impl StatementsIter {
 					},
 					_ => match self.parse_next_statement() {
 						Some(statement_result) => body.push(statement_result?),
-						None => break Err( InterpErr::from( StatementErr::UnfinishedBody (self.tokens_iter.pos()) ) ),
+						None => break Err(StatementErr::UnfinishedBody (self.tokens_iter.pos()).into()),
 					},
 				}
 			}
@@ -214,13 +222,13 @@ impl StatementsIter {
 					Token { content: TokenContent::Bracket ( Bracket::Right ), .. } => break,
 					
 					found @ _ => 
-						return Err( InterpErr::from( TokenErr::ExpectedButFound { 
+						return Err(TokenErr::ExpectedButFound { 
 							expected: vec![
 								TokenContent::StatementOp(StatementOp::Comma),
 								TokenContent::Bracket ( Bracket::Right ),
 							], 
 							found
-						} ) ),
+						}.into()),
 				}
 			}
 		}
@@ -263,13 +271,13 @@ impl StatementsIter {
 				match self.tokens_iter.next_or_end_reached_err()? {
 					Token { content: TokenContent::StatementOp (StatementOp::Comma), .. } => continue,
 					Token { content: TokenContent::Bracket (Bracket::Right), .. } => break,
-					found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound {
+					found @ _ => return Err(TokenErr::ExpectedButFound {
 						expected: vec![
 							TokenContent::StatementOp (StatementOp::Comma),
 							TokenContent::Bracket (Bracket::Right),
 						],
 						found,
-					} ) ),
+					}.into()),
 				}
 			}
 		}
@@ -283,13 +291,13 @@ impl StatementsIter {
 			Token { content: TokenContent::Bracket (Bracket::LeftCurly), .. } => { // function doesn't return value
 				None
 			},
-			found @ _ => return Err( InterpErr::from(TokenErr::ExpectedButFound {
+			found @ _ => return Err(TokenErr::ExpectedButFound {
 				expected: vec![
 					TokenContent::StatementOp (StatementOp::ThinArrow),
 					TokenContent::Bracket (Bracket::LeftCurly),
 				], 
 				found: found.clone(),
-			} ) ),
+			}.into()),
 		};
 		
 		let mut statements = Vec::<Statement>::new();
@@ -352,22 +360,22 @@ impl StatementsIter {
 					match self.tokens_iter.next_or_end_reached_err()? {
 						Token { content: TokenContent::StatementOp (StatementOp::Comma), .. } => continue,
 						Token { content: TokenContent::Bracket (Bracket::RightCurly), pos } => break pos.end(),
-						found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound {
+						found @ _ => return Err(TokenErr::ExpectedButFound {
 							expected: vec![
 								TokenContent::StatementOp (StatementOp::Comma),
 								TokenContent::Bracket (Bracket::RightCurly),
 							],
 							found,
-						} ) ),
+						}.into()),
 					}
 				},
-				found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound {
+				found @ _ => return Err(TokenErr::ExpectedButFound {
 					expected: vec![
 						TokenContent::Bracket (Bracket::RightCurly),
 						TokenContent::Name (String::from("<name>")),
 					],
 					found,
-				} ) ),
+				}.into()),
 			}
 		};
 		
@@ -383,14 +391,14 @@ impl StatementsIter {
 	fn parse_next_statement(&mut self) -> Option<Result<Statement, InterpErr>> {
 		let first: Token = match self.tokens_iter.next()? {
 			Ok(tok) => tok,
-			Err(err) => return Some(Err(InterpErr::from(err))),
+			Err(err) => return Some(Err(err.into())),
 		};
 		
 		let begin_pos: CharPos = first.pos().begin();
 		
 		let statement_result: Result<Statement, InterpErr> = match first {
-			Token { content: TokenContent::StatementOp ( StatementOp::Comment (content) ), pos } => 
-				Ok( Statement { kind: StatementKind::Comment (content), pos } ),
+			// iterator doesn't give comment tokens by default
+			Token { content: TokenContent::Comment (content), pos } => unreachable!(),
 				
 			Token { content: TokenContent::Keyword ( Keyword::Var ), .. } => 
 				self.parse_varable_declaration(begin_pos),	
@@ -417,13 +425,13 @@ impl StatementsIter {
 				self.parse_variable_set_or_func_call(NameToken::from_or_err(first).unwrap(), true),
 				
 			found @ _ => 
-				Err( InterpErr::from( TokenErr::ExpectedButFound { 
+				Err(TokenErr::ExpectedButFound { 
 					expected: vec![
 						TokenContent::Keyword ( Keyword::Var ),
 						TokenContent::Name( String::from("<name>") ),
 					], 
 					found
-				} ) ),
+				}.into()),
 		};
 		
 		Some(statement_result)
@@ -448,7 +456,6 @@ pub struct Statement {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum StatementKind {
-	Comment (String),
 	VariableDeclare { var_name: NameToken, data_type_name: NameToken },
 	VariableDeclareSet { var_name: NameToken, data_type_name: NameToken, value_expr: Expr },
 	VariableSet { var_name: NameToken, value_expr: Expr },
@@ -485,9 +492,7 @@ impl Statement {
 		check_context: &mut Context
 	) -> Result<(), InterpErr> 
 	{
-		match &self.kind {
-			StatementKind::Comment (_) => {},
-				
+		match &self.kind {				
 			StatementKind::VariableDeclare { var_name, data_type_name } => {
 				let data_type: DataType = check_context.find_type_by_name(data_type_name)?;
 				check_context.add_variable(var_name.clone(), data_type,  None)?;
@@ -500,11 +505,11 @@ impl Statement {
 				
 				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_context)?;
 				if data_type.clone() != expr_data_type {
-					return Err(InterpErr::from(VarErr::WrongType { 
+					return Err(VarErr::WrongType { 
 						value_data_type: expr_data_type, 
 						variable_type: data_type.clone(),
 						var_name: var_name.clone(),
-					}));
+					}.into());
 				}
 			},
 			
@@ -516,11 +521,11 @@ impl Statement {
 				let variable_type: &DataType = var_def.get_type();
 				
 				if variable_type.ne(&expr_data_type) {
-					return Err(InterpErr::from(VarErr::WrongType { 
+					return Err(VarErr::WrongType { 
 						value_data_type: expr_data_type, 
 						variable_type: variable_type.clone(),
 						var_name: var_name.clone(),
-					}));
+					}.into());
 				}
 			},
 			
@@ -613,9 +618,7 @@ impl Statement {
 	}
 	
 	pub fn run(&self, context: &mut Context) -> Option<Value> {
-		match &self.kind {
-			StatementKind::Comment (_) => {},
-			
+		match &self.kind {			
 			StatementKind::VariableDeclare { var_name, data_type_name } => {
 				let data_type: DataType = context.find_type_by_name(data_type_name).unwrap();
 				context.add_variable(var_name.clone(), data_type, None).unwrap();
@@ -743,9 +746,7 @@ impl Statement {
 impl std::fmt::Display for Statement {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "[{}, {}] ", self.pos().begin(), self.pos().end())?;
-		match &self.kind {
-			StatementKind::Comment (comment) => writeln!(f, "//{}", comment),
-				
+		match &self.kind {				
 			StatementKind::VariableDeclare { var_name, data_type_name } => writeln!(f, "declare {}: {}", var_name, data_type_name),
 					
 			StatementKind::VariableDeclareSet { var_name, data_type_name, .. } => writeln!(f, "declare {}: {} = expr", var_name, data_type_name),
@@ -844,9 +845,9 @@ impl ConditionalBody {
 	pub fn check(&self, check_context: &mut Context) -> Result<(), InterpErr> {
 		match self.condition_expr.check_and_calc_data_type(check_context)? {
 			DataType::Primitive (Primitive::Bool) => {},
-			_ => return Err( InterpErr::from( StatementErr::IfConditionType { 
+			_ => return Err(StatementErr::IfConditionType { 
 										pos: self.condition_expr().pos(),
-									} ) ),
+									}.into()),
 		}
 		
 		check_context.push_scope();
@@ -941,9 +942,9 @@ impl ReturningBody {
 		}
 		
 		if !has_return && return_type.ne(&DataType::Primitive (Primitive::None)) {
-			return Err( InterpErr::from(StatementErr::UserFuncNotAllFuncPathsReturn {
+			return Err(StatementErr::UserFuncNotAllFuncPathsReturn {
 				last_statement_pos: CodePos::from(CharPos::new()),
-			}) );
+			}.into());
 		}
 		
 		for st_ref in self.statements.iter() {
@@ -955,8 +956,7 @@ impl ReturningBody {
 	
 	fn returns(statement: &Statement, declared_return_type: &DataType, check_context: &Context) -> Result<bool, InterpErr> {
 		match &statement.kind {
-			StatementKind::Comment (_) 
-				| StatementKind::VariableDeclare { .. }
+			StatementKind::VariableDeclare { .. }
 				| StatementKind::VariableDeclareSet { .. }
 				| StatementKind::VariableSet { .. }
 				| StatementKind::UserDefinedFuncDeclare { .. }
@@ -973,11 +973,11 @@ impl ReturningBody {
 					None => DataType::Primitive (Primitive::None),
 				};
 				if returned_type.ne(declared_return_type) {
-					Err( InterpErr::from(StatementErr::UserFuncReturnType {
+					Err(StatementErr::UserFuncReturnType {
 						return_expr_pos: statement.pos(),
 						declared_return_type: declared_return_type.clone(),
 						returned_type,
-					}) )
+					}.into())
 				} else {
 					Ok(true)
 				}
@@ -1128,15 +1128,13 @@ mod tests {
 	use super::super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
 	
 	#[test]
-	fn can_parse_comment() {
+	fn does_not_can_parse_comment_by_default() {
 		let mut statements_iter = StatementsIter::new();
 		
-		statements_iter.push_string("//var a: f32;\nvar a: f32;//d".to_string());	
-		
-		assert_eq!(
-			statements_iter.next().unwrap().unwrap().kind, 
-			StatementKind::Comment (String::from("var a: f32;")) 
-		);
+		statements_iter.push_string(r#"
+		//var a: f32;
+		var a: f32;//d
+		"#.to_string());
 		
 		let nt = new_name_token("a");
 		
@@ -1146,11 +1144,6 @@ mod tests {
 					var_name: nt, 
 					data_type_name: new_name_token("f32"), 
 			} 
-		);
-		
-		assert_eq!(
-			statements_iter.next().unwrap().unwrap().kind, 
-			StatementKind::Comment (String::from("d")) 
 		);
 		
 		assert!(statements_iter.next().is_none());
@@ -1319,7 +1312,7 @@ mod tests {
 		
 		//--------------------- if ---------------------
 		statements_iter.push_string(r#"
-		if 2 == 2 { 
+		if (2 == 2) { 
 			@print("2 == 2"); 
 			@print("Cool!"); 
 		} 
@@ -1345,7 +1338,7 @@ mod tests {
 		
 		//--------------------- if-else --------------------- 
 		statements_iter.push_string(r#"
-		if 3 == 1 + 2 { 
+		if (3 == 1 + 2) { 
 			@print("3 == 1 + 2"); 
 			@print("Cool!"); 
 		} else { 
@@ -1372,10 +1365,10 @@ mod tests {
 		
 		//--------------------- if-elseif ---------------------
 		statements_iter.push_string(r#"
-		if 3 == 1 + 2 { 
+		if (3 == 1 + 2) { 
 			@print("3 == 1 + 2"); 
 			@print("Cool!"); 
-		} else if 45 * 6 == 6 * 45 { 
+		} else if (45 * 6 == 6 * 45) { 
 			@print("45 * 6 == 6 * 45"); 
 			@print("Nice!"); 
 		}
@@ -1400,10 +1393,10 @@ mod tests {
 		
 		//--------------------- if-elseif-else ---------------------
 		statements_iter.push_string(r#"
-		if 3 == 1 + 2 { 
+		if (3 == 1 + 2) { 
 			@print("3 == 1 + 2"); 
 			@print("Cool!"); 
-		} else if (45 * 6 == 6 * 45) land False { 
+		} else if ((45 * 6 == 6 * 45) land False) { 
 			@print("45 * 6 == 6 * 45"); 
 			@print("Nice!"); 
 		} else { 
@@ -1431,13 +1424,13 @@ mod tests {
 		
 		//--------------------- if-elseif-elseif-else ---------------------
 		statements_iter.push_string(r#"
-		if 3 == 1 + 2 { 
+		if (3 == 1 + 2) { 
 			@print("3 == 1 + 2"); 
 			@print("Cool!"); 
-		} else if (45 * 6 == 6 * 45) land False { 
+		} else if ((45 * 6 == 6 * 45) land False) { 
 			@print("45 * 6 == 6 * 45"); 
 			@print("Nice!"); 
-		} else if (10 == 7) lor True { 
+		} else if ((10 == 7) lor True) { 
 			@print("(10 == 7) lor True"); 
 			@print("Ok!"); 
 		} else { 
@@ -1473,7 +1466,7 @@ mod tests {
 		
 		statements_iter.push_string(r#"
 		var a: f32 = 3;
-		while 3 > 0 { 
+		while (3 > 0) { 
 			@print("a is"); 
 			@print("a"); 
 		} 
