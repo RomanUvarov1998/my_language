@@ -371,6 +371,7 @@ pub enum ExprErr {
 		operator_pos: CodePos,
 		descr: String,
 	},
+	NotStruct (CodePos),
 }
 
 impl ExprErr {
@@ -396,6 +397,7 @@ impl std::fmt::Display for ExprErr {
 			ExprErr::ExpectedExprButFound (_) => write!(f, "Expected arithmetical expression, but found"),
 			ExprErr::WrongOperandsTypeForOperator { ref descr, .. } => write!(f, "{}", descr),
 			ExprErr::NotEnoughOperandsForOperator { ref descr, .. } => write!(f, "{}", descr),
+			ExprErr::NotStruct (_) => write!(f, "Not a struct"),
 		}
 	}
 }

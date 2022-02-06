@@ -103,7 +103,7 @@ impl std::fmt::Debug for StructDef {
 #[derive(Debug)]
 pub struct StructDefInner {
 	name: NameToken,
-	fields: HashMap<String, StructFieldDef>,
+	fields: HashMap<String, StructFieldDef>, // TODO: try using &str
 	member_funcs: Vec<UserFuncDef>,	// TODO: use HashMap for member_funcs and builtin_funcs
 	builtin_funcs: Vec<BuiltinFuncDef>,
 }
@@ -124,6 +124,15 @@ impl StructDefInner {
 	
 	pub fn field_defs(&self) -> Values<'_, String, StructFieldDef> {
 		self.fields.values()
+	}
+	
+	pub fn member_field(&self, name: &NameToken) -> Result<&StructFieldDef, StructDefErr> {
+		match self.fields.get(name.value()) {
+			Some(field_def) => Ok(field_def),
+			None => Err( StructDefErr::FieldDoesNotExist {
+				name_in_code: name.clone(),
+			} ),
+		}
 	}
 	
 	pub fn add_builtin_func_def(&mut self, func_def: BuiltinFuncDef) {

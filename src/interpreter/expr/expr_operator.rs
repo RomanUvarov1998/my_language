@@ -6,6 +6,7 @@ use super::super::utils::CodePos;
 use super::super::statement::FuncKind;
 use super::super::context::Context;
 use super::super::token::{TokenContent, Operator, StatementOp};
+use super::super::struct_def::StructFieldDef;
 use super::symbol::{Symbol, SymbolKind, Operand};
 use super::ExprErr;
 
@@ -186,6 +187,7 @@ impl ExprOperator {
 						FuncKind::UserDefined => todo!(),
 					}
 				},
+				
 				(SymbolKind::Operand (Operand::Variable (ref var_name)), SymbolKind::Operand (Operand::FuncCall {
 					ref kind,
 					ref func_name,
@@ -210,6 +212,17 @@ impl ExprOperator {
 						FuncKind::UserDefined => todo!(),
 					}
 				},
+				
+				(SymbolKind::Operand (Operand::Variable (ref var_name_1)), SymbolKind::Operand (Operand::Variable (ref var_name_2))) => {
+					let value: &Value = context.get_variable_value(&var_name_1).unwrap();
+					
+					if let Value::Struct { fields, .. } = value {
+						fields.get(var_name_2.value()).unwrap().clone()
+					} else {
+						unreachable!();
+					}
+				},
+				
 				_ => todo!(),
 			}
 		} else {
@@ -265,6 +278,7 @@ impl ExprOperator {
 						FuncKind::UserDefined => todo!(),
 					}
 				},
+				
 				(SymbolKind::Operand (Operand::Variable (ref var_name)), SymbolKind::Operand (Operand::FuncCall {
 					ref kind,
 					ref func_name,
@@ -284,6 +298,19 @@ impl ExprOperator {
 						FuncKind::UserDefined => todo!(),
 					}
 				},
+				
+				(SymbolKind::Operand (Operand::Variable (ref var_name_1)), SymbolKind::Operand (Operand::Variable (ref var_name_2))) => {
+					let value_type: &DataType = check_context.get_variable_def(&var_name_1)?.get_type();
+					
+					if let DataType::Complex (struct_def) = value_type {
+						let sd_inner = struct_def.inner();
+						let field_def: &StructFieldDef = sd_inner.member_field(var_name_2)?;
+						Ok(field_def.data_type().clone())
+					} else {
+						Err( ExprErr::NotStruct (var_name_1.pos()).into() )
+					}
+				},
+				
 				_ => todo!(),
 			}
 		} else {

@@ -231,6 +231,11 @@ impl From<ExprErr> for InterpErr {
 				descr: descr.clone(),
 				inner: InnerErr::Expr (err),
 			},
+			ExprErr::NotStruct (pos) => InterpErr {
+				pos,
+				descr: format!("{}", err),
+				inner: InnerErr::Expr (err),
+			},
 		}
 	}
 }
@@ -675,6 +680,26 @@ struct A {
 }
 
 var a: A = A { a: 4.5, b: False, };
+		"#) {
+			Ok(_) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
+
+	#[test]
+	fn can_use_fields_of_defined_struct_in_expr() {
+		// TODO: make possible to create struct with a field of a type of itself:
+		// struct A { a: A }
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+struct A {
+	a: f32,
+	b: bool
+}
+
+var a: A = A { a: 4.5, b: False, };
+
+var b: f32 = a.a + 4;
 		"#) {
 			Ok(_) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),

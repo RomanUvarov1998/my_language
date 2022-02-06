@@ -515,7 +515,7 @@ impl Statement {
 			
 			StatementKind::VariableSet { var_name, value_expr } => {
 				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_context)?;
-				let var_def: &mut VarData = check_context.get_variable_mut(var_name)?;
+				let var_def: &mut VarData = check_context.get_variable_def_mut(var_name)?;
 				var_def.set(expr_data_type.default_value())?;
 				
 				let variable_type: &DataType = var_def.get_type();
