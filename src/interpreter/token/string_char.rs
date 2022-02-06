@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use super::utils::CharPos;
+use super::super::utils::CharPos;
 
 //------------------------------ CharsIter ----------------------------
 
@@ -53,7 +53,13 @@ impl Iterator for CharsIter {
 			for ch in cur_string.chars() {
 				let ch_kind = CharKind::from(ch);
 				self.chars_queue.push_back(ParsedChar::new(ch, ch_kind, self.pos));
-				self.pos.advance(ch_kind);
+				
+				match ch_kind {
+					CharKind::NewLine => 
+						self.pos.advance_line(),
+					_ => 
+						self.pos.advance_col(),
+				}
 			}
 		}
 			

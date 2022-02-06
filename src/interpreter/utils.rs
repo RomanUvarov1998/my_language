@@ -1,5 +1,4 @@
 use super::token::{Token, TokenContent, TokenErr};
-use super::string_char::CharKind;
 use super::InterpErr;
 
 //--------------------- NameToken --------------------------
@@ -106,16 +105,12 @@ impl CharPos {
 	pub fn line(&self) -> usize { self.line }
 	pub fn col(&self) -> usize { self.col }
 	
-	pub fn advance(&mut self, ch_kind: CharKind) {
-		match ch_kind {
-			CharKind::NewLine => {
-				self.col = 0;
-				self.line += 1;
-			},
-			_ => {
-				self.col += 1;
-			},
-		}
+	pub fn advance_col(&mut self) {
+		self.col += 1;
+	}
+	pub fn advance_line(&mut self) {
+		self.col = 0;
+		self.line += 1;
 	}
 }
 

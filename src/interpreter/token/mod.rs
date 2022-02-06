@@ -1,4 +1,6 @@
-use super::string_char::{ CharsIter, CharKind, Punctuation, ParsedChar };
+mod string_char;
+
+use string_char::{ CharsIter, CharKind, Punctuation, ParsedChar };
 use super::utils::{CharPos, CodePos};
 use std::collections::VecDeque;
 
