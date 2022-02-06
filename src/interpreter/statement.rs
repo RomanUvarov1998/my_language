@@ -1812,13 +1812,6 @@ mod tests {
 	fn can_parse_struct_declaration() {
 		let test = |code: &str| {
 			let mut statements_iter = StatementsIter::new();
-		
-			let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-			let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
-			let mut context = Context::new(
-				&builtin_func_defs,
-				&primitive_type_member_funcs_list,
-				Vec::<StructDef>::new());
 			
 			statements_iter.push_string(code.to_string());
 			

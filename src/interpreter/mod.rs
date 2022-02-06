@@ -113,7 +113,7 @@ impl Interpreter {
 		self.statements_iter.push_string(code.to_string());
 		
 		let mut statements = Vec::<Statement>::new();
-		let mut struct_defs = Vec::<StructDef>::new();
+		let struct_defs = Vec::<StructDef>::new();
 		let mut check_context = Context::new(
 			&self.builtin_func_defs, 
 			&self.primitive_type_member_funcs_list,
@@ -125,7 +125,7 @@ impl Interpreter {
 			statements.push(st);
 		}
 		
-		let mut struct_defs = Vec::<StructDef>::new();
+		let struct_defs = Vec::<StructDef>::new();
 		let mut run_context = Context::new(
 			&self.builtin_func_defs, 
 			&self.primitive_type_member_funcs_list,

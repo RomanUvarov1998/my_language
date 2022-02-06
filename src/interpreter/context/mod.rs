@@ -94,7 +94,7 @@ impl<'prev_context> Context<'prev_context> {
 			
 			if let Some(struct_def) = defs.iter().find(|sd| sd.inner().name().value() == name.value()) {
 				return Err( StructDefErr::StructDefIsAlreadyDefined {
-					defined_name: name.clone(),
+					defined_name: struct_def.inner().name().clone(),
 				} );
 			}
 			
