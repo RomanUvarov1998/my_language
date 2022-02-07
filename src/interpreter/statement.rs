@@ -113,10 +113,10 @@ impl StatementsIter {
 			});
 			
 			if let Some(Token { content: TokenContent::Keyword (Keyword::Else), .. }) = self.tokens_iter.peek()? {
-				self.tokens_iter.next_or_end_reached_err().unwrap();
+				self.tokens_iter.skip();
 				
 				if let Some(Token { content: TokenContent::Keyword (Keyword::If), .. }) = self.tokens_iter.peek()? {
-					self.tokens_iter.next_or_end_reached_err().unwrap();
+					self.tokens_iter.skip();
 					continue; // parse next if () {}
 				}
 				
@@ -177,7 +177,7 @@ impl StatementsIter {
 			loop {
 				match self.tokens_iter.peek_or_end_reached_err()? {
 					Token { content: TokenContent::Bracket (Bracket::RightCurly), .. } => {
-						self.tokens_iter.next_or_end_reached_err().unwrap();
+						self.tokens_iter.skip();
 						break Ok(());
 					},
 					_ => match self.parse_next_statement() {
@@ -209,7 +209,7 @@ impl StatementsIter {
 		let mut arg_exprs = Vec::<Expr>::new();
 		
 		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_end_reached_err()?.content() {
-			self.tokens_iter.next_or_end_reached_err().unwrap();
+			self.tokens_iter.skip();
 		} else {
 			loop {			
 				arg_exprs.push(Expr::new(
@@ -257,7 +257,7 @@ impl StatementsIter {
 		
 		let mut args = Vec::<ParsedFuncArgDef>::new();
 		if let TokenContent::Bracket (Bracket::Right) = self.tokens_iter.peek_or_end_reached_err()?.content() {
-			self.tokens_iter.next_or_end_reached_err().unwrap();
+			self.tokens_iter.skip();
 		} else {
 			loop {
 				let arg_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
@@ -284,7 +284,7 @@ impl StatementsIter {
 		
 		let return_type_name: Option<NameToken> = match self.tokens_iter.peek_or_end_reached_err()? {
 			Token { content: TokenContent::StatementOp (StatementOp::ThinArrow), .. } => { // function returns value
-				self.tokens_iter.next_or_end_reached_err().unwrap(); // skip ThinArrow
+				self.tokens_iter.skip(); // skip ThinArrow
 				let return_type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 				Some(return_type_name)
 			},
@@ -324,7 +324,7 @@ impl StatementsIter {
 			if let TokenContent::StatementOp (StatementOp::Semicolon) = 
 				self.tokens_iter.peek_or_end_reached_err()?.content() 
 			{
-				self.tokens_iter.next_or_end_reached_err().unwrap(); // skip semicolon
+				self.tokens_iter.skip(); // skip semicolon
 				(None, return_keyword_pos)
 			} else {
 				let expr: Expr = Expr::new(

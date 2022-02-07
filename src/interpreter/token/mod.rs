@@ -30,8 +30,6 @@ impl TokensIter {
 		self.iter.last_pos()
 	}
 	
-	// TODO: add skip() function
-	
 	pub fn peek(&mut self) -> Result<Option<&Token>, TokenErr> {
 		if self.peeked_tokens.front().is_none() {
 			if let Some(token_result) = self.next() {
@@ -47,6 +45,10 @@ impl TokensIter {
 			Some(token_ref) => Ok(token_ref),
 			None => Err( TokenErr::EndReached { pos } ),
 		}
+	}
+	
+	pub fn skip(&mut self) {
+		self.next_or_end_reached_err().unwrap();
 	}
 	
 	pub fn next_or_end_reached_err(&mut self) -> Result<Token, TokenErr> {
