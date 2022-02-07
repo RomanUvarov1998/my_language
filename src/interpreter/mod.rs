@@ -705,6 +705,8 @@ var b: f32 = a.a + 4;
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 	}
+	
+	// TODO: add ability to assign to a member field of a struct
 
 	fn new_name_token(name: &str) -> NameToken {
 		NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()))
