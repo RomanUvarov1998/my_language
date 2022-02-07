@@ -102,6 +102,15 @@ impl TokensIter {
 		}
 	}
 	
+	pub fn next_expect_assign_operator(&mut self) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::Operator (Operator::Assign)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
+	}
+	
 	pub fn expect_keyword(&mut self, kw: Keyword) -> Result<(), TokenErr> {
 		match self.next() {
 			Some(token_result) => Self::expect(

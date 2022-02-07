@@ -387,12 +387,12 @@ impl Operand {
 				
 			Operand::FuncCall { func_name, arg_exprs } => {
 				if func_name.is_builtin() {
-					let f: &BuiltinFuncDef = check_context.find_builtin_func_def(&func_name).unwrap();
+					let f: &BuiltinFuncDef = check_context.find_builtin_func_def(&func_name)?;
 			
 					f.check_args(&func_name, arg_exprs, check_context)?;
 					f.return_type().clone()
 				} else {
-					let f: &UserFuncDef = check_context.find_func_def(&func_name).unwrap();
+					let f: &UserFuncDef = check_context.find_user_func_def(&func_name)?;
 			
 					f.check_args(arg_exprs, check_context)?;
 					f.return_type().clone()
@@ -436,7 +436,7 @@ impl Operand {
 					
 					f.call(args_values)
 				} else {
-					let f: &UserFuncDef = context.find_func_def(&func_name).unwrap();
+					let f: &UserFuncDef = context.find_user_func_def(&func_name).unwrap();
 			
 					let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
 					
@@ -452,7 +452,7 @@ impl Operand {
 						next_context.add_variable(
 							func_args[i].name().clone(),
 							func_args[i].data_type().clone(),
-							Some(args_values[i].clone())).unwrap();
+							args_values[i].clone()).unwrap();
 					}
 					
 					f.call(&mut next_context)

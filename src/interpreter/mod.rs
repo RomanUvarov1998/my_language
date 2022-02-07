@@ -258,11 +258,6 @@ impl From<VarErr> for InterpErr {
 				descr: format!("{}", err),
 				inner: InnerErr::Var (err),
 			},
-			VarErr::NotSet { ref name } => InterpErr {
-				pos: name.pos(),
-				descr: format!("{}", err),
-				inner: InnerErr::Var (err),
-			},
 			VarErr::AlreadyExists { ref name } => InterpErr {
 				pos: name.pos(),
 				descr: format!("{}", err),

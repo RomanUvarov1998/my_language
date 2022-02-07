@@ -1,6 +1,6 @@
 // f32
 
-var a: f32 = -3;
+var a: @f32 = -3;
 @print("a.@abs() == ");
 @println(a.@abs());
 
@@ -21,7 +21,7 @@ var a: f32 = -3;
 
 // str
 
-var s: str = "hello!@#$%^&*()_+1234567890-=|\/`~_";
+var s: @str = "hello!@#$%^&*()_+1234567890-=|\/`~_";
 @print("s is '");
 @print(s);
 @println("'");
@@ -30,7 +30,7 @@ var s: str = "hello!@#$%^&*()_+1234567890-=|\/`~_";
 
 // bool
 
-var b: bool = True;
+var b: @bool = True;
 @print("s.@to_string() == ");
 @println(b.@to_string());
 

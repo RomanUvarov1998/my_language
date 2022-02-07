@@ -19,16 +19,12 @@ impl Scope {
 		}
 	}
 	
-	pub fn add_variable(&mut self, name: NameToken, data_type: DataType, initial_value: Option<Value>) -> Result<(), VarErr> {
+	pub fn add_variable(&mut self, name: NameToken, data_type: DataType, initial_value: Value) -> Result<(), VarErr> {
 		if let Ok(..) = self.find_var(&name) {
 			return Err( VarErr::AlreadyExists { name } );
 		}
 		
-		if let Some(value) = initial_value {
-			self.vars.push(VarData::new_with_value(name, data_type, value)?);
-		} else {
-			self.vars.push(VarData::new_uninit(name, data_type));
-		}
+		self.vars.push(VarData::new_with_value(name, data_type, initial_value)?);
 		
 		Ok(())
 	}

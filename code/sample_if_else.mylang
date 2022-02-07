@@ -1,26 +1,26 @@
 // Guessing game:
-var a: f32 = @str_to_f32(@input("Give a number between 0 and 7 inclusive: ")); // 0..7
+var a: @f32 = @str_to_f32(@input("Give a number between 0 and 7 inclusive: ")); // 0..7
 
-if a < 0 {
+if (a < 0) {
 	@print("ERROR: number is < 0");
 	@exit();
 }
 
-if a > 7 {
+if (a > 7) {
 	@print("ERROR: number is > 7");
 	@exit();
 }
 
-if a > 3 { // 4..7
-	if a > 5 { // 6..7
-		if a > 6 { @print(7); } else { @print(6); }
+if (a > 3) { // 4..7
+	if (a > 5) { // 6..7
+		if (a > 6) { @print(7); } else { @print(6); }
 	} else { // 4..5
-		if a > 4 { @print(5); } else { @print(4); }
+		if (a > 4) { @print(5); } else { @print(4); }
 	}
 } else { // 0..3
-	if a > 1 { // 2..3
-		if a > 2 { @print(3); } else { @print(2); }
+	if (a > 1) { // 2..3
+		if (a > 2) { @print(3); } else { @print(2); }
 	} else { // 0..1
-		if a > 0 { @print(1); } else { @print(0); }
+		if (a > 0) { @print(1); } else { @print(0); }
 	}
 }

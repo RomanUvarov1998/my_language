@@ -1,7 +1,7 @@
 // 'if-else' statement:
-var a: f32 = 4;
+var a: @f32 = 4;
 
-while a > 0 {
-	@print(a);
+while (a > 0) {
+	@println(a);
 	a = a - 1;
 }

@@ -1,9 +1,9 @@
-@print("Must print 'Hello, world!':");
-var a: str = "Hello,";
-var b: str = " world!";
-@print(a + b);
+@println("Must print 'Hello, world!':");
+var a: @str = "Hello,";
+var b: @str = " world!";
+@println(a + b);
 
-@print("Must print '11':");
-var c: f32 = 3;
-var d: f32 = 4;
-@print(c + d * 2);
+@println("Must print '11':");
+var c: @f32 = 3;
+var d: @f32 = 4;
+@println(c + d * 2);

@@ -303,15 +303,16 @@ impl ExprOperator {
 		} else {
 			match OP_ATTRS[self as usize].arity {
 				OpArity::Binary => {
-					let rhs: DataType = calc_stack.pop()
+					let rhs: Operand = calc_stack.pop()
 						.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 0, 2)))?
-						.unwrap_operand()
-						.check_and_calc_data_type_in_place(check_context)?;
+						.unwrap_operand();
 						
-					let lhs: DataType = calc_stack.pop()
+					let lhs: Operand = calc_stack.pop()
 						.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 1, 2)))?
-						.unwrap_operand()
-						.check_and_calc_data_type_in_place(check_context)?;
+						.unwrap_operand();
+					
+					let lhs: DataType = lhs.check_and_calc_data_type_in_place(check_context)?;
+					let rhs: DataType = rhs.check_and_calc_data_type_in_place(check_context)?;
 					
 					let result = match self {
 						BinPlus => self.get_bin_plus_result_type(&rhs, &lhs),
@@ -559,7 +560,7 @@ impl ExprOperator {
 				next_context.add_variable(
 					func_args[i].name().clone(),
 					func_args[i].data_type().clone(),
-					Some(args_values[i].clone())).unwrap();
+					args_values[i].clone()).unwrap();
 			}
 			
 			let value: Value = func_def.call(&mut next_context).unwrap();

@@ -16,7 +16,7 @@ use std::rc::Rc;
 //---------------------- Context -----------------------
 
 pub struct Context<'prev_context> {
-	prev_frame_context: Option<&'prev_context CallStackFrame>,
+	prev_frame_context: Option<&'prev_context Context<'prev_context>>,
 	frame: CallStackFrame,
 	builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>,
 	primitive_type_member_builtin_funcs_list: &'prev_context PrimitiveTypeMemberBuiltinFuncsList,
@@ -42,7 +42,7 @@ impl<'prev_context> Context<'prev_context> {
 	
 	pub fn new_stack_frame_context(&'prev_context self) -> Self {
 		Self {
-			prev_frame_context: Some(&self.frame),
+			prev_frame_context: Some(&self),
 			frame: CallStackFrame::new(),
 			builtin_func_defs: &self.builtin_func_defs,
 			primitive_type_member_builtin_funcs_list: &self.primitive_type_member_builtin_funcs_list,
@@ -51,7 +51,7 @@ impl<'prev_context> Context<'prev_context> {
 		}
 	}
 	
-	pub fn add_variable(&mut self, name: NameToken, data_type: DataType, initial_value: Option<Value>) -> Result<(), VarErr> {
+	pub fn add_variable(&mut self, name: NameToken, data_type: DataType, initial_value: Value) -> Result<(), VarErr> {
 		self.frame.get_upper_scope_mut()
 			.add_variable(name, data_type, initial_value)
 	}
@@ -62,11 +62,7 @@ impl<'prev_context> Context<'prev_context> {
 	}
 	
 	pub fn get_variable_value(&self, name: &NameToken) -> Result<&Value, VarErr> {
-		let var = self.frame.find_var(name)?;
-		match var.get_value() {
-			Some(value) => Ok(value),
-			None => Err( VarErr::NotSet { name: name.clone() } ),
-		}
+		Ok(self.frame.find_var(name)?.get_value())
 	}
 	
 	#[allow(dead_code)]
@@ -127,11 +123,11 @@ impl<'prev_context> Context<'prev_context> {
 		self.frame.pop_scope();
 	}
 	
-	pub fn find_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, UserFuncErr> {
-		if let Ok(func) = self.frame.find_func_def(name) {
+	pub fn find_user_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, UserFuncErr> {
+		if let Ok(func) = self.frame.find_user_func_def(name) {
 			Ok(func)
-		} else if let Some(frame) = self.prev_frame_context {
-			if let Ok(func) = frame.find_func_def(name) {
+		} else if let Some(prev_context) = self.prev_frame_context {
+			if let Ok(func) = prev_context.find_user_func_def(name) {
 				Ok(func)
 			} else {
 				Err( UserFuncErr::NotDefined { name: name.clone() } )
@@ -184,31 +180,31 @@ mod tests {
 		let nt_a = new_name_token("a", false);
 		let nt_b = new_name_token("b", false);
 		
-		context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), None).unwrap();
-		assert_eq!(context.get_variable_value(&nt_a), Err(VarErr::NotSet { name: nt_a.clone() }));
+		context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), Value::from(3_f32)).unwrap();
+		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::from(3_f32)));
 		assert_eq!(context.get_variable_def_mut(&nt_a).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		context.set_variable(&nt_a, Value::from(1_f32)).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(1_f32)));
 		assert_eq!(context.get_variable_def_mut(&nt_a).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		
 		assert_eq!(
-			context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), None),
+			context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), Value::from(1_f32)),
 			Err( VarErr::AlreadyExists { name: nt_a.clone() } ));	
 		
 		context.push_scope();
-		context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), None).unwrap();
-		assert_eq!(context.get_variable_value(&nt_a), Err(VarErr::NotSet { name: nt_a.clone() }));		
+		context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), Value::from(3_f32)).unwrap();
+		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::from(3_f32)));		
 		assert_eq!(context.get_variable_def_mut(&nt_a).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		context.set_variable(&nt_a, Value::from(3_f32)).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(3_f32)));
 		assert_eq!(context.get_variable_def_mut(&nt_a).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		
 		assert_eq!(
-			context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), None),
+			context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), Value::from(4_f32)),
 			Err( VarErr::AlreadyExists { name: nt_a.clone() } ));	
 			
-		context.add_variable(nt_b.clone(), DataType::Primitive (Primitive::Float32), None).unwrap();
-		assert_eq!(context.get_variable_value(&nt_b), Err(VarErr::NotSet { name: nt_b.clone() }));		
+		context.add_variable(nt_b.clone(), DataType::Primitive (Primitive::Float32), Value::from(3_f32)).unwrap();
+		assert_eq!(context.get_variable_value(&nt_b), Ok(&Value::from(3_f32)));		
 		assert_eq!(context.get_variable_def_mut(&nt_b).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 		context.set_variable(&nt_b, Value::from(5_f32)).unwrap();
 		assert_eq!(context.get_variable_value(&nt_b), Ok(&Value::Float32(5_f32)));
@@ -240,7 +236,7 @@ mod tests {
 		
 		let nt = new_name_token("a", false);
 		
-		context.add_variable(nt.clone(), DataType::Primitive (Primitive::Float32), Some(Value::Float32(2_f32))).unwrap();
+		context.add_variable(nt.clone(), DataType::Primitive (Primitive::Float32), Value::Float32(2_f32)).unwrap();
 		
 		assert_eq!(context.get_variable_value(&nt), Ok(&Value::Float32(2_f32)));
 		

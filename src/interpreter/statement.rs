@@ -76,25 +76,7 @@ impl StatementsIter {
 		
 		let data_type_name: NameToken = NameToken::from_or_err(self.tokens_iter.next_or_end_reached_err()?)?;
 		
-		let tok_assign = self.tokens_iter.next_or_end_reached_err()?;
-		match tok_assign {
-			Token { content: TokenContent::Operator (Operator::Assign), .. } => {},
-			Token { content: TokenContent::StatementOp ( StatementOp::Semicolon ), .. } => return 
-				Ok ( Statement {
-					pos: CodePos::new(begin_pos, data_type_name.pos().end()),
-					kind: StatementKind::VariableDeclare {
-						var_name, 
-						data_type_name, 
-					},
-				} ),
-			found @ _ => return Err(TokenErr::ExpectedButFound { 
-							expected: vec![
-								TokenContent::Operator (Operator::Assign),
-								TokenContent::StatementOp ( StatementOp::Semicolon ),
-							], 
-							found
-						}.into()),
-		};
+		self.tokens_iter.next_expect_assign_operator()?;
 		
 		let value_expr = Expr::new(
 			&mut self.tokens_iter, 
@@ -431,7 +413,6 @@ pub struct Statement {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum StatementKind {
-	VariableDeclare { var_name: NameToken, data_type_name: NameToken },
 	VariableDeclareSet { var_name: NameToken, data_type_name: NameToken, value_expr: Expr },
 	UserStructDeclare {
 		new_type_name: NameToken,
@@ -467,16 +448,11 @@ impl Statement {
 		check_context: &mut Context
 	) -> Result<(), InterpErr> 
 	{
-		match &self.kind {				
-			StatementKind::VariableDeclare { var_name, data_type_name } => {
-				let data_type: DataType = check_context.find_type_by_name(data_type_name)?;
-				check_context.add_variable(var_name.clone(), data_type,  None)?;
-			},
-					
+		match &self.kind {	
 			StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 				let data_type: DataType = check_context.find_type_by_name(data_type_name)?;
 				let default_value = data_type.default_value();
-				check_context.add_variable(var_name.clone(), data_type.clone(), Some(default_value))?;
+				check_context.add_variable(var_name.clone(), data_type.clone(), default_value)?;
 				
 				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_context)?;
 				if data_type.clone() != expr_data_type {
@@ -506,7 +482,7 @@ impl Statement {
 				left_expr.check_as_standalone_expression(check_context)?;
 			},
 			
-			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {
+			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {				
 				let return_type: DataType = match return_type_name {
 					Some(nt) => check_context.find_type_by_name(nt)?,
 					None => DataType::Primitive (Primitive::None),
@@ -526,7 +502,7 @@ impl Statement {
 					return_type.clone(), 
 					body.clone())?;
 					
-				let user_func_def = check_context.find_func_def(name).unwrap();
+				let user_func_def = check_context.find_user_func_def(name).unwrap();
 				
 				let mut next_check_context = check_context.new_stack_frame_context();
 				
@@ -534,7 +510,7 @@ impl Statement {
 					next_check_context.add_variable(
 						arg_ref.name().clone(), 
 						arg_ref.data_type().clone(),
-						Some(arg_ref.data_type().default_value()))?;
+						arg_ref.data_type().default_value())?;
 				}
 				
 				body.check(&return_type, &mut next_check_context)?;
@@ -570,19 +546,14 @@ impl Statement {
 	}
 	
 	pub fn run(&self, context: &mut Context) -> Option<Value> {
-		match &self.kind {			
-			StatementKind::VariableDeclare { var_name, data_type_name } => {
-				let data_type: DataType = context.find_type_by_name(data_type_name).unwrap();
-				context.add_variable(var_name.clone(), data_type, None).unwrap();
-			},
-					
+		match &self.kind {					
 			StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 				let data_type: DataType = context.find_type_by_name(data_type_name).unwrap();
 				let value: Value = value_expr.calc(context);
 				context.add_variable(
 					var_name.clone(), 
 					data_type,
-					Some(value)).unwrap();
+					value).unwrap();
 			},
 				
 			StatementKind::VariableSet { left_expr, right_expr } => {
@@ -664,8 +635,6 @@ impl std::fmt::Display for Statement {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "[{}, {}] ", self.pos().begin(), self.pos().end())?;
 		match &self.kind {				
-			StatementKind::VariableDeclare { var_name, data_type_name } => writeln!(f, "declare {}: {}", var_name, data_type_name),
-					
 			StatementKind::VariableDeclareSet { var_name, data_type_name, .. } => writeln!(f, "declare {}: {} = expr", var_name, data_type_name),
 				
 			StatementKind::VariableSet { .. } => writeln!(f, "expr = expr;"),
@@ -834,6 +803,10 @@ impl ReturningBody {
 	}
 	
 	pub fn check(&self, return_type: &DataType, check_context: &mut Context) -> Result<(), InterpErr> {
+		for st_ref in self.statements.iter() {
+			st_ref.check(check_context)?;
+		}
+		
 		let mut has_return = false; // at least one statement on 1st level returns
 		for st_ref in self.statements().iter() {
 			if Self::returns(st_ref, return_type, check_context)? {
@@ -847,17 +820,12 @@ impl ReturningBody {
 			}.into());
 		}
 		
-		for st_ref in self.statements.iter() {
-			st_ref.check(check_context)?;
-		}
-		
 		Ok(())
 	}
 	
 	fn returns(statement: &Statement, declared_return_type: &DataType, check_context: &Context) -> Result<bool, InterpErr> {
 		match &statement.kind {
-			StatementKind::VariableDeclare { .. }
-				| StatementKind::VariableDeclareSet { .. }
+			StatementKind::VariableDeclareSet { .. }
 				| StatementKind::VariableSet { .. }
 				| StatementKind::UserDefinedFuncDeclare { .. }
 				| StatementKind::FuncCall { .. }
@@ -1041,53 +1009,33 @@ mod tests {
 		
 		statements_iter.push_string(r#"
 		//var a: @f32;
-		var a: @f32;//d
+		var a: @f32 = 3;//d
 		"#.to_string());
 		
-		let nt = new_name_token("a", false);
+		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
+		let primitive_type_member_funcs_list = PrimitiveTypeMemberBuiltinFuncsList::new();
+		let context = Context::new(
+			&builtin_func_defs,
+			&primitive_type_member_funcs_list,
+			Vec::<StructDef>::new());
 		
-		assert_eq!(
-			statements_iter.next().unwrap().unwrap().kind, 
-			StatementKind::VariableDeclare {
-					var_name: nt, 
-					data_type_name: new_name_token("f32", true), 
-			} 
-		);
+		let st = statements_iter.next().unwrap().unwrap();
+		match st.kind {
+			StatementKind::VariableDeclareSet {
+					var_name, 
+					data_type_name,
+					value_expr
+				} => {
+					assert_eq!(data_type_name, new_name_token("f32", true));
+					assert_eq!(value_expr.calc(&context), Value::from(3_f32));
+					assert_eq!(var_name, new_name_token("a", false));
+				},
+			_ => panic!("wrong statement: {:?}", st),
+		};
 		
 		assert!(statements_iter.next().is_none());
 	}
-	
-	#[test]
-	fn can_make_variable_declare_statement() {
-		let mut statements_iter = StatementsIter::new();
 		
-		let nt = new_name_token("a", false);
-		
-		statements_iter.push_string("var a: @f32;".to_string());		
-		let st = statements_iter.next().unwrap().unwrap();
-		assert_eq!(st.kind, StatementKind::VariableDeclare {
-			var_name: nt.clone(), 
-			data_type_name: new_name_token("f32", true),  
-		});		
-		assert!(statements_iter.next().is_none());
-		
-		statements_iter.push_string("var a: @str;".to_string());
-		let st = statements_iter.next().unwrap().unwrap();
-		assert_eq!(st.kind, StatementKind::VariableDeclare {
-			var_name: nt.clone(), 
-			data_type_name: new_name_token("str", true), 
-		});		
-		assert!(statements_iter.next().is_none());
-		
-		statements_iter.push_string("var a: @bool;".to_string());
-		let st = statements_iter.next().unwrap().unwrap();
-		assert_eq!(st.kind, StatementKind::VariableDeclare {
-			var_name: nt.clone(), 
-			data_type_name: new_name_token("bool", true),
-		});		
-		assert!(statements_iter.next().is_none());
-	}
-	
 	#[test]
 	fn can_make_variable_declare_set_statement() {
 		let mut statements_iter = StatementsIter::new();
@@ -1105,7 +1053,7 @@ mod tests {
 		match st.kind {
 			StatementKind::VariableDeclareSet {
 					var_name, 
-					data_type_name,  
+					data_type_name,
 					value_expr
 				} => {
 					assert_eq!(data_type_name, new_name_token("f32", true));
@@ -1113,7 +1061,7 @@ mod tests {
 					assert_eq!(var_name, nt);
 				},
 			_ => panic!("wrong statement: {:?}", st),
-		};		
+		};
 		assert!(statements_iter.next().is_none());
 		
 		statements_iter.push_string("var a: @str = \"hello\";".to_string());
@@ -1467,8 +1415,8 @@ mod tests {
 				
 				assert_eq!(body.statements().len(), 3);
 				
-				context.add_variable(new_name_token("a", false), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
-				context.add_variable(new_name_token("b", false), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
+				context.add_variable(new_name_token("a", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
+				context.add_variable(new_name_token("b", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
 				
 				match &body.statements()[0].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
@@ -1484,7 +1432,7 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("a2", false), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
+				context.add_variable(new_name_token("a2", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
 				
 				match &body.statements()[1].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
@@ -1500,7 +1448,7 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("b2", false), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
+				context.add_variable(new_name_token("b2", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
 				
 				match &body.statements()[2].kind {
 					StatementKind::UserDefinedFuncReturn { return_expr } => {
@@ -1558,8 +1506,8 @@ mod tests {
 				
 				assert_eq!(body.statements().len(), 4);
 				
-				context.add_variable(new_name_token("a", false), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
-				context.add_variable(new_name_token("b", false), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
+				context.add_variable(new_name_token("a", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
+				context.add_variable(new_name_token("b", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
 				
 				match &body.statements()[0].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
@@ -1575,7 +1523,7 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("a2", false), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
+				context.add_variable(new_name_token("a2", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
 				
 				match &body.statements()[1].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
@@ -1591,7 +1539,7 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("b2", false), DataType::Primitive (Primitive::Float32), Some(DataType::Primitive (Primitive::Float32).default_value())).unwrap();
+				context.add_variable(new_name_token("b2", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
 				
 				match &body.statements()[2].kind {
 					StatementKind::FuncCall { .. } => {},

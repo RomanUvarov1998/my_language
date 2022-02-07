@@ -89,8 +89,7 @@ impl Expr {
 		let data_type: DataType = type_calc_stack.pop()
 			.unwrap()
 			.unwrap_operand()
-			.check_and_calc_data_type_in_place(check_context)
-			.unwrap();
+			.check_and_calc_data_type_in_place(check_context)?;
 		
 		Ok(data_type)
 	}
@@ -126,6 +125,11 @@ impl Expr {
 		}
 		
 		assert_eq!(type_calc_stack.len(), 1);
+		
+		type_calc_stack.pop()
+			.unwrap()
+			.unwrap_operand()
+			.check_and_calc_data_type_in_place(check_context)?;
 		
 		Ok(())
 	}
@@ -186,26 +190,18 @@ impl Expr {
 		let data_type: DataType = type_calc_stack.pop()
 			.unwrap()
 			.unwrap_operand()
-			.check_and_calc_data_type_in_place(check_context)
-			.unwrap();
+			.check_and_calc_data_type_in_place(check_context)?;
 		
 		Ok(data_type)
 	}
 	
 	pub fn set_as_to_lhs(&self, value: Value, context: &mut Context) {
 		let mut calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
-		
-		println!("expr stack:");
-		dbg!(&self.expr_stack);
-		println!("------------");
 					
 		for sym in self.expr_stack.iter() {
 			match sym.kind() {
 				SymbolKind::Operand (_) => {
 					calc_stack.push(sym.clone());
-					println!("added operand:");
-					dbg!(&calc_stack);
-					println!("------------");
 				}, // TODO: avoid cloning symbols
 				
 				SymbolKind::LeftBracket => unreachable!(),
@@ -216,9 +212,6 @@ impl Expr {
 						ExprOperator::DotMemberAccess => {
 							let result_sym: Symbol = op.apply(&mut calc_stack, context, sym.pos());
 							calc_stack.push(result_sym);
-							println!("Applied operator {:?}:", op);
-							dbg!(&calc_stack);
-							println!("------------");
 						}
 						_ => unreachable!(),
 					}

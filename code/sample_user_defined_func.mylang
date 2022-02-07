@@ -1,9 +1,10 @@
 // first func
-f add(a: f32, b: f32) -> f32 {
-	return a + b;
+f add(a: @f32, b: @f32) -> @f32 {
+	var e: @f32 = a;
+	return e + b;
 }
 
-var a: f32 = @str_to_f32(@input("Input a: "));
+var a: @f32 = @str_to_f32(@input("Input a: "));
 
 @print("a + 5 == ");
 @println(add(a, 5));
@@ -15,17 +16,19 @@ var a: f32 = @str_to_f32(@input("Input a: "));
 @println(add(a, 5) + add(a, 5) ^ 2);
 
 // second func
-f mul(a: f32, b: f32, c: f32) -> f32 {
-	var a2: f32 = a ^ 2;
-	var b2: f32 = b ^ 2;
-	var c2: f32 = c ^ 2;
-	return False;
+f mul(a: @f32, b: @f32, c: @f32) -> @f32 {
+	var a2: @f32 = a ^ 2;
+	var b2: @f32 = b ^ 2;
+	var c2: @f32 = c ^ 2;
+	return a2 + b2 + c2;
 }
 
 a = @str_to_f32(@input("Input a: "));
-var b: f32 = @str_to_f32(@input("Input b: "));
-var c: f32 = @str_to_f32(@input("Input c: "));
+var b: @f32 = @str_to_f32(@input("Input b: "));
+var c: @f32 = @str_to_f32(@input("Input c: "));
+
+@print("a + b == ");
+@println(add(a, b));
 
 @print("a^2 + b^2 + c^2 + (a + b) == ");
-@println(
-mul(a, b, c) + add(a, b));
+@println(mul(a, b, c) + add(a, b));
