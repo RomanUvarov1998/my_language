@@ -59,7 +59,7 @@ impl Scope {
 	}
 
 	pub fn find_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, UserFuncErr> {
-		match self.user_defined_funcs.iter().find(|func| func.get_name() == name) {
+		match self.user_defined_funcs.iter().find(|func| func.name() == name) {
 			Some(func) => Ok(func),
 			None => Err( UserFuncErr::NotDefined { name: name.clone() } ),
 		}

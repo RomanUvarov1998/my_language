@@ -8,7 +8,7 @@ use super::data_type::{DataType, Primitive, DataTypeErr};
 use super::var_data::{VarData, VarErr};
 use super::user_func::{UserFuncErr, UserFuncArg, UserFuncDef};
 use super::statement::ReturningBody;
-use super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
+use super::primitive_type_member_builtin_funcs_list::PrimitiveTypeMemberBuiltinFuncsList;
 use super::struct_def::{StructDef, StructFieldDef, StructDefErr};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -19,7 +19,7 @@ pub struct Context<'prev_context> {
 	prev_frame_context: Option<&'prev_context CallStackFrame>,
 	frame: CallStackFrame,
 	builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>,
-	primitive_type_member_funcs_list: &'prev_context PrimitiveTypeMemberFuncsList,
+	primitive_type_member_builtin_funcs_list: &'prev_context PrimitiveTypeMemberBuiltinFuncsList,
 	struct_defs: Rc<RefCell<Vec<StructDef>>>,
 	is_root: bool,
 }
@@ -27,14 +27,14 @@ pub struct Context<'prev_context> {
 impl<'prev_context> Context<'prev_context> {
 	pub fn new(
 		builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>,
-		primitive_type_member_funcs_list: &'prev_context PrimitiveTypeMemberFuncsList,
+		primitive_type_member_builtin_funcs_list: &'prev_context PrimitiveTypeMemberBuiltinFuncsList,
 		struct_defs: Vec<StructDef>
 	) -> Self {
 		Self {
 			prev_frame_context: None,
 			frame: CallStackFrame::new(),
 			builtin_func_defs,
-			primitive_type_member_funcs_list,
+			primitive_type_member_builtin_funcs_list,
 			struct_defs: Rc::new(RefCell::new(struct_defs)),
 			is_root: true,
 		}
@@ -45,7 +45,7 @@ impl<'prev_context> Context<'prev_context> {
 			prev_frame_context: Some(&self.frame),
 			frame: CallStackFrame::new(),
 			builtin_func_defs: &self.builtin_func_defs,
-			primitive_type_member_funcs_list: &self.primitive_type_member_funcs_list,
+			primitive_type_member_builtin_funcs_list: &self.primitive_type_member_builtin_funcs_list,
 			struct_defs: Rc::clone(&self.struct_defs),
 			is_root: false,
 		}
@@ -69,6 +69,7 @@ impl<'prev_context> Context<'prev_context> {
 		}
 	}
 	
+	#[allow(dead_code)]
 	pub fn get_variable_def_mut(&mut self, name: &NameToken) -> Result<&mut VarData, VarErr> {
 		self.frame.find_var_mut(name)
 	}
@@ -83,13 +84,19 @@ impl<'prev_context> Context<'prev_context> {
 	}
 	
 	pub fn find_type_by_name(&self, name: &NameToken) -> Result<DataType, DataTypeErr> {
-		if let Some(dt) = DataType::primitive_from_name(name) {
-			Ok(dt)
-		} else if let Some(dt) = self.struct_defs.borrow().iter().find(|sd| sd.inner().name().value() == name.value()) {
-			Ok( DataType::Complex (dt.clone()) )
+		if name.is_builtin() {
+			if let Some(dt) = DataType::primitive_from_name(name) {
+				Ok(dt)
+			} else {
+				Err( DataTypeErr::NotDefined { name: name.clone() } )
+			}
 		} else {
-			Err( DataTypeErr::NotDefined { name: name.clone() } )
-		}		
+			if let Some(dt) = self.struct_defs.borrow().iter().find(|sd| sd.inner().name().value() == name.value()) {
+				Ok( DataType::Complex (dt.clone()) )
+			} else {
+				Err( DataTypeErr::NotDefined { name: name.clone() } )
+			}
+		}	
 	}
 	
 	pub fn add_user_struct(&mut self, name: NameToken, fields: Vec<StructFieldDef>) -> Result<(), StructDefErr> {
@@ -147,10 +154,9 @@ impl<'prev_context> Context<'prev_context> {
 		func_name: &'prev_context NameToken
 	) -> Result<& 'prev_context BuiltinFuncDef, StructDefErr> 
 	{
-		self.primitive_type_member_funcs_list.find_func(data_type, func_name)
+		assert!(func_name.is_builtin());
+		self.primitive_type_member_builtin_funcs_list.find_func(data_type, func_name)
 	}
- 
- // TODO: add find user member func for TokenContent::Name
 }
 
 //---------------------- Tests -----------------------
@@ -163,20 +169,20 @@ mod tests {
 	use super::super::data_type::{DataType, Primitive};
 	use super::super::var_data::VarErr;
 	use super::super::value::Value;
-	use super::super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
+	use super::super::primitive_type_member_builtin_funcs_list::PrimitiveTypeMemberBuiltinFuncsList;
 	use super::super::struct_def::StructDef;
 	
 	#[test]
 	fn add_uninit_variable() {
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let primitive_type_member_builtin_funcs_list = PrimitiveTypeMemberBuiltinFuncsList::new();
 		let mut context = Context::new(
 			&builtin_func_defs,
-			&primitive_type_member_funcs_list,
+			&primitive_type_member_builtin_funcs_list,
 			Vec::<StructDef>::new());
 		
-		let nt_a = new_name_token("a");
-		let nt_b = new_name_token("b");
+		let nt_a = new_name_token("a", false);
+		let nt_b = new_name_token("b", false);
 		
 		context.add_variable(nt_a.clone(), DataType::Primitive (Primitive::Float32), None).unwrap();
 		assert_eq!(context.get_variable_value(&nt_a), Err(VarErr::NotSet { name: nt_a.clone() }));
@@ -226,13 +232,13 @@ mod tests {
 	#[test]
 	fn add_variable_with_value() {
 		let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-		let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+		let primitive_type_member_builtin_funcs_list = PrimitiveTypeMemberBuiltinFuncsList::new();
 		let mut context = Context::new(
 			&builtin_func_defs,
-			&primitive_type_member_funcs_list,
+			&primitive_type_member_builtin_funcs_list,
 			Vec::<StructDef>::new());
 		
-		let nt = new_name_token("a");
+		let nt = new_name_token("a", false);
 		
 		context.add_variable(nt.clone(), DataType::Primitive (Primitive::Float32), Some(Value::Float32(2_f32))).unwrap();
 		
@@ -241,8 +247,8 @@ mod tests {
 		assert_eq!(context.get_variable_def_mut(&nt).unwrap().get_type(), &DataType::Primitive (Primitive::Float32));
 	}
 
-	fn new_name_token(name: &str) -> NameToken {
+	fn new_name_token(name: &str, is_builtin: bool) -> NameToken {
 		use super::super::utils::{CodePos, CharPos};
-		NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()))
+		NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()), is_builtin)
 	}
 }

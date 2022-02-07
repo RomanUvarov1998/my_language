@@ -54,7 +54,6 @@ impl VarData {
 pub enum VarErr {
 	NotDefined { name: NameToken },
 	NotSet { name: NameToken },
-	UnknownType { name: NameToken },
 	AlreadyExists { name: NameToken },
 	WrongValue { 
 		new_var_value: Value, 
@@ -74,8 +73,6 @@ impl std::fmt::Display for VarErr {
 			VarErr::NotDefined { name } => write!(f, "Variable '{}' is not defined", &name),
 			VarErr::NotSet { name } => 
 				write!(f, "Variable '{}' is not set", &name),
-			VarErr::UnknownType { name } => 
-				write!(f, "Unknown type '{}'", &name),
 			VarErr::AlreadyExists { name } => 
 				write!(f, "Variable already exists '{}'", &name),
 			VarErr::WrongValue { new_var_value, variable_type, .. } =>

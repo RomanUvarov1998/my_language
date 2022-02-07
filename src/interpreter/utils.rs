@@ -6,6 +6,7 @@ use super::InterpErr;
 #[derive(Debug, Clone)]
 pub struct NameToken {
 	pub name: String,
+	pub is_builtin: bool,
 	pub pos: CodePos,
 }
 
@@ -13,12 +14,20 @@ impl NameToken {
 	pub fn from_or_err(tok: Token) -> Result<Self, InterpErr> {
 		let pos = tok.pos();
 		match tok {
-			Token { content: TokenContent::Name (name), .. }
-				| Token { content: TokenContent::BuiltinName (name), .. } => 
-			Ok( NameToken {
-				name,
-				pos,
-			} ),
+			Token { content: TokenContent::Name (name), .. } => 
+				Ok( NameToken {
+					is_builtin: false,
+					name,
+					pos,
+				} ),
+				
+			Token { content: TokenContent::BuiltinName (name), .. } => 
+				Ok( NameToken {
+					is_builtin: true,
+					name,
+					pos,
+				} ),
+				
 			found @ _ => return Err(TokenErr::ExpectedButFound {
 							expected: vec![TokenContent::Name ("<name>".to_string())], 
 							found,
@@ -26,15 +35,17 @@ impl NameToken {
 		}
 	}
 	
-	pub fn new_with_pos(name: String, pos: CodePos) -> Self {
+	pub fn new_with_pos(name: String, pos: CodePos, is_builtin: bool) -> Self {
 		Self {
 			name,
+			is_builtin,
 			pos,
 		}
 	}
 	
 	pub fn value(&self) -> &str { &self.name }
 	pub fn pos(&self) -> CodePos { self.pos }
+	pub fn is_builtin(&self) -> bool { self.is_builtin }
 }
 
 impl std::fmt::Display for NameToken {
@@ -45,7 +56,7 @@ impl std::fmt::Display for NameToken {
 
 impl PartialEq for NameToken {
 	fn eq(&self, other: &Self) -> bool {
-		self.value() == other.value()
+		self.value() == other.value() && self.is_builtin() == other.is_builtin()
 	}
 }
 impl Eq for NameToken {}

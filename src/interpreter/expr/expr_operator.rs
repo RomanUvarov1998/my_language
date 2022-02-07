@@ -2,13 +2,15 @@ use super::super::InterpErr;
 use super::super::value::Value;
 use super::super::data_type::{DataType, Primitive};
 use super::super::builtin_func::BuiltinFuncDef;
+use super::super::user_func::{UserFuncDef, UserFuncArg};
 use super::super::utils::CodePos;
-use super::super::statement::FuncKind;
 use super::super::context::Context;
-use super::super::token::{TokenContent, Operator, StatementOp};
 use super::super::struct_def::StructFieldDef;
+use super::super::utils::NameToken;
 use super::symbol::{Symbol, SymbolKind, Operand};
-use super::ExprErr;
+use super::{Expr, ExprErr};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 //------------------------------- ExprOperator ----------------------------------
 
@@ -89,60 +91,7 @@ pub static OP_ATTRS: [OpInfo; 18] = [
 	OpInfo { arity: OpArity::Binary, rank: 9, assot: OpAssot::Left }, 	//Dot
 ];
 
-impl ExprOperator {
-	pub fn new_bin(tc: TokenContent) -> Self {
-		match tc {
-			TokenContent::Operator (ref tok_op) => match tok_op {
-				Operator::Plus => ExprOperator::BinPlus,
-				Operator::Minus => ExprOperator::BinMinus,
-				Operator::Mul => ExprOperator::Mul,
-				Operator::Div => ExprOperator::Div,
-				Operator::Pow => ExprOperator::Pow,
-				Operator::Equal => ExprOperator::Equal,
-				Operator::Greater => ExprOperator::Greater,
-				Operator::GreaterEqual => ExprOperator::GreaterEqual,
-				Operator::Less => ExprOperator::Less,
-				Operator::LessEqual => ExprOperator::LessEqual,
-				Operator::NotEqual => ExprOperator::NotEqual,
-				Operator::LogicalAnd => ExprOperator::LogicalAnd,
-				Operator::LogicalOr => ExprOperator::LogicalOr,
-				Operator::LogicalXor => ExprOperator::LogicalXor,
-				Operator::Not => ExprOperator::Not,
-				Operator::Assign => panic!("Wrong input: {:?}", tc),
-			},
-			TokenContent::StatementOp (ref st_op) => match st_op {
-				StatementOp::Dot => ExprOperator::DotMemberAccess,
-				_ => panic!("Wrong input: {:?}", tc),
-			},
-			_ => panic!("Wrong input: {:?}", tc),
-		}
-	}
-	
-	pub fn new_un_pref(tc: TokenContent) -> Self {
-		match tc {
-			TokenContent::Operator (tok_op) => match tok_op {
-				Operator::Plus => ExprOperator::UnPlus,
-				Operator::Minus => ExprOperator::UnMinus,
-				Operator::Mul 
-					| Operator::Div 
-					| Operator::Equal 
-					| Operator::Assign 
-					| Operator::Pow 
-					| Operator::Greater 
-					| Operator::GreaterEqual
-					| Operator::Less 
-					| Operator::LessEqual 
-					| Operator::NotEqual
-					| Operator::Not
-					| Operator::LogicalAnd
-					| Operator::LogicalOr
-					| Operator::LogicalXor
-				=> panic!("Wrong input: {:?}", tc),
-			},
-			_ => panic!("Wrong input: {:?}", tc),
-		}
-	}
-	
+impl ExprOperator {	
 	pub fn rank(&self) -> u32 {
 		OP_ATTRS[*self as usize].rank
 	}
@@ -150,104 +99,7 @@ impl ExprOperator {
 	pub fn assot(&self) -> OpAssot {
 		OP_ATTRS[*self as usize].assot
 	}
-
-	pub fn apply(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {	
-		use ExprOperator::*;
-		
-		if let DotMemberAccess = self {
-			let rhs: Symbol = calc_stack
-				.pop()
-				.unwrap();
-				
-			let lhs: Symbol = calc_stack
-				.pop()
-				.unwrap();
-			
-			match (lhs.kind(), rhs.kind()) {
-				(SymbolKind::Operand (Operand::Value (ref value)), SymbolKind::Operand (Operand::FuncCall {
-					ref kind,
-					ref func_name,
-					ref arg_exprs,
-				})) => {
-					match kind {
-						FuncKind::Builtin => {
-							let func_def: &BuiltinFuncDef = value.get_type()
-								.find_member_builtin_func(&func_name, context).unwrap();
-							
-							let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
-							args_values.push(value.clone());
-							for expr in arg_exprs {
-								let value: Value = expr.calc(context);
-								args_values.push(value);
-							}
-							
-							return func_def.call(args_values).unwrap();
-						},
-						
-						FuncKind::UserDefined => todo!(),
-					}
-				},
-				
-				(SymbolKind::Operand (Operand::Variable (ref var_name)), SymbolKind::Operand (Operand::FuncCall {
-					ref kind,
-					ref func_name,
-					ref arg_exprs,
-				})) => {
-					let value: &Value = context.get_variable_value(var_name).unwrap();
-					match kind {
-						FuncKind::Builtin => {
-							let func_def: &BuiltinFuncDef = value.get_type()
-								.find_member_builtin_func(&func_name, context).unwrap();
-							
-							let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
-							args_values.push(value.clone());
-							for expr in arg_exprs {
-								let value: Value = expr.calc(context);
-								args_values.push(value);
-							}
-							
-							return func_def.call(args_values).unwrap();
-						},
-						
-						FuncKind::UserDefined => todo!(),
-					}
-				},
-				
-				(SymbolKind::Operand (Operand::Variable (ref var_name_1)), SymbolKind::Operand (Operand::Variable (ref var_name_2))) => {
-					let value: &Value = context.get_variable_value(&var_name_1).unwrap();
-					
-					if let Value::Struct { fields, .. } = value {
-						fields.get(var_name_2.value()).unwrap().clone()
-					} else {
-						unreachable!();
-					}
-				},
-				
-				_ => todo!(),
-			}
-		} else {
-			match self {
-				BinPlus => self.apply_bin_plus(calc_stack, context),
-				BinMinus => self.apply_bin_minus(calc_stack, context),
-				Div => self.apply_bin_div(calc_stack, context),
-				Mul => self.apply_bin_mul(calc_stack, context),
-				Pow => self.apply_bin_pow(calc_stack, context),
-				UnPlus => self.apply_unary_plus(calc_stack, context),
-				UnMinus => self.apply_unary_minus(calc_stack, context),
-				Equal => self.apply_equal(calc_stack, context),
-				NotEqual => self.apply_not_equal(calc_stack, context),
-				Not => self.apply_not(calc_stack, context),
-				Greater => self.apply_greater(calc_stack, context),
-				GreaterEqual => self.apply_greater_equal(calc_stack, context),
-				Less => self.apply_less(calc_stack, context),
-				LessEqual => self.apply_less_equal(calc_stack, context),
-				LogicalAnd => self.apply_logical_and(calc_stack, context),
-				LogicalOr => self.apply_logical_or(calc_stack, context),
-				LogicalXor => self.apply_logical_xor(calc_stack, context),
-				DotMemberAccess => todo!(),
-			}
-		}
-	}
+	
 	
 	pub fn get_result_data_type(self, calc_stack: &mut Vec<Symbol>, check_context: &Context, operator_pos: CodePos) -> Result<DataType, InterpErr> {
 		use ExprOperator::*;
@@ -256,50 +108,66 @@ impl ExprOperator {
 			let rhs: Symbol = calc_stack.pop()
 				.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 0, 2)))?;
 				
+			let rhs = if let Symbol { kind: SymbolKind::Operand (opnd), .. } = rhs {
+				opnd
+			} else { unreachable!() };
+				
 			let lhs: Symbol = calc_stack.pop()
 				.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 1, 2)))?;
 				
-			match (lhs.kind(), rhs.kind()) {
-				(SymbolKind::Operand (Operand::Value (ref value)), SymbolKind::Operand (Operand::FuncCall {
-					ref kind,
-					ref func_name,
-					ref arg_exprs,
-				})) => {
-					match kind {
-						FuncKind::Builtin => {
-							let func_def: &BuiltinFuncDef = value.get_type()
-								.find_member_builtin_func(&func_name, check_context)?;
-							
-							func_def.check_args_as_member_function(func_name, arg_exprs, value, lhs.pos(), check_context)?;
-							
-							return Ok(func_def.return_type().clone());
-						},
-						
-						FuncKind::UserDefined => todo!(),
+			let (lhs, lhs_pos) = if let Symbol { kind: SymbolKind::Operand (opnd), pos } = lhs {
+				(opnd, pos)
+			} else { unreachable!() };
+				
+			match (&lhs, &rhs) {
+				(_, Operand::Value (_)) =>
+					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
+					
+				(_, Operand::StructLiteral { .. }) =>
+					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
+					
+				(_, Operand::StructFieldValue (_)) =>
+					unreachable!(),
+				
+				
+				(Operand::Value (ref value), Operand::Variable (ref var_name)) => {
+					let value_type: DataType = value.get_type();
+					
+					if let DataType::Complex (ref struct_def) = value_type {
+						let sd_inner = struct_def.inner();
+						let field_def: &StructFieldDef = sd_inner.member_field(var_name)?;
+						Ok(field_def.data_type().clone())
+					} else {
+						Err( ExprErr::NotStruct (lhs_pos).into() )
 					}
 				},
 				
-				(SymbolKind::Operand (Operand::Variable (ref var_name)), SymbolKind::Operand (Operand::FuncCall {
-					ref kind,
+				(Operand::Value (ref value), Operand::FuncCall {
 					ref func_name,
 					ref arg_exprs,
-				})) => {
-					let value: &Value = check_context.get_variable_value(&var_name)?;
-					match kind {
-						FuncKind::Builtin => {
-							let func_def: &BuiltinFuncDef = value.get_type()
-								.find_member_builtin_func(&func_name, check_context)?;
-							
-							func_def.check_args_as_member_function(func_name, arg_exprs, value, lhs.pos(), check_context)?;
-							
-							return Ok(func_def.return_type().clone());
-						},
+				}) => {
+					let value_type: DataType = value.get_type();
+					
+					if func_name.is_builtin() {
+						let func_def: &BuiltinFuncDef = value_type
+							.find_member_builtin_func(&func_name, check_context)?;
 						
-						FuncKind::UserDefined => todo!(),
+						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						
+						return Ok(func_def.return_type().clone());
+					} else {
+						let sd = value_type.struct_def(lhs_pos)?;
+						let sd_inner = sd.inner();
+						let func_def: &UserFuncDef = sd_inner.find_user_func_def(func_name)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						
+						return Ok(func_def.return_type().clone());
 					}
 				},
 				
-				(SymbolKind::Operand (Operand::Variable (ref var_name_1)), SymbolKind::Operand (Operand::Variable (ref var_name_2))) => {
+								
+				(Operand::Variable (ref var_name_1), Operand::Variable (ref var_name_2)) => {
 					let value_type: &DataType = check_context.get_variable_def(&var_name_1)?.get_type();
 					
 					if let DataType::Complex (struct_def) = value_type {
@@ -311,7 +179,126 @@ impl ExprOperator {
 					}
 				},
 				
-				_ => todo!(),
+				(Operand::Variable (ref var_name), Operand::FuncCall {
+					ref func_name,
+					ref arg_exprs,
+				}) => {
+					let value: &Value = check_context.get_variable_value(&var_name)?;
+					let value_type: DataType = value.get_type();
+					
+					if func_name.is_builtin() {
+						let func_def: &BuiltinFuncDef = value_type
+							.find_member_builtin_func(&func_name, check_context)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						
+						return Ok(func_def.return_type().clone());
+					} else {
+						let sd = value_type.struct_def(var_name.pos())?;
+						let sd_inner = sd.inner();
+						let func_def: &UserFuncDef = sd_inner.find_user_func_def(func_name)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						
+						return Ok(func_def.return_type().clone());
+					}
+				},
+				
+				
+				(ref fc @ Operand::FuncCall { .. }, Operand::Variable (ref var_name)) => {
+					let return_type: DataType = fc.check_and_calc_data_type_in_place(check_context)?;
+					
+					if let DataType::Complex (struct_def) = return_type {
+						let sd_inner = struct_def.inner();
+						let field_def: &StructFieldDef = sd_inner.member_field(var_name)?;
+						Ok(field_def.data_type().clone())
+					} else {
+						Err( ExprErr::NotStruct (lhs_pos).into() )
+					}
+				},
+				
+				(ref fc1 @ Operand::FuncCall { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
+					let return_type_1: DataType = fc1.check_and_calc_data_type_in_place(check_context)?;
+					
+					if func_name.is_builtin() {
+						let func_def: &BuiltinFuncDef = return_type_1
+							.find_member_builtin_func(&func_name, check_context)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &return_type_1, lhs_pos, check_context)?;
+						
+						return Ok(func_def.return_type().clone());
+					} else {
+						let sd = return_type_1.struct_def(lhs_pos)?;
+						let sd_inner = sd.inner();
+						let func_def: &UserFuncDef = sd_inner.find_user_func_def(func_name)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &return_type_1, lhs_pos, check_context)?;
+						
+						return Ok(func_def.return_type().clone());
+					}
+				},
+				
+				
+				(sl @ Operand::StructLiteral { .. }, Operand::Variable (ref field_name)) => {
+					let struct_type: DataType = sl.check_and_calc_data_type_in_place(check_context)?;
+					
+					if let DataType::Complex (ref struct_def) = struct_type {
+						let sd_inner = struct_def.inner();
+						let field_def: &StructFieldDef = sd_inner.member_field(field_name)?;
+						Ok(field_def.data_type().clone())
+					} else { unreachable!() }
+				},
+				
+				(sl @ Operand::StructLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
+					let struct_type: DataType = sl.check_and_calc_data_type_in_place(check_context)?;
+					
+					if let DataType::Complex (ref struct_def) = struct_type {
+						let sd_inner = struct_def.inner();
+						
+						if func_name.is_builtin() {
+							let func_def: &BuiltinFuncDef = sd_inner.find_builtin_func_def(func_name)?;
+							func_def.check_args_as_member_function(func_name, arg_exprs, &struct_type, lhs_pos, check_context)?;
+							Ok(func_def.return_type().clone())
+						} else {
+							let func_def: &BuiltinFuncDef = sd_inner.find_builtin_func_def(func_name)?;
+							func_def.check_args_as_member_function(func_name, arg_exprs, &struct_type, lhs_pos, check_context)?;
+							Ok(func_def.return_type().clone())
+						}
+					} else { unreachable!() }
+				},
+				
+				
+				(Operand::StructFieldValue (ref value_rc), Operand::Variable (ref field_name)) => {
+					let value_type: DataType = value_rc.borrow().get_type();
+					
+					if let DataType::Complex (struct_def) = value_type {
+						let sd_inner = struct_def.inner();
+						let field_def: &StructFieldDef = sd_inner.member_field(field_name)?;
+						Ok(field_def.data_type().clone())
+					} else {
+						Err( ExprErr::NotStruct (lhs_pos).into() )
+					}
+				},
+				
+				(Operand::StructFieldValue (ref value_rc), Operand::FuncCall { ref func_name, ref arg_exprs }) => {
+					let value_type: DataType = value_rc.borrow().get_type();
+					
+					if let DataType::Complex (ref struct_def) = value_type {
+						let sd_inner = struct_def.inner();
+						
+						if func_name.is_builtin() {
+							let func_def: &BuiltinFuncDef = sd_inner.find_builtin_func_def(func_name)?;
+							func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+							Ok(func_def.return_type().clone())
+						} else {
+							let func_def: &BuiltinFuncDef = sd_inner.find_builtin_func_def(func_name)?;
+							func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+							Ok(func_def.return_type().clone())
+						}
+					} else {
+						Err( ExprErr::NotStruct (lhs_pos).into() )
+					}
+				},
 			}
 		} else {
 			match OP_ATTRS[self as usize].arity {
@@ -374,6 +361,216 @@ impl ExprOperator {
 		}
 	}
 	
+	pub fn apply(&self, calc_stack: &mut Vec<Symbol>, context: &Context, optr_pos: CodePos) -> Symbol {	
+		use ExprOperator::*;
+		
+		if let DotMemberAccess = self {
+			let rhs: Symbol = calc_stack
+				.pop()
+				.unwrap();
+				
+			let (rhs_pos, rhs) = if let Symbol { pos, kind: SymbolKind::Operand (opnd) } = rhs {
+				(pos, opnd)
+			} else { unreachable!() };
+				
+			let lhs: Symbol = calc_stack
+				.pop()
+				.unwrap();
+				
+			let (lhs, lhs_pos) = if let Symbol { kind: SymbolKind::Operand (opnd), pos } = lhs {
+				(opnd, pos)
+			} else { unreachable!() };
+			
+			match (&lhs, &rhs) {
+				(_, Operand::Value (_)) =>
+					unreachable!(),
+					
+				(_, Operand::StructLiteral { .. }) =>
+					unreachable!(),
+					
+				(_, Operand::StructFieldValue (_)) =>
+					unreachable!(),
+				
+				
+				(Operand::Value (ref value), Operand::Variable (ref var_name)) => {
+					if let Value::Struct { fields, .. } = value {
+						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(var_name.value()).unwrap());
+						let opnd: Operand = Operand::StructFieldValue(value_rc);
+						Symbol {
+							pos: rhs_pos,
+							kind: SymbolKind::Operand (opnd),
+						}
+					} else { unreachable!() }
+				},
+				
+				(Operand::Value (ref value), Operand::FuncCall {
+					ref func_name,
+					ref arg_exprs,
+				}) => Self::call_member_func_of_value(value, func_name, arg_exprs, context, lhs_pos, rhs_pos),
+				
+				
+				(Operand::Variable (ref var_name_1), Operand::Variable (ref var_name_2)) => {
+					let value: &Value = context.get_variable_value(&var_name_1).unwrap();
+					
+					if let Value::Struct { fields, .. } = value {
+						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(var_name_2.value()).unwrap());
+						let opnd: Operand = Operand::StructFieldValue (value_rc);
+						Symbol {
+							pos: rhs_pos,
+							kind: SymbolKind::Operand (opnd),
+						}
+					} else {
+						unreachable!();
+					}
+				},
+				
+				(Operand::Variable (ref var_name), Operand::FuncCall {
+					ref func_name,
+					ref arg_exprs,
+				}) => {
+					let value: &Value = context.get_variable_value(var_name).unwrap();
+					
+					Self::call_member_func_of_value(value, func_name, arg_exprs, context, lhs_pos, rhs_pos)
+				},
+				
+				
+				(ref fc @ Operand::FuncCall { .. }, Operand::Variable (ref var_name)) => {
+					let result: Value = fc.calc_in_place(context).unwrap();
+					
+					if let Value::Struct { fields, .. } = result {
+						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(var_name.value()).unwrap());
+						let opnd: Operand = Operand::StructFieldValue (value_rc);
+						Symbol {
+							pos: rhs_pos,
+							kind: SymbolKind::Operand (opnd),
+						}
+					} else {
+						unreachable!();
+					}
+				},
+				
+				(ref fc1 @ Operand::FuncCall { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
+					let result: Value = fc1.calc_in_place(context).unwrap();					
+					Self::call_member_func_of_value(&result, func_name, arg_exprs, context, lhs_pos, rhs_pos)
+				},
+				
+				
+				(sl @ Operand::StructLiteral { .. }, Operand::Variable (ref field_name)) => {
+					let struct_value: Value = sl.calc_in_place(context).unwrap();
+					
+					if let Value::Struct { fields, .. } = struct_value {
+						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(field_name.value()).unwrap());
+						let opnd: Operand = Operand::StructFieldValue(value_rc);
+						Symbol {
+							pos: rhs_pos,
+							kind: SymbolKind::Operand (opnd),
+						}
+					} else { unreachable!() }
+				},
+				
+				(sl @ Operand::StructLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
+					let struct_value: Value = sl.calc_in_place(context).unwrap();
+					Self::call_member_func_of_value(&struct_value, func_name, arg_exprs, context, lhs_pos, rhs_pos)
+				},
+				
+				
+				(Operand::StructFieldValue (ref value_rc), Operand::Variable (ref field_name)) => {
+					if let Value::Struct { ref fields, .. } = *value_rc.borrow() {
+						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(field_name.value()).unwrap());
+						let opnd: Operand = Operand::StructFieldValue (value_rc);
+						Symbol {
+							pos: rhs_pos,
+							kind: SymbolKind::Operand (opnd),
+						}
+					} else {
+						unreachable!();
+					}
+				},
+				
+				(Operand::StructFieldValue (ref value_rc), Operand::FuncCall { ref func_name, ref arg_exprs }) =>
+					Self::call_member_func_of_value(&value_rc.borrow(), func_name, arg_exprs, context, lhs_pos, rhs_pos),
+			}
+		} else {
+			let value: Value = match self {
+				BinPlus => self.apply_bin_plus(calc_stack, context),
+				BinMinus => self.apply_bin_minus(calc_stack, context),
+				Div => self.apply_bin_div(calc_stack, context),
+				Mul => self.apply_bin_mul(calc_stack, context),
+				Pow => self.apply_bin_pow(calc_stack, context),
+				UnPlus => self.apply_unary_plus(calc_stack, context),
+				UnMinus => self.apply_unary_minus(calc_stack, context),
+				Equal => self.apply_equal(calc_stack, context),
+				NotEqual => self.apply_not_equal(calc_stack, context),
+				Not => self.apply_not(calc_stack, context),
+				Greater => self.apply_greater(calc_stack, context),
+				GreaterEqual => self.apply_greater_equal(calc_stack, context),
+				Less => self.apply_less(calc_stack, context),
+				LessEqual => self.apply_less_equal(calc_stack, context),
+				LogicalAnd => self.apply_logical_and(calc_stack, context),
+				LogicalOr => self.apply_logical_or(calc_stack, context),
+				LogicalXor => self.apply_logical_xor(calc_stack, context),
+				DotMemberAccess => unreachable!(),
+			};
+			let opnd: Operand = Operand::Value (value);
+			Symbol {
+				pos: optr_pos,
+				kind: SymbolKind::Operand (opnd),
+			}
+		}
+	}
+	
+	
+	fn call_member_func_of_value(value: &Value, func_name: &NameToken, arg_exprs: &Vec<Expr>, context: &Context, lhs_pos: CodePos, rhs_pos: CodePos) -> Symbol {
+		if func_name.is_builtin() {
+			let func_def: &BuiltinFuncDef = value.get_type()
+				.find_member_builtin_func(&func_name, context).unwrap();
+			
+			let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
+			args_values.push(value.clone());
+			for expr in arg_exprs {
+				let value: Value = expr.calc(context);
+				args_values.push(value);
+			}
+			
+			let value: Value = func_def.call(args_values).unwrap();
+			let opnd: Operand = Operand::Value(value);
+			
+			Symbol {
+				pos: rhs_pos,
+				kind: SymbolKind::Operand (opnd),
+			}
+		} else {
+			let value_type: DataType = value.get_type();
+			let sd = value_type.struct_def(lhs_pos).unwrap();
+			let sd_inner = sd.inner();
+			let func_def: &UserFuncDef = sd_inner.find_user_func_def(func_name).unwrap();
+			
+			let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
+			args_values.push(value.clone());
+			for expr in arg_exprs {
+				let value: Value = expr.calc(context);
+				args_values.push(value);
+			}
+			
+			let mut next_context = context.new_stack_frame_context();
+			
+			let func_args: &Vec<UserFuncArg> = func_def.args();
+			for i in 0..args_values.len() {
+				next_context.add_variable(
+					func_args[i].name().clone(),
+					func_args[i].data_type().clone(),
+					Some(args_values[i].clone())).unwrap();
+			}
+			
+			let value: Value = func_def.call(&mut next_context).unwrap();
+			let opnd: Operand = Operand::Value(value);
+			
+			Symbol {
+				pos: rhs_pos,
+				kind: SymbolKind::Operand (opnd),
+			}
+		}
+	}
 	
 	fn apply_bin_plus(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
 		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
@@ -505,13 +702,15 @@ impl ExprOperator {
 			.pop()
 			.unwrap()
 			.unwrap_operand()
-			.calc_in_place(context);
+			.calc_in_place(context)
+			.unwrap();
 			
 		let lhs: Value = calc_stack
 			.pop()
 			.unwrap()
 			.unwrap_operand()
-			.calc_in_place(context);
+			.calc_in_place(context)
+			.unwrap();
 			
 		(lhs, rhs)
 	}
@@ -546,7 +745,8 @@ impl ExprOperator {
 			.pop()
 			.unwrap()
 			.unwrap_operand()
-			.calc_in_place(context);
+			.calc_in_place(context)
+			.unwrap();
 		
 		op
 	}

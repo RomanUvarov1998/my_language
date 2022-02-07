@@ -1,6 +1,8 @@
-use super::data_type::{DataType, Primitive, DataTypeErr};
+use super::data_type::{DataType, Primitive};
 use super::struct_def::StructDef;
 use std::collections::HashMap;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 //------------------- Value -------------------
 
@@ -13,7 +15,7 @@ pub enum Value {
 	Struct {
 		struct_def: StructDef,
 		// TODO: try use &str for key to not to copy the whole string
-		fields: HashMap<String, Value>,
+		fields: HashMap<String, Rc<RefCell<Value>>>,
 	},
 	None,
 }
@@ -72,7 +74,7 @@ impl std::fmt::Display for Value {
 			Value::Struct { struct_def, fields } => {
 				writeln!(f, "Value of struct '{}' {{", struct_def.inner().name().value())?;
 				for (key, val) in fields {
-					writeln!(f, "\t{}: {},", key, val)?;
+					writeln!(f, "\t{}: {},", key, val.borrow())?;
 				}
 				writeln!(f, "}}")
 			},

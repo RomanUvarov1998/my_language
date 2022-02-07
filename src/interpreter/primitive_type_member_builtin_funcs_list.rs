@@ -6,11 +6,11 @@ use super::struct_def::StructDefErr;
 
 //------------------- PrimitiveTypeMemberFuncsList -----------------------
 
-pub struct PrimitiveTypeMemberFuncsList {
+pub struct PrimitiveTypeMemberBuiltinFuncsList {
 	lookup: Vec<Vec<BuiltinFuncDef>>,
 }
 
-impl PrimitiveTypeMemberFuncsList {
+impl PrimitiveTypeMemberBuiltinFuncsList {
 	pub fn new() -> Self {		
 		let lookup_float32 = vec![
 			BuiltinFuncDef::new(
@@ -144,12 +144,12 @@ impl PrimitiveTypeMemberFuncsList {
 
 #[cfg(test)]
 mod tests {
-	use super::PrimitiveTypeMemberFuncsList;
+	use super::PrimitiveTypeMemberBuiltinFuncsList;
 	use super::super::data_type::Primitive;
 	
 	#[test]
 	fn test_loopkup_table() {
-		let list = PrimitiveTypeMemberFuncsList::new();
+		let list = PrimitiveTypeMemberBuiltinFuncsList::new();
 		
 		assert_eq!(list.lookup[Primitive::Float32 as usize].len(), 3);
 		assert_eq!(list.lookup[Primitive::Float32 as usize][0].name(), "abs");

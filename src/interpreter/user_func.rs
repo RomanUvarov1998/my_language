@@ -46,11 +46,49 @@ impl UserFuncDef {
 			if !self.args[i].type_check(&args_data_types[i]) {
 				return Err(UserFuncErr::ArgType {
 					func_signature: format!("{}", self),
-					arg_name: self.args[i].name.clone(),
 					arg_expr_pos: args_exprs[i].pos(),
 					actual_type: self.args[i].data_type.clone(),
 					given_type: args_data_types[i].clone(),
 				}.into());
+			}
+		}
+		
+		Ok(())
+	}
+	
+	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value_type: &DataType, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
+		if self.args.len() != args_exprs.len() + 1 {
+			return Err( UserFuncErr::ArgsCnt {
+				func_signature: format!("{}", self),
+				func_name_pos: func_name.pos(),
+				actual_cnt: self.args.len(),
+				given_cnt: args_exprs.len() + 1,
+			}.into() );
+		}
+						
+		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
+			.map(|expr| expr.check_and_calc_data_type(check_context))
+			.collect();
+			
+		let args_data_types: Vec<DataType> = args_data_types_result?;
+		
+		if value_type.ne(&self.args[0].data_type) {
+			return Err( UserFuncErr::ArgType {
+				func_signature: format!("{}", self),
+				arg_expr_pos: caller_pos,
+				actual_type: self.args[0].data_type.clone(),
+				given_type: value_type.clone(),
+			}.into() );
+		}
+		
+		for i in 1..self.args.len() {
+			if !self.args[i].type_check(&args_data_types[i]) {
+				return Err( UserFuncErr::ArgType {
+					func_signature: format!("{}", self),
+					arg_expr_pos: args_exprs[i].pos(),
+					actual_type: self.args[i].data_type.clone(),
+					given_type: args_data_types[i].clone(),
+				}.into() );
 			}
 		}
 		
@@ -65,7 +103,7 @@ impl UserFuncDef {
 		&self.args
 	}
 	
-	pub fn get_name(&self) -> &NameToken {
+	pub fn name(&self) -> &NameToken {
 		&self.name
 	}
 
@@ -140,7 +178,6 @@ pub enum UserFuncErr {
 	},
 	ArgType {
 		func_signature: String,
-		arg_name: NameToken,
 		arg_expr_pos: CodePos,
 		actual_type: DataType,
 		given_type: DataType,
@@ -158,8 +195,8 @@ impl std::fmt::Display for UserFuncErr {
 		match self {
 			UserFuncErr::ArgsCnt { func_signature, actual_cnt, given_cnt, .. } =>
 				write!(f, "Wrong arguments count for user-defined function:\n{}\n{} expected but {} found", func_signature, actual_cnt, given_cnt),
-			UserFuncErr::ArgType { func_signature, arg_name, actual_type, given_type, .. } =>
-				write!(f, "Wrong type of argument '{}' for user-defined function:\n{}\n'{}' expected but '{}' found", arg_name, func_signature, actual_type, given_type),
+			UserFuncErr::ArgType { func_signature, actual_type, given_type, .. } =>
+				write!(f, "Wrong type of argument for user-defined function:\n{}\n'{}' expected but '{}' found", func_signature, actual_type, given_type),
 			UserFuncErr::NotDefined { name } =>
 				write!(f, "User-defined function {} is not defined", name.value()),
 			UserFuncErr::AlreadyExists { name } => write!(f, "User-defined function {} already defined", name.value()),

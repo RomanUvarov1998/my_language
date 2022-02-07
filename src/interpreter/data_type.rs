@@ -1,9 +1,11 @@
 use super::value::Value;
 use super::struct_def::{StructDef, StructDefErr};
-use super::utils::NameToken;
+use super::utils::{NameToken, CodePos};
 use super::context::Context;
 use super::builtin_func::BuiltinFuncDef;
 use std::collections::HashMap;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 //--------------------------- DataType -------------------------
 
@@ -27,12 +29,12 @@ impl DataType {
 		match self {
 			DataType::Primitive (dt) => dt.default_value(),
 			DataType::Complex (sd) => {
-				let mut fields = HashMap::<String, Value>::new();
+				let mut fields = HashMap::<String, Rc<RefCell<Value>>>::new();
 				let sd_inner = sd.inner();
 				for field_def in sd_inner.field_defs() {
 					fields.insert(
 						field_def.name().value().to_string(),
-						field_def.data_type().default_value());
+						Rc::new(RefCell::new(field_def.data_type().default_value())));
 				}
 				Value::Struct {
 					struct_def: sd.clone(),
@@ -48,8 +50,24 @@ impl DataType {
 		context: &'context Context
 	) -> Result<&'context BuiltinFuncDef, StructDefErr> {
 		match self {
-			DataType::Primitive (dt) => context.find_member_builtin_func_def(*dt, func_name),
-			DataType::Complex (_) => todo!(),
+			DataType::Primitive (dt) => {
+				assert!(func_name.is_builtin());
+				context.find_member_builtin_func_def(*dt, func_name)
+			},
+			DataType::Complex (_) => Err( StructDefErr::BuiltinMemberFuncIsNotDefined {
+				name: func_name.clone(),
+			} ),
+		}
+	}
+	
+	pub fn struct_def(&self, value_pos: CodePos) -> Result<&StructDef, StructDefErr> {
+		match self {
+			DataType::Primitive (_) => Err( StructDefErr::NotAStruct {
+				value_pos
+			} ),
+			DataType::Complex (struct_def) => {
+				Ok(struct_def)
+			},
 		}
 	}
 }
@@ -115,7 +133,9 @@ impl std::fmt::Display for DataTypeErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			DataTypeErr::NotDefined { name } => 
-				write!(f, "DataType '{}' is not defined", name.value()),
+				write!(f, "{} dataType '{}' is not defined", 
+					if name.is_builtin() { "Builtin" } else { "User-defined" }, 
+					name.value()),
 			DataTypeErr::PrimitiveTypeInitializedAsComplex { type_name_in_code } => 
 				write!(f, "DataType '{}' value is primitive, but declared as struct", type_name_in_code.value()),
 		}

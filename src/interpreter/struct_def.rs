@@ -1,4 +1,4 @@
-use super::data_type::{DataType, DataTypeErr};
+use super::data_type::DataType;
 use super::user_func::UserFuncDef;
 use super::builtin_func::BuiltinFuncDef;
 use super::utils::{CodePos, NameToken};
@@ -40,6 +40,7 @@ impl StructDef {
 		self.inner.borrow()
 	}
 	
+	#[allow(dead_code)]
 	pub fn inner_mut(&self) -> RefMut<'_, StructDefInner> {
 		self.inner.borrow_mut()
 	}
@@ -104,7 +105,7 @@ impl std::fmt::Debug for StructDef {
 pub struct StructDefInner {
 	name: NameToken,
 	fields: HashMap<String, StructFieldDef>, // TODO: try using &str
-	member_funcs: Vec<UserFuncDef>,	// TODO: use HashMap for member_funcs and builtin_funcs
+	user_funcs: Vec<UserFuncDef>,	// TODO: use HashMap for user_funcs and builtin_funcs
 	builtin_funcs: Vec<BuiltinFuncDef>,
 }
 
@@ -113,7 +114,7 @@ impl StructDefInner {
 		Self {
 			name,
 			fields,
-			member_funcs: Vec::new(),
+			user_funcs: Vec::new(),
 			builtin_funcs: Vec::new(),
 		}
 	}
@@ -135,6 +136,7 @@ impl StructDefInner {
 		}
 	}
 	
+	#[allow(dead_code)]
 	pub fn add_builtin_func_def(&mut self, func_def: BuiltinFuncDef) {
 		if let Some(_) = self.builtin_funcs.iter().find(|fd| fd.name() == func_def.name()) {
 			panic!("Builtin member function '{}' is already defined", func_def.name());
@@ -147,6 +149,13 @@ impl StructDefInner {
 		match self.builtin_funcs.iter().find(|fd| fd.name() == name.value()) {
 			Some(func_def) => Ok(func_def),
 			None => Err( StructDefErr::BuiltinMemberFuncIsNotDefined { name: name.clone() } )
+		}
+	}
+
+	pub fn find_user_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, StructDefErr> {
+		match self.user_funcs.iter().find(|fd| fd.name().value() == name.value()) {
+			Some(func_def) => Ok(func_def),
+			None => Err( StructDefErr::UserMemberFuncIsNotDefined { name: name.clone() } )
 		}
 	}
 }
@@ -181,6 +190,9 @@ impl StructFieldDef {
 // TODO: refactor fields' names
 #[derive(Debug, PartialEq, Eq)]
 pub enum StructDefErr {
+	NotAStruct {
+		value_pos: CodePos,
+	},
 	StructDefNotInRootContext {
 		struct_pos: CodePos,
 	},
@@ -207,7 +219,7 @@ pub enum StructDefErr {
 	BuiltinMemberFuncIsNotDefined {
 		name: NameToken,
 	},
-	StructIsAlreadyDefined {
+	UserMemberFuncIsNotDefined {
 		name: NameToken,
 	},
 }
@@ -215,6 +227,8 @@ pub enum StructDefErr {
 impl std::fmt::Display for StructDefErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
+			StructDefErr::NotAStruct { .. } =>
+				write!(f, "Struct definitions can only be in the global scope"),
 			StructDefErr::StructDefNotInRootContext { .. } =>
 				write!(f, "Struct definitions can only be in the global scope"),
 			StructDefErr::StructDefIsAlreadyDefined { defined_name } => 
@@ -232,8 +246,8 @@ impl std::fmt::Display for StructDefErr {
 				write!(f, "Member field '{}' is not declared", &name_in_code),
 			StructDefErr::BuiltinMemberFuncIsNotDefined { name } => 
 				write!(f, "Builtin member function '{}' is not defined", &name),
-			StructDefErr::StructIsAlreadyDefined { name } => 
-				write!(f, "Struct '{}' is already defined", &name),
+			StructDefErr::UserMemberFuncIsNotDefined { name } => 
+				write!(f, "User member function '{}' is not defined", &name),
 		}
 	}
 }

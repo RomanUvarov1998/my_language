@@ -5,13 +5,14 @@ use super::super::data_type::{DataType, DataTypeErr};
 use super::super::builtin_func::BuiltinFuncDef;
 use super::super::user_func::{UserFuncArg, UserFuncDef};
 use super::super::utils::{CodePos, CharPos, NameToken};
-use super::super::statement::FuncKind;
 use super::super::context::Context;
 use super::super::struct_def::StructDef;
 use super::{Expr, ExprContext, ExprContextKind};
 use super::expr_operator::ExprOperator;
 use super::unexpected;
 use std::collections::HashMap;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 //------------------------------- Symbol ----------------------------------
 
@@ -62,12 +63,14 @@ impl Symbol {
 			},
 			
 			TokenContent::BuiltinName (name) => {
-				let sym = Self::parse_func_call_or_name_or_struct_literal(tokens_iter, FuncKind::Builtin, name, pos)?;
+				let nt = NameToken::new_with_pos(name, pos, true);
+				let sym = Self::parse_func_call_or_name_or_struct_literal(tokens_iter, nt)?;
 				Ok(Some(sym))
 			},
 			
 			TokenContent::Name (name) => {
-				let sym = Self::parse_func_call_or_name_or_struct_literal(tokens_iter, FuncKind::UserDefined, name, pos)?;
+				let nt = NameToken::new_with_pos(name, pos, false);
+				let sym = Self::parse_func_call_or_name_or_struct_literal(tokens_iter, nt)?;
 				Ok(Some(sym))
 			},
 			
@@ -154,7 +157,7 @@ impl Symbol {
 		}
 	}
 	
-	fn parse_func_call_or_name_or_struct_literal(tokens_iter: &mut TokensIter, kind: FuncKind, name: String, pos: CodePos) -> Result<Symbol, InterpErr> {
+	fn parse_func_call_or_name_or_struct_literal(tokens_iter: &mut TokensIter, name: NameToken) -> Result<Symbol, InterpErr> {
 		match tokens_iter.peek_or_end_reached_err()?.content() {
 			// func call
 			TokenContent::Bracket (Bracket::Left) => {
@@ -187,9 +190,9 @@ impl Symbol {
 					}
 				}
 				
-				let func_name = NameToken::new_with_pos(name, pos);
+				let func_name = name;
 				
-				let sym = Symbol::new_func_call(kind, func_name, arg_exprs);
+				let sym = Symbol::new_func_call(func_name, arg_exprs);
 				Ok(sym)
 			},
 			
@@ -197,7 +200,7 @@ impl Symbol {
 			TokenContent::Bracket (Bracket::LeftCurly) => {
 				tokens_iter.next_or_end_reached_err().unwrap(); // skip '{'
 				
-				let data_type_name = NameToken::new_with_pos(name, pos);
+				let data_type_name = name;
 				
 				let mut fields = Vec::<StructLiteralField>::new();
 				
@@ -206,7 +209,29 @@ impl Symbol {
 						Token { content: TokenContent::Bracket (Bracket::RightCurly), pos } => break pos.end(),
 						
 						Token { content: TokenContent::Name (name), pos } => {
-							let field_name = NameToken::new_with_pos(name, pos);
+							let field_name = NameToken::new_with_pos(name, pos, false);
+							
+							tokens_iter.next_expect_colon()?;
+							
+							let value_expr = Expr::new(tokens_iter, ExprContextKind::StructField)?;
+							
+							fields.push(StructLiteralField::new(field_name, value_expr));
+							
+							match tokens_iter.next_or_end_reached_err()? {
+								Token { content: TokenContent::StatementOp (StatementOp::Comma), .. } => continue,
+								Token { content: TokenContent::Bracket (Bracket::RightCurly), pos } => break pos.end(),
+								found @ _ => return Err(TokenErr::ExpectedButFound {
+									expected: vec![
+										TokenContent::StatementOp (StatementOp::Comma),
+										TokenContent::Bracket (Bracket::RightCurly),
+									],
+									found,
+								}.into()),
+							}
+						},
+						
+						Token { content: TokenContent::BuiltinName (name), pos } => {
+							let field_name = NameToken::new_with_pos(name, pos, true);
 							
 							tokens_iter.next_expect_colon()?;
 							
@@ -238,7 +263,7 @@ impl Symbol {
 				};
 				
 				Ok(Symbol {
-					pos: CodePos::new(pos.begin(), last_pos),
+					pos: CodePos::new(data_type_name.pos().begin(), last_pos),
 					kind: SymbolKind::Operand (Operand::StructLiteral {
 						data_type_name,
 						fields,
@@ -248,7 +273,6 @@ impl Symbol {
 			
 			// variable
 			_ => {
-				let name = NameToken::new_with_pos(name, pos);
 				let sym = Symbol::new_name(name);
 				Ok(sym)
 			},
@@ -268,11 +292,10 @@ impl Symbol {
 			kind: SymbolKind::Operand( Operand::Variable (name_tok) ),
 		}
 	}
-	pub fn new_func_call(kind: FuncKind, func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
+	pub fn new_func_call(func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
 		let pos = func_name.pos();
 		Self {
 			kind: SymbolKind::Operand( Operand::FuncCall {
-				kind,
 				func_name, 
 				arg_exprs,
 			} ),
@@ -285,27 +308,7 @@ impl Symbol {
 			pos,
 		}
 	}
-	pub fn new_bool_literal(kw: Keyword, pos: CodePos) -> Self {
-		let kind: SymbolKind = match kw {
-			Keyword::True => SymbolKind::Operand (Operand::Value (Value::from(true))),
-			Keyword::False => SymbolKind::Operand (Operand::Value (Value::from(false))),
-			_ => panic!("Unexpected input: {:?}", kw),
-		};
-		Self { kind, pos }
-	}
-	pub fn new_left_bracket(pos: CodePos) -> Self {
-		Self { 
-			kind: SymbolKind::LeftBracket, 
-			pos,
-		}
-	}
-	pub fn new_un_pref_op(tc: TokenContent, pos: CodePos) -> Self {
-		Self { 
-			kind: SymbolKind::ExprOperator( ExprOperator::new_un_pref(tc) ), 
-			pos,
-		}
-	}
-
+	
 	pub fn kind(&self) -> &SymbolKind {
 		&self.kind
 	}
@@ -328,12 +331,13 @@ impl PartialEq for Symbol {
 	}
 }
 
+//------------------------------- Operand ----------------------------------
+
 #[derive(Debug, Clone)]
 pub enum Operand {
 	Value (Value),
 	Variable (NameToken),
 	FuncCall {
-		kind: FuncKind,
 		func_name: NameToken, 
 		arg_exprs: Vec<Expr>,
 	},
@@ -341,8 +345,11 @@ pub enum Operand {
 		data_type_name: NameToken,
 		fields: Vec<StructLiteralField>,
 	},
+	StructFieldValue (Rc<RefCell<Value>>),
 }
+
 impl Eq for Operand {}
+
 impl PartialEq for Operand {
 	fn eq(&self, other: &Self) -> bool {
 		match self {
@@ -354,42 +361,44 @@ impl PartialEq for Operand {
 				Operand::Variable (op2) => op1 == op2,
 				_ => false,
 			},
-			Operand::FuncCall { kind: kind1, func_name: fn1, arg_exprs: ae1 } => match other {
-				Operand::FuncCall { kind: kind2, func_name: fn2, arg_exprs: ae2 } => fn1 == fn2 && ae1 == ae2 && kind1 == kind2,
+			Operand::FuncCall { func_name: fn1, arg_exprs: ae1 } => match other {
+				Operand::FuncCall { func_name: fn2, arg_exprs: ae2 } => fn1 == fn2 && ae1 == ae2,
 				_ => false,
 			},
 			sl_1 @ Operand::StructLiteral { .. } => match other {
 				sl_2 @ Operand::StructLiteral { .. } => sl_1 == sl_2,
 				_ => false,
 			},
+			Operand::StructFieldValue (v1) => match other {
+				Operand::StructFieldValue (v2) => *v1.borrow() == *v2.borrow(),
+				_ => false,
+			},
 		}
 	}
 }
-
-//------------------------------- Operand ----------------------------------
 
 impl Operand {
 	pub fn check_and_calc_data_type_in_place(&self, check_context: &Context) -> Result<DataType, InterpErr> {
 		let dt: DataType = match self {
 			Operand::Value (val) => val.get_type().clone(),
+			
 			Operand::Variable (name) =>
 				check_context.get_variable_value(&name)?.get_type().clone(),
-			Operand::FuncCall { kind, func_name, arg_exprs } => {
-				match kind {
-					FuncKind::Builtin => {
-						let f: &BuiltinFuncDef = check_context.find_builtin_func_def(&func_name).unwrap();
 				
-						f.check_args(&func_name, arg_exprs, check_context)?;
-						f.return_type().clone()
-					},
-					FuncKind::UserDefined => {
-						let f: &UserFuncDef = check_context.find_func_def(&func_name).unwrap();
-				
-						f.check_args(arg_exprs, check_context)?;
-						f.return_type().clone()
-					},
+			Operand::FuncCall { func_name, arg_exprs } => {
+				if func_name.is_builtin() {
+					let f: &BuiltinFuncDef = check_context.find_builtin_func_def(&func_name).unwrap();
+			
+					f.check_args(&func_name, arg_exprs, check_context)?;
+					f.return_type().clone()
+				} else {
+					let f: &UserFuncDef = check_context.find_func_def(&func_name).unwrap();
+			
+					f.check_args(arg_exprs, check_context)?;
+					f.return_type().clone()
 				}
 			},
+			
 			Operand::StructLiteral { data_type_name, fields } => {
 				let dt: DataType = check_context.find_type_by_name(data_type_name)?;
 				
@@ -400,71 +409,88 @@ impl Operand {
 				}
 				
 				dt
-			},				
+			},
+			
+			Operand::StructFieldValue (value_rc) => value_rc.borrow().get_type(),
 		};
+		
 		Ok(dt)
 	}
 	
-	pub fn calc_in_place(&self, context: &Context) -> Value {
+	pub fn calc_in_place(&self, context: &Context) -> Option<Value> {
 		match self {
-			Operand::Value (val) => val.clone(), // TODO: try do it without cloning values
-			Operand::Variable (name) => context.get_variable_value(&name).unwrap().clone(),
-			Operand::FuncCall { kind, func_name, arg_exprs } => {
-				match kind {
-					FuncKind::Builtin => {
-						let f: &BuiltinFuncDef = context.find_builtin_func_def(&func_name).unwrap();
-				
-						let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
-						
-						for expr in arg_exprs {
-							let value: Value = expr.calc(context);
-							args_values.push(value);
-						}
-						
-						f.call(args_values).unwrap()
-					},
-					FuncKind::UserDefined => {
-						let f: &UserFuncDef = context.find_func_def(&func_name).unwrap();
-				
-						let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
-						
-						for expr in arg_exprs {
-							let value: Value = expr.calc(context);
-							args_values.push(value);
-						}
-						
-						let mut next_context = context.new_stack_frame_context();
-						
-						let func_args: &Vec<UserFuncArg> = f.args();
-						for i in 0..args_values.len() {
-							next_context.add_variable(
-								func_args[i].name().clone(),
-								func_args[i].data_type().clone(),
-								Some(args_values[i].clone())).unwrap();
-						}
-						
-						f.call(&mut next_context).unwrap()
-					},
+			Operand::Value (val) => Some(val.clone()), // TODO: try do it without cloning values
+			
+			Operand::Variable (name) => Some(context.get_variable_value(&name).unwrap().clone()),
+			
+			Operand::FuncCall { func_name, arg_exprs } => {
+				if func_name.is_builtin() {
+					let f: &BuiltinFuncDef = context.find_builtin_func_def(&func_name).unwrap();
+			
+					let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
+					
+					for expr in arg_exprs {
+						let value: Value = expr.calc(context);
+						args_values.push(value);
+					}
+					
+					f.call(args_values)
+				} else {
+					let f: &UserFuncDef = context.find_func_def(&func_name).unwrap();
+			
+					let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
+					
+					for expr in arg_exprs {
+						let value: Value = expr.calc(context);
+						args_values.push(value);
+					}
+					
+					let mut next_context = context.new_stack_frame_context();
+					
+					let func_args: &Vec<UserFuncArg> = f.args();
+					for i in 0..args_values.len() {
+						next_context.add_variable(
+							func_args[i].name().clone(),
+							func_args[i].data_type().clone(),
+							Some(args_values[i].clone())).unwrap();
+					}
+					
+					f.call(&mut next_context)
 				}
 			},
+			
 			Operand::StructLiteral { data_type_name, fields } => {
-				let mut calculated_fields = HashMap::<String, Value>::new();
+				let mut calculated_fields = HashMap::<String, Rc<RefCell<Value>>>::new();
 				
 				for field in fields {
 					calculated_fields.insert(
 						field.field_name().value().to_string(), 
-						field.value_expr().calc(context));
+						Rc::new(RefCell::new(field.value_expr().calc(context))));
 				}
 				
 				let struct_def: StructDef = if let DataType::Complex(struct_def) = context.find_type_by_name(data_type_name).unwrap() {
 					struct_def
 				} else { unreachable!(); };
 				
-				Value::Struct {
+				Some(Value::Struct {
 					struct_def,
 					fields: calculated_fields,
-				}
+				})
 			},
+			
+			Operand::StructFieldValue (value_rc) => Some(value_rc.borrow().clone()),
+		}
+	}
+}
+
+impl std::fmt::Display for Operand {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Operand::Value (_) => write!(f, "value literal"),
+			Operand::Variable (_) => write!(f, "variable"),
+			Operand::FuncCall { .. } => write!(f, "function call"),
+			Operand::StructLiteral { .. } => write!(f, "struct literal"),
+			Operand::StructFieldValue (_) => write!(f, "struct field"),
 		}
 	}
 }

@@ -10,7 +10,6 @@ use std::collections::VecDeque;
 pub struct TokensIter {
 	iter: CharsIter,
 	peeked_tokens: VecDeque<Token>,
-	cached_queue: VecDeque<Token>,
 }
 
 impl TokensIter {
@@ -18,7 +17,6 @@ impl TokensIter {
 		Self { 
 			iter: CharsIter::new(),
 			peeked_tokens: VecDeque::new(),
-			cached_queue: VecDeque::new(),
 		}
 	}
 	
@@ -47,8 +45,9 @@ impl TokensIter {
 		}
 	}
 	
-	pub fn skip(&mut self) {
-		self.next_or_end_reached_err().unwrap();
+	pub fn skip_or_end_reached_err(&mut self) -> Result<(), TokenErr> {
+		self.next_or_end_reached_err()?;
+		Ok(())
 	}
 	
 	pub fn next_or_end_reached_err(&mut self) -> Result<Token, TokenErr> {
@@ -102,7 +101,27 @@ impl TokensIter {
 			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 		}
 	}
-		
+	
+	pub fn expect_keyword(&mut self, kw: Keyword) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::Keyword (kw)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
+	}
+	
+	fn expect(actual_token: Token, expected_tc: TokenContent) -> Result<(), TokenErr> {
+		if *actual_token.content() == expected_tc {
+			Ok(())
+		} else {
+			Err( TokenErr::ExpectedButFound {
+				expected: vec![expected_tc], 
+				found: actual_token,
+			} )
+		}
+	}
+
 	fn parse_number_or_dot(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
 		let (mut value, mut has_dot): (f32, bool) = match first_char.kind() {
 			CharKind::Digit (d1) => (d1 as f32, false), // X
@@ -402,17 +421,6 @@ impl TokensIter {
 			}
 			
 			_ => panic!("Unexpected input: {:?}", first_char),
-		}
-	}
-
-	fn expect(actual_token: Token, expected_tc: TokenContent) -> Result<(), TokenErr> {
-		if *actual_token.content() == expected_tc {
-			Ok(())
-		} else {
-			Err( TokenErr::ExpectedButFound {
-				expected: vec![expected_tc], 
-				found: actual_token,
-			} )
 		}
 	}
 

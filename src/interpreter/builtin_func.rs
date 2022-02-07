@@ -57,7 +57,7 @@ impl BuiltinFuncDef {
 		Ok(())
 	}
 	
-	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value: &Value, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
+	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value_type: &DataType, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() + 1 {
 			return Err( BuiltinFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
@@ -73,13 +73,13 @@ impl BuiltinFuncDef {
 			
 		let args_data_types: Vec<DataType> = args_data_types_result?;
 		
-		if value.get_type().ne(&self.args[0].data_type) {
+		if value_type.ne(&self.args[0].data_type) {
 			return Err( BuiltinFuncErr::ArgType {
 				func_signature: format!("{}", self),
 				arg_name: String::from("value itself"),
 				arg_expr_pos: caller_pos,
 				actual_type: self.args[0].data_type.clone(),
-				given_type: value.get_type().clone(),
+				given_type: value_type.clone(),
 			}.into() );
 		}
 		

@@ -1,13 +1,11 @@
 mod symbol;
 mod expr_operator;
 
-use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp, Keyword, TokenErr};
+use super::token::{Token, TokenContent, TokensIter, Operator, Bracket, StatementOp, Keyword};
 use super::InterpErr;
 use super::value::Value;
 use super::data_type::DataType;
-use super::builtin_func::BuiltinFuncDef;
-use super::utils::{CharPos, CodePos, NameToken};
-use super::statement::FuncKind;
+use super::utils::{CharPos, CodePos};
 use super::context::Context;
 use symbol::{Symbol, SymbolKind, Operand};
 use expr_operator::{ExprOperator, OpAssot};
@@ -50,11 +48,8 @@ impl Expr {
 				SymbolKind::RightBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => {
-					let value: Value = op.apply(&mut calc_stack, context);
-					calc_stack.push(Symbol { 
-						pos: sym.pos(), 
-						kind: SymbolKind::Operand (Operand::Value(value)),
-					}); // TODO: somehow place DataType here, not a massive symbol
+					let result_sym: Symbol = op.apply(&mut calc_stack, context, sym.pos());
+					calc_stack.push(result_sym);
 				},
 			}
 		}
@@ -62,15 +57,14 @@ impl Expr {
 		let result: Value = calc_stack.pop()
 			.unwrap()
 			.unwrap_operand()
-			.calc_in_place(context);
+			.calc_in_place(context)
+			.unwrap();
 		assert_eq!(calc_stack.pop(), None);
 		
 		result
 	}
 	
-	pub fn check_and_calc_data_type(&self, check_context: &Context) -> Result<DataType, InterpErr> {		
-		assert!(self.expr_stack.len() > 0);
-		
+	pub fn check_and_calc_data_type(&self, check_context: &Context) -> Result<DataType, InterpErr> {
 		let mut type_calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
 		
 		for sym in self.expr_stack.iter() {
@@ -90,18 +84,159 @@ impl Expr {
 			}
 		}
 		
-		let result: DataType = type_calc_stack.pop()
+		assert_eq!(type_calc_stack.len(), 1);
+		
+		let data_type: DataType = type_calc_stack.pop()
 			.unwrap()
 			.unwrap_operand()
 			.check_and_calc_data_type_in_place(check_context)
 			.unwrap();
-		assert_eq!(type_calc_stack.pop(), None);
 		
-		Ok(result)
+		Ok(data_type)
 	}
 
 	pub fn pos(&self) -> CodePos {
 		self.pos
+	}
+	
+	pub fn check_as_standalone_expression(&self, check_context: &Context) -> Result<(), InterpErr> {
+		let mut type_calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
+		
+		for sym in self.expr_stack.iter() {
+			match sym.kind() {
+				SymbolKind::Operand (opnd) => match opnd {
+					Operand::Variable(_) | Operand::FuncCall { .. } => type_calc_stack.push(sym.clone()),
+					_ => return Err( ExprErr::NotLhsExprSymbol(sym.pos).into() ),
+				}, // TODO: avoid cloning symbols
+				
+				SymbolKind::LeftBracket => unreachable!(),
+				SymbolKind::RightBracket => unreachable!(),
+				
+				SymbolKind::ExprOperator (op) => match op {
+					ExprOperator::DotMemberAccess => {
+						let dt: DataType = op.get_result_data_type(&mut type_calc_stack, check_context, sym.pos())?;
+						type_calc_stack.push(Symbol { 
+							pos: sym.pos(), 
+							kind: SymbolKind::Operand (Operand::Value(dt.default_value())),
+						}); // TODO: somehow place DataType here, not a massive symbol
+					},
+					_ => return Err( ExprErr::NotLhsExprSymbol(sym.pos).into() ),
+				}
+			}
+		}
+		
+		assert_eq!(type_calc_stack.len(), 1);
+		
+		Ok(())
+	}
+	
+	pub fn run_as_standalone_expression(&self, context: &Context) {
+		let mut calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
+		
+		for sym in self.expr_stack.iter() {
+			match sym.kind() {
+				SymbolKind::Operand (_) => calc_stack.push(sym.clone()), // TODO: avoid cloning symbols
+				
+				SymbolKind::LeftBracket => unreachable!(),
+				SymbolKind::RightBracket => unreachable!(),
+				
+				SymbolKind::ExprOperator (op) => {
+					let result_sym: Symbol = op.apply(&mut calc_stack, context, sym.pos());
+					calc_stack.push(result_sym);
+				},
+			}
+		}
+			
+		assert_eq!(calc_stack.len(), 1);
+		
+		calc_stack.pop()
+			.unwrap()
+			.unwrap_operand()
+			.calc_in_place(context);
+	}
+	
+	pub fn check_and_get_variable_to_set_type(&self, check_context: &Context) -> Result<DataType, InterpErr> {
+		let mut type_calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
+		
+		for sym in self.expr_stack.iter() {
+			match sym.kind() {
+				SymbolKind::Operand (opnd) => match opnd {
+					Operand::Variable(_) | Operand::FuncCall { .. } => type_calc_stack.push(sym.clone()),
+					_ => return Err( ExprErr::NotLhsExprSymbol(sym.pos).into() ),
+				}, // TODO: avoid cloning symbols
+				
+				SymbolKind::LeftBracket => unreachable!(),
+				SymbolKind::RightBracket => unreachable!(),
+				
+				SymbolKind::ExprOperator (op) => match op {
+					ExprOperator::DotMemberAccess => {
+						let dt: DataType = op.get_result_data_type(&mut type_calc_stack, check_context, sym.pos())?;
+						type_calc_stack.push(Symbol { 
+							pos: sym.pos(), 
+							kind: SymbolKind::Operand (Operand::Value(dt.default_value())),
+						}); // TODO: somehow place DataType here, not a massive symbol
+					},
+					_ => return Err( ExprErr::NotLhsExprSymbol(sym.pos).into() ),
+				}
+			}
+		}
+			
+		assert_eq!(type_calc_stack.len(), 1);
+		
+		let data_type: DataType = type_calc_stack.pop()
+			.unwrap()
+			.unwrap_operand()
+			.check_and_calc_data_type_in_place(check_context)
+			.unwrap();
+		
+		Ok(data_type)
+	}
+	
+	pub fn set_as_to_lhs(&self, value: Value, context: &mut Context) {
+		let mut calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
+		
+		println!("expr stack:");
+		dbg!(&self.expr_stack);
+		println!("------------");
+					
+		for sym in self.expr_stack.iter() {
+			match sym.kind() {
+				SymbolKind::Operand (_) => {
+					calc_stack.push(sym.clone());
+					println!("added operand:");
+					dbg!(&calc_stack);
+					println!("------------");
+				}, // TODO: avoid cloning symbols
+				
+				SymbolKind::LeftBracket => unreachable!(),
+				SymbolKind::RightBracket => unreachable!(),
+				
+				SymbolKind::ExprOperator (op) => {
+					match op {
+						ExprOperator::DotMemberAccess => {
+							let result_sym: Symbol = op.apply(&mut calc_stack, context, sym.pos());
+							calc_stack.push(result_sym);
+							println!("Applied operator {:?}:", op);
+							dbg!(&calc_stack);
+							println!("------------");
+						}
+						_ => unreachable!(),
+					}
+				},
+			}
+		}
+			
+		assert_eq!(calc_stack.len(), 1);
+		
+		let last_opnd: Operand = calc_stack.pop()
+			.unwrap()
+			.unwrap_operand();
+		
+		match last_opnd {
+			Operand::Variable (var_name) => context.set_variable(&var_name, value).unwrap(),
+			Operand::StructFieldValue (value_rc) => *value_rc.borrow_mut() = value,
+			opnd @ _ => panic!("Wrong last operand: {:#?}", opnd),
+		}
 	}
 	
 	fn create_stack(tokens_iter: &mut TokensIter, context_kind: ExprContextKind) -> Result<Vec<Symbol>, InterpErr> {
@@ -257,7 +392,8 @@ impl Clone for Expr {
 
 #[derive(Debug, Clone, Copy)]
 pub enum ExprContextKind {
-	ValueToAssign,
+	RightAssignOperand,
+	LeftAssignOperand,
 	ToReturn,
 	FunctionArg,
 	IfCondition,
@@ -281,8 +417,14 @@ impl ExprContext {
 		match tok.content() {
 			// iterator doesn't give comment tokens by default
 			TokenContent::Comment (_) => unreachable!(),
+			TokenContent::Operator (op) => match op {
+				Operator::Assign => match self.kind {
+					ExprContextKind::LeftAssignOperand => Ok(true),
+					_ => Err(unexpected(tok.pos())),
+				},
+				_ => Ok(false),
+			},
 			TokenContent::Number (..) | 
-				TokenContent::Operator (..) | 
 				TokenContent::Name (..) |
 				TokenContent::BuiltinName (..) |
 				TokenContent::StringLiteral (..)
@@ -291,15 +433,24 @@ impl ExprContext {
 				=> self.check_brackets(tok),
 			TokenContent::StatementOp (st_op) => match st_op {
 				StatementOp::Dot => Ok(false),
-				StatementOp::Colon | StatementOp::ThinArrow => Err(unexpected(tok.pos())),
+				StatementOp::Colon => Err(unexpected(tok.pos())),
+				StatementOp::ThinArrow => Err(unexpected(tok.pos())),
 				StatementOp::Comma => match self.kind {
-					ExprContextKind::ValueToAssign => Err(unexpected(tok.pos())),
+					ExprContextKind::RightAssignOperand => Err(unexpected(tok.pos())),
+					ExprContextKind::LeftAssignOperand => Ok(false),
 					ExprContextKind::IfCondition => Err(unexpected(tok.pos())),
 					ExprContextKind::ToReturn => Err(unexpected(tok.pos())),
 					ExprContextKind::FunctionArg => Ok(true),
 					ExprContextKind::StructField => Ok(true),
 				},
-				StatementOp::Semicolon => Ok(true),
+				StatementOp::Semicolon => match self.kind {
+					ExprContextKind::RightAssignOperand => Ok(true),
+					ExprContextKind::LeftAssignOperand => Ok(true),
+					ExprContextKind::IfCondition => Err(unexpected(tok.pos())),
+					ExprContextKind::ToReturn => Ok(true),
+					ExprContextKind::FunctionArg => Err(unexpected(tok.pos())),
+					ExprContextKind::StructField => Err(unexpected(tok.pos())),
+				}
 			},
 			TokenContent::Keyword (kw) => match kw {
 				Keyword::Var | 
@@ -307,8 +458,8 @@ impl ExprContext {
 					Keyword::Else | 
 					Keyword::While | 
 					Keyword::F | 
+					Keyword::Struct |
 					Keyword::Return => Err(unexpected(tok.pos())),
-				Keyword::Struct => Ok(false),
 				Keyword::True => Ok(false),
 				Keyword::False => Ok(false),
 			},
@@ -328,7 +479,8 @@ impl ExprContext {
 						Ok(false)
 					} else {
 						match self.kind {
-							ExprContextKind::ValueToAssign => Err( unpaired_bracket(br_tok.pos()) ),
+							ExprContextKind::RightAssignOperand => Err( unpaired_bracket(br_tok.pos()) ),
+							ExprContextKind::LeftAssignOperand => Err( unpaired_bracket(br_tok.pos()) ),
 							ExprContextKind::IfCondition => Ok(true),
 							ExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
 							ExprContextKind::StructField => Err( unpaired_bracket(br_tok.pos()) ),
@@ -337,15 +489,17 @@ impl ExprContext {
 					}
 				},
 				Bracket::LeftCurly => match self.kind {
+					ExprContextKind::RightAssignOperand => Ok(false),
+					ExprContextKind::LeftAssignOperand => Ok(false),
 					ExprContextKind::IfCondition => Ok(false),
-					ExprContextKind::ValueToAssign => Ok(false),
 					ExprContextKind::FunctionArg => Ok(false),
 					ExprContextKind::ToReturn => Ok(false),
 					ExprContextKind::StructField => Ok(true),
 				},
 				Bracket::RightCurly => match self.kind {
+					ExprContextKind::RightAssignOperand => Ok(false),
+					ExprContextKind::LeftAssignOperand => Ok(false),
 					ExprContextKind::IfCondition => Ok(false),
-					ExprContextKind::ValueToAssign => Ok(false),
 					ExprContextKind::FunctionArg => Ok(false),
 					ExprContextKind::ToReturn => Ok(false),
 					ExprContextKind::StructField => Ok(true),
@@ -367,11 +521,16 @@ pub enum ExprErr {
 		operator_pos: CodePos,
 		descr: String,
 	},
+	WrongOperandsForOperator { 
+		operator_pos: CodePos,
+		descr: String,
+	},
 	NotEnoughOperandsForOperator { 
 		operator_pos: CodePos,
 		descr: String,
 	},
 	NotStruct (CodePos),
+	NotLhsExprSymbol (CodePos),
 }
 
 impl ExprErr {
@@ -387,6 +546,24 @@ impl ExprErr {
 			descr: format!("Operator '{:?}' can't be applied to operands with type(-s) {:?}", op, operands_types),
 		}
 	}
+	fn wrong_operands_for_operator(op: ExprOperator, operator_pos: CodePos, operands: &[&Operand]) -> Self {
+		let mut descr: String = format!("Operator '{:?}' can't be applied to operands [", op);
+		
+		let mut is_first = true;
+		for op in operands {
+			if !is_first {
+				descr.push_str(", ");
+			}
+			is_first = false;
+			descr.push_str(&format!("{}", op));
+		}
+		descr.push_str("]");
+		
+		ExprErr::WrongOperandsForOperator { 
+			operator_pos,
+			descr,
+		}
+	}
 }
 
 impl std::fmt::Display for ExprErr {
@@ -396,8 +573,10 @@ impl std::fmt::Display for ExprErr {
 			ExprErr::UnpairedBracket (_) => write!(f, "Unpaired bracket"),
 			ExprErr::ExpectedExprButFound (_) => write!(f, "Expected arithmetical expression, but found"),
 			ExprErr::WrongOperandsTypeForOperator { ref descr, .. } => write!(f, "{}", descr),
+			ExprErr::WrongOperandsForOperator { ref descr, .. } => write!(f, "{}", descr),
 			ExprErr::NotEnoughOperandsForOperator { ref descr, .. } => write!(f, "{}", descr),
-			ExprErr::NotStruct (_) => write!(f, "Not a struct"),
+			ExprErr::NotStruct (_) => write!(f, "Value is not a struct"),
+			ExprErr::NotLhsExprSymbol (_) => write!(f, "Not allowed to use as left hand side of '=' operator"),
 		}
 	}
 }
@@ -414,11 +593,18 @@ fn unpaired_bracket(pos: CodePos) -> InterpErr {
 
 #[cfg(test)]
 mod tests {
-	use super::super::token::*;
-	use super::*;
-	use super::super::primitive_type_member_funcs_list::PrimitiveTypeMemberFuncsList;
+	//use super::super::token::*;
+use super::{Expr, ExprContextKind};
+	use super::symbol::{SymbolKind, Symbol, Operand};
+	use super::super::value::Value;
+	use std::rc::Rc;
+	use super::super::context::Context;
+	use super::super::token::TokensIter;
+	use super::super::primitive_type_member_builtin_funcs_list::PrimitiveTypeMemberBuiltinFuncsList;
 	use super::super::struct_def::StructDef;
-	use super::expr_operator::*;
+	use super::super::builtin_func::BuiltinFuncDef;
+	use super::expr_operator::ExprOperator;
+use super::super::utils::{NameToken, CodePos, CharPos};
 	
 	#[test]
 	fn check_stack_creation_and_arithmetic_calc() {
@@ -571,10 +757,9 @@ mod tests {
 		let zero_pos = CodePos::from(CharPos::new());
 		
 		test_expr_and_its_stack_eq("a + add(2, 4) + @add(4, 9);", vec![
-			SymbolKind::Operand (Operand::Variable (new_name_token("a"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("a", false))),
 			SymbolKind::Operand (Operand::FuncCall {
-				kind: FuncKind::UserDefined,
-				func_name: new_name_token("add"),
+				func_name: new_name_token("add", false),
 				arg_exprs: vec![
 					// arg 1
 					Expr { 
@@ -601,8 +786,7 @@ mod tests {
 			}),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 			SymbolKind::Operand (Operand::FuncCall {
-				kind: FuncKind::Builtin,
-				func_name: new_name_token("add"),
+				func_name: new_name_token("add", true),
 				arg_exprs: vec![
 					// arg 1
 					Expr { 
@@ -631,17 +815,15 @@ mod tests {
 		]);
 		
 		test_expr_and_its_stack_eq("a.foo1() + b.foo2();", vec![
-			SymbolKind::Operand (Operand::Variable (new_name_token("a"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("a", false))),
 			SymbolKind::Operand (Operand::FuncCall {
-				kind: FuncKind::UserDefined,
-				func_name: new_name_token("foo1"),
+				func_name: new_name_token("foo1", false),
 				arg_exprs: Vec::new(),
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
-			SymbolKind::Operand (Operand::Variable (new_name_token("b"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("b", false))),
 			SymbolKind::Operand (Operand::FuncCall {
-				kind: FuncKind::UserDefined,
-				func_name: new_name_token("foo2"),
+				func_name: new_name_token("foo2", false),
 				arg_exprs: Vec::new(),
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
@@ -650,20 +832,17 @@ mod tests {
 		
 		test_expr_and_its_stack_eq("foo1().foo3() + b.foo2();", vec![
 			SymbolKind::Operand (Operand::FuncCall {
-				kind: FuncKind::UserDefined,
-				func_name: new_name_token("foo1"),
+				func_name: new_name_token("foo1", false),
 				arg_exprs: Vec::new(),
 			}),
 			SymbolKind::Operand (Operand::FuncCall {
-				kind: FuncKind::UserDefined,
-				func_name: new_name_token("foo3"),
+				func_name: new_name_token("foo3", false),
 				arg_exprs: Vec::new(),
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
-			SymbolKind::Operand (Operand::Variable (new_name_token("b"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("b", false))),
 			SymbolKind::Operand (Operand::FuncCall {
-				kind: FuncKind::UserDefined,
-				func_name: new_name_token("foo2"),
+				func_name: new_name_token("foo2", false),
 				arg_exprs: Vec::new(),
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
@@ -672,25 +851,22 @@ mod tests {
 		
 		test_expr_and_its_stack_eq("2 * a.foo1(c.foo3().foo5() - 3) ^ b.foo2() / d.foo4();", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Variable (new_name_token("a"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("a", false))),
 			SymbolKind::Operand (Operand::FuncCall {
-				kind: FuncKind::UserDefined,
-				func_name: new_name_token("foo1"),
+				func_name: new_name_token("foo1", false),
 				arg_exprs: vec![
 					// arg 1
 					Expr {
 						pos: zero_pos,
 						expr_stack: Rc::new(vec![
-							Symbol { kind: SymbolKind::Operand (Operand::Variable (new_name_token("c"))), pos: zero_pos, },
+							Symbol { kind: SymbolKind::Operand (Operand::Variable (new_name_token("c", false))), pos: zero_pos, },
 							Symbol { kind: SymbolKind::Operand (Operand::FuncCall {
-								kind: FuncKind::UserDefined,
-								func_name: new_name_token("foo3"),
+								func_name: new_name_token("foo3", false),
 								arg_exprs: Vec::new(),
 							}), pos: zero_pos, },
 							Symbol { kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess), pos: zero_pos, },
 							Symbol { kind: SymbolKind::Operand (Operand::FuncCall {
-								kind: FuncKind::UserDefined,
-								func_name: new_name_token("foo5"),
+								func_name: new_name_token("foo5", false),
 								arg_exprs: Vec::new(),
 							}), pos: zero_pos, },
 							Symbol { kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess), pos: zero_pos, },
@@ -702,10 +878,9 @@ mod tests {
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
 			
-			SymbolKind::Operand (Operand::Variable (new_name_token("b"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("b", false))),
 			SymbolKind::Operand (Operand::FuncCall {
-				kind: FuncKind::UserDefined,
-				func_name: new_name_token("foo2"),
+				func_name: new_name_token("foo2", false),
 				arg_exprs: Vec::new(),
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
@@ -714,10 +889,9 @@ mod tests {
 			
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 			
-			SymbolKind::Operand (Operand::Variable (new_name_token("d"))),
+			SymbolKind::Operand (Operand::Variable (new_name_token("d", false))),
 			SymbolKind::Operand (Operand::FuncCall {
-				kind: FuncKind::UserDefined,
-				func_name: new_name_token("foo4"),
+				func_name: new_name_token("foo4", false),
 				arg_exprs: Vec::new(),
 			}),
 			SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
@@ -726,8 +900,11 @@ mod tests {
 		]);
 	}
 	
-	fn new_name_token(name: &str) -> NameToken {
-		NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()))
+	fn new_name_token(name: &str, is_builtin: bool) -> NameToken {
+		NameToken::new_with_pos(
+			name.to_string(), 
+			CodePos::from(CharPos::new()), 
+			is_builtin)
 	}
 
 	#[test]
@@ -856,7 +1033,7 @@ mod tests {
 		
 		let expr_stack: Vec<Symbol> = Expr::create_stack(
 			&mut tokens_iter, 
-			ExprContextKind::ValueToAssign).unwrap();
+			ExprContextKind::RightAssignOperand).unwrap();
 		
 		let syms_expr_stack: Vec<SymbolKind> = expr_stack.iter().map(|Symbol { kind, .. }| kind.clone()).collect();
 		
@@ -864,10 +1041,10 @@ mod tests {
 			let mut tokens_iter = TokensIter::new();	
 			tokens_iter.push_string(expr_str.to_string());
 		
-			let expr = Expr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
+			let expr = Expr::new(&mut tokens_iter, ExprContextKind::RightAssignOperand).unwrap();
 			
 			let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
-			let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
+			let primitive_type_member_funcs_list = PrimitiveTypeMemberBuiltinFuncsList::new();
 			let context = Context::new(
 				&builtin_func_defs,
 				&primitive_type_member_funcs_list,
@@ -913,7 +1090,7 @@ mod tests {
 		
 		let expr_stack: Vec<Symbol> = Expr::create_stack(
 			&mut tokens_iter, 
-			ExprContextKind::ValueToAssign).unwrap();
+			ExprContextKind::RightAssignOperand).unwrap();
 		
 		let syms_expr_stack: Vec<SymbolKind> = expr_stack.iter().map(|Symbol { kind, .. }| kind.clone()).collect();
 		
