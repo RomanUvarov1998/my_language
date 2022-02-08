@@ -82,9 +82,9 @@ pub static OP_ATTRS: [OpInfo; 18] = [
 	OpInfo { arity: OpArity::Binary, rank: 6, assot: OpAssot::Left }, 	//Div
 	OpInfo { arity: OpArity::Binary, rank: 6, assot: OpAssot::Left }, 	//Mul
 	
-	OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left },		//UnPlus
-	OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left },		//UnMinus
-	OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left },		//Not
+	OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Right },		//UnPlus
+	OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Right },		//UnMinus
+	OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Right },		//Not
 	
 	OpInfo { arity: OpArity::Binary, rank: 8, assot: OpAssot::Right }, 	//Pow
 	
@@ -939,13 +939,13 @@ mod tests {
 			
 		assert_eq!(
 			OP_ATTRS[ExprOperator::UnPlus as usize], 
-			OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left });
+			OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Right });
 		assert_eq!(
 			OP_ATTRS[ExprOperator::UnMinus as usize], 
-			OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left });
+			OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Right });
 		assert_eq!(
 			OP_ATTRS[ExprOperator::Not as usize], 
-			OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Left });
+			OpInfo { arity: OpArity::Unary, rank: 7, assot: OpAssot::Right });
 			
 		assert_eq!(
 			OP_ATTRS[ExprOperator::Pow as usize], 
