@@ -204,6 +204,8 @@ impl TokensIter {
 									| CharKind::RightBracket
 									| CharKind::LeftCurlyBracket
 									| CharKind::RightCurlyBracket
+									| CharKind::LeftSquaredBracket
+									| CharKind::RightSquaredBracket
 									| CharKind::Eq
 									| CharKind::Underscore
 									| CharKind::Punctuation (_)
@@ -246,6 +248,8 @@ impl TokensIter {
 					CharKind::RightBracket |
 					CharKind::LeftCurlyBracket |
 					CharKind::RightCurlyBracket |
+					CharKind::LeftSquaredBracket |
+					CharKind::RightSquaredBracket |
 					CharKind::Eq |
 					CharKind::Letter |
 					CharKind::Underscore |
@@ -459,6 +463,9 @@ impl TokensIter {
 				CharKind::LeftCurlyBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::LeftCurly )) ),
 				CharKind::RightCurlyBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::RightCurly )) ),
 				
+				CharKind::LeftSquaredBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::LeftSquared )) ),
+				CharKind::RightSquaredBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::RightSquared )) ),
+				
 				CharKind::Letter 
 					| CharKind::Underscore 
 					| CharKind::Dog 
@@ -571,6 +578,8 @@ impl std::fmt::Display for TokenContent {
 				Bracket::Right => write!(f, "'{}'", ")"),
 				Bracket::LeftCurly => write!(f, "'{}'", "{{"),
 				Bracket::RightCurly => write!(f, "'{}'", "}}"),
+				Bracket::LeftSquared => write!(f, "'{}'", "["),
+				Bracket::RightSquared => write!(f, "'{}'", "]"),
 			},
 			TokenContent::Name (name) => write!(f, "'{}'", name),
 			TokenContent::BuiltinName (name) => write!(f, "'{}'", name),
@@ -669,6 +678,8 @@ pub enum Bracket {
 	Right,
 	LeftCurly,
 	RightCurly,
+	LeftSquared,
+	RightSquared,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -739,7 +750,7 @@ mod tests {
 			}
 		};
 		
-		// Doesn't yield tokens by default
+		// Doesn't yield comment tokens by default
 		let mut tokens_iter = TokensIter::new();
 		tokens_iter.push_string("//23rwrer2".to_string());
 					
@@ -764,6 +775,8 @@ mod tests {
 		test_token_content_detection(")", TokenContent::Bracket (Bracket::Right));
 		test_token_content_detection("{", TokenContent::Bracket (Bracket::LeftCurly));
 		test_token_content_detection("}", TokenContent::Bracket (Bracket::RightCurly));
+		test_token_content_detection("[", TokenContent::Bracket (Bracket::LeftSquared));
+		test_token_content_detection("]", TokenContent::Bracket (Bracket::RightSquared));
 		test_token_content_detection("=", TokenContent::Operator (Operator::Assign));
 		test_token_content_detection("var1", TokenContent::Name (String::from("var1")));
 		test_token_content_detection(":", TokenContent::StatementOp (StatementOp::Colon));
@@ -794,7 +807,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 f return var struct var_1var\"vasya\">>=<<===!=!land lor lxor:;,->(){}if else while//sdsdfd".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 f return var struct var_1var\"vasya\">>=<<===!=!land lor lxor:;,->(){}[]if else while//sdsdfd".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -829,11 +842,13 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Right));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftCurly));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightCurly));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftSquared));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightSquared));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::If ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Else ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::While ));
 		
-		// Doesn't yield tokens by default
+		// Doesn't yield comment tokens by default
 		//assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Comment (String::from("sdsdfd")));
 		
 		assert_eq!(tokens_iter.next(), None);
@@ -910,8 +925,9 @@ mod tests {
 		(
 		)
 		{
-			
 		}
+		[
+		]
 		if
 		else
 		while
@@ -951,11 +967,13 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Right));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftCurly));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightCurly));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftSquared));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightSquared));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::If ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Else ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::While ));
 		
-		// Doesn't yield tokens by default
+		// Doesn't yield comment tokens by default
 		// assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Comment (String::from(" sdfsdfs ")));
 		
 		assert_eq!(tokens_iter.next(), None);

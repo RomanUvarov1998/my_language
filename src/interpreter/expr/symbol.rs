@@ -116,6 +116,7 @@ impl Symbol {
 					Bracket::Right => SymbolKind::RightBracket,
 					Bracket::Left => SymbolKind::LeftBracket,
 					Bracket::LeftCurly | Bracket::RightCurly => return Err(unexpected(pos)),
+					Bracket::LeftSquared | Bracket::RightSquared => return Err(unexpected(pos)),
 				};
 				
 				Ok(Some(Symbol {
@@ -213,7 +214,7 @@ impl Symbol {
 							
 							tokens_iter.next_expect_colon()?;
 							
-							let value_expr = Expr::new(tokens_iter, ExprContextKind::StructField)?;
+							let value_expr = Expr::new(tokens_iter, ExprContextKind::StructFieldValue)?;
 							
 							fields.push(StructLiteralField::new(field_name, value_expr));
 							
@@ -235,7 +236,7 @@ impl Symbol {
 							
 							tokens_iter.next_expect_colon()?;
 							
-							let value_expr = Expr::new(tokens_iter, ExprContextKind::StructField)?;
+							let value_expr = Expr::new(tokens_iter, ExprContextKind::StructFieldValue)?;
 							
 							fields.push(StructLiteralField::new(field_name, value_expr));
 							

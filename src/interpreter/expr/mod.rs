@@ -390,7 +390,8 @@ pub enum ExprContextKind {
 	ToReturn,
 	FunctionArg,
 	IfCondition,
-	StructField,
+	StructFieldValue,
+	ArrayIndex,
 }
 
 pub struct ExprContext {
@@ -434,7 +435,8 @@ impl ExprContext {
 					ExprContextKind::IfCondition => Err(unexpected(tok.pos())),
 					ExprContextKind::ToReturn => Err(unexpected(tok.pos())),
 					ExprContextKind::FunctionArg => Ok(true),
-					ExprContextKind::StructField => Ok(true),
+					ExprContextKind::StructFieldValue => Ok(true),
+					ExprContextKind::ArrayIndex => Err(unexpected(tok.pos())),
 				},
 				StatementOp::Semicolon => match self.kind {
 					ExprContextKind::RightAssignOperand => Ok(true),
@@ -442,7 +444,8 @@ impl ExprContext {
 					ExprContextKind::IfCondition => Err(unexpected(tok.pos())),
 					ExprContextKind::ToReturn => Ok(true),
 					ExprContextKind::FunctionArg => Err(unexpected(tok.pos())),
-					ExprContextKind::StructField => Err(unexpected(tok.pos())),
+					ExprContextKind::StructFieldValue => Err(unexpected(tok.pos())),
+					ExprContextKind::ArrayIndex => Err(unexpected(tok.pos())),
 				}
 			},
 			TokenContent::Keyword (kw) => match kw {
@@ -476,8 +479,9 @@ impl ExprContext {
 							ExprContextKind::LeftAssignOperand => Err( unpaired_bracket(br_tok.pos()) ),
 							ExprContextKind::IfCondition => Ok(true),
 							ExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
-							ExprContextKind::StructField => Err( unpaired_bracket(br_tok.pos()) ),
+							ExprContextKind::StructFieldValue => Err( unpaired_bracket(br_tok.pos()) ),
 							ExprContextKind::FunctionArg => Ok(true),
+							ExprContextKind::ArrayIndex => Err( unpaired_bracket(br_tok.pos()) ),
 						}
 					}
 				},
@@ -487,7 +491,8 @@ impl ExprContext {
 					ExprContextKind::IfCondition => Ok(false),
 					ExprContextKind::FunctionArg => Ok(false),
 					ExprContextKind::ToReturn => Ok(false),
-					ExprContextKind::StructField => Ok(true),
+					ExprContextKind::StructFieldValue => Ok(true),
+					ExprContextKind::ArrayIndex => Err(unexpected(br_tok.pos())),
 				},
 				Bracket::RightCurly => match self.kind {
 					ExprContextKind::RightAssignOperand => Ok(false),
@@ -495,7 +500,13 @@ impl ExprContext {
 					ExprContextKind::IfCondition => Ok(false),
 					ExprContextKind::FunctionArg => Ok(false),
 					ExprContextKind::ToReturn => Ok(false),
-					ExprContextKind::StructField => Ok(true),
+					ExprContextKind::StructFieldValue => Ok(true),
+					ExprContextKind::ArrayIndex => Err(unexpected(br_tok.pos())),
+				},
+				Bracket::LeftSquared => Ok(false),
+				Bracket::RightSquared => match self.kind {
+					ExprContextKind::ArrayIndex => Ok(true),
+					_ => Ok(false),
 				},
 			},
 			_ => unreachable!(),
