@@ -212,7 +212,7 @@ impl Expr {
 						ExprOperator::DotMemberAccess => {
 							let result_sym: Symbol = op.apply(&mut calc_stack, context, sym.pos());
 							calc_stack.push(result_sym);
-						}
+						},
 						_ => unreachable!(),
 					}
 				},
@@ -227,7 +227,7 @@ impl Expr {
 		
 		match last_opnd {
 			Operand::Variable (var_name) => context.set_variable(&var_name, value).unwrap(),
-			Operand::StructFieldValue (value_rc) => *value_rc.borrow_mut() = value,
+			Operand::ValueRef (value_rc) => *value_rc.borrow_mut() = value,
 			opnd @ _ => panic!("Wrong last operand: {:#?}", opnd),
 		}
 	}

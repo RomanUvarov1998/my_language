@@ -411,7 +411,7 @@ pub enum Operand {
 		data_type_name: NameToken,
 		fields: Vec<StructLiteralField>,
 	},
-	StructFieldValue (Rc<RefCell<Value>>),
+	ValueRef (Rc<RefCell<Value>>),
 	IndexExpr (Expr),
 }
 
@@ -436,8 +436,8 @@ impl PartialEq for Operand {
 				sl_2 @ Operand::StructLiteral { .. } => sl_1 == sl_2,
 				_ => false,
 			},
-			Operand::StructFieldValue (v1) => match other {
-				Operand::StructFieldValue (v2) => *v1.borrow() == *v2.borrow(),
+			Operand::ValueRef (v1) => match other {
+				Operand::ValueRef (v2) => *v1.borrow() == *v2.borrow(),
 				_ => false,
 			},
 			Operand::IndexExpr (se1) => match other {
@@ -482,7 +482,7 @@ impl Operand {
 				dt
 			},
 			
-			Operand::StructFieldValue (value_rc) => value_rc.borrow().get_type(),
+			Operand::ValueRef (value_rc) => value_rc.borrow().get_type(),
 			
 			Operand::IndexExpr (se) => se.check_and_calc_data_type(check_context)?,
 		};
@@ -551,7 +551,7 @@ impl Operand {
 				})
 			},
 			
-			Operand::StructFieldValue (value_rc) => Some(value_rc.borrow().clone()),
+			Operand::ValueRef (value_rc) => Some(value_rc.borrow().clone()),
 			
 			Operand::IndexExpr (se) => Some(se.calc(context)),
 		}
@@ -565,7 +565,7 @@ impl std::fmt::Display for Operand {
 			Operand::Variable (_) => write!(f, "variable"),
 			Operand::FuncCall { .. } => write!(f, "function call"),
 			Operand::StructLiteral { .. } => write!(f, "struct literal"),
-			Operand::StructFieldValue (_) => write!(f, "struct field"),
+			Operand::ValueRef (_) => write!(f, "struct field"),
 			Operand::IndexExpr (_) => write!(f, "index expr"),
 		}
 	}

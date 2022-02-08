@@ -128,7 +128,7 @@ impl ExprOperator {
 				(_, Operand::StructLiteral { .. }) =>
 					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
 					
-				(_, Operand::StructFieldValue (_)) =>
+				(_, Operand::ValueRef (_)) =>
 					unreachable!(),
 				
 				(_, Operand::IndexExpr (_)) => 
@@ -276,7 +276,7 @@ impl ExprOperator {
 				},
 				
 				
-				(Operand::StructFieldValue (ref value_rc), Operand::Variable (ref field_name)) => {
+				(Operand::ValueRef (ref value_rc), Operand::Variable (ref field_name)) => {
 					let value_type: DataType = value_rc.borrow().get_type();
 					
 					if let DataType::Complex (struct_def) = value_type {
@@ -288,7 +288,7 @@ impl ExprOperator {
 					}
 				},
 				
-				(Operand::StructFieldValue (ref value_rc), Operand::FuncCall { ref func_name, ref arg_exprs }) => {
+				(Operand::ValueRef (ref value_rc), Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					let value_type: DataType = value_rc.borrow().get_type();
 					
 					if let DataType::Complex (ref struct_def) = value_type {
@@ -418,7 +418,7 @@ impl ExprOperator {
 				(_, Operand::StructLiteral { .. }) =>
 					unreachable!(),
 					
-				(_, Operand::StructFieldValue (_)) =>
+				(_, Operand::ValueRef (_)) =>
 					unreachable!(),
 				
 				(_, Operand::IndexExpr (_)) => 
@@ -431,7 +431,7 @@ impl ExprOperator {
 				(Operand::Value (ref value), Operand::Variable (ref var_name)) => {
 					if let Value::Struct { fields, .. } = value {
 						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(var_name.value()).unwrap());
-						let opnd: Operand = Operand::StructFieldValue(value_rc);
+						let opnd: Operand = Operand::ValueRef(value_rc);
 						Symbol {
 							pos: rhs_pos,
 							kind: SymbolKind::Operand (opnd),
@@ -450,7 +450,7 @@ impl ExprOperator {
 					
 					if let Value::Struct { fields, .. } = value {
 						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(var_name_2.value()).unwrap());
-						let opnd: Operand = Operand::StructFieldValue (value_rc);
+						let opnd: Operand = Operand::ValueRef (value_rc);
 						Symbol {
 							pos: rhs_pos,
 							kind: SymbolKind::Operand (opnd),
@@ -475,7 +475,7 @@ impl ExprOperator {
 					
 					if let Value::Struct { fields, .. } = result {
 						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(var_name.value()).unwrap());
-						let opnd: Operand = Operand::StructFieldValue (value_rc);
+						let opnd: Operand = Operand::ValueRef (value_rc);
 						Symbol {
 							pos: rhs_pos,
 							kind: SymbolKind::Operand (opnd),
@@ -496,7 +496,7 @@ impl ExprOperator {
 					
 					if let Value::Struct { fields, .. } = struct_value {
 						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(field_name.value()).unwrap());
-						let opnd: Operand = Operand::StructFieldValue(value_rc);
+						let opnd: Operand = Operand::ValueRef(value_rc);
 						Symbol {
 							pos: rhs_pos,
 							kind: SymbolKind::Operand (opnd),
@@ -510,10 +510,10 @@ impl ExprOperator {
 				},
 				
 				
-				(Operand::StructFieldValue (ref value_rc), Operand::Variable (ref field_name)) => {
+				(Operand::ValueRef (ref value_rc), Operand::Variable (ref field_name)) => {
 					if let Value::Struct { ref fields, .. } = *value_rc.borrow() {
 						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(field_name.value()).unwrap());
-						let opnd: Operand = Operand::StructFieldValue (value_rc);
+						let opnd: Operand = Operand::ValueRef (value_rc);
 						Symbol {
 							pos: rhs_pos,
 							kind: SymbolKind::Operand (opnd),
@@ -523,7 +523,7 @@ impl ExprOperator {
 					}
 				},
 				
-				(Operand::StructFieldValue (ref value_rc), Operand::FuncCall { ref func_name, ref arg_exprs }) =>
+				(Operand::ValueRef (ref value_rc), Operand::FuncCall { ref func_name, ref arg_exprs }) =>
 					Self::call_member_func_of_value(&value_rc.borrow(), func_name, arg_exprs, context, lhs_pos, rhs_pos),
 			}
 		} else {
