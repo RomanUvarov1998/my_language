@@ -34,7 +34,8 @@ fn main() {
 }
 
 fn print_usage() {
-	println!("program file_with_code.txt");
+	println!(r#"Usage:
+	[program] [file_with_code.mylang]"#);
 }
 
 fn print_code_line(line: &str) {
