@@ -304,6 +304,7 @@ impl Expr {
 						| ExprOperator::Pow
 						
 						| ExprOperator::DotMemberAccess
+						| ExprOperator::Index
 						=> {
 							while let Some(top_tok_sym) = tmp_stack.last() {
 								match top_tok_sym.kind() {

@@ -42,6 +42,8 @@ pub enum ExprOperator {
 	Pow,
 	
 	DotMemberAccess,
+	
+	Index,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,7 +65,7 @@ pub enum OpAssot {
 	Right,
 }
 
-pub static OP_ATTRS: [OpInfo; 18] = [
+pub static OP_ATTRS: [OpInfo; 19] = [
 	OpInfo { arity: OpArity::Binary, rank: 0, assot: OpAssot::Left },		//LogicalOr
 	OpInfo { arity: OpArity::Binary, rank: 1, assot: OpAssot::Left },		//LogicalAnd
 	OpInfo { arity: OpArity::Binary, rank: 2, assot: OpAssot::Left },		//LogicalXor
@@ -89,6 +91,7 @@ pub static OP_ATTRS: [OpInfo; 18] = [
 	OpInfo { arity: OpArity::Binary, rank: 8, assot: OpAssot::Right }, 	//Pow
 	
 	OpInfo { arity: OpArity::Binary, rank: 9, assot: OpAssot::Left }, 	//Dot
+	OpInfo { arity: OpArity::Binary, rank: 9, assot: OpAssot::Left }, 	//Index
 ];
 
 impl ExprOperator {	
@@ -329,7 +332,12 @@ impl ExprOperator {
 						LogicalAnd => self.get_logical_and_result_type(&rhs, &lhs),
 						LogicalOr => self.get_logical_or_result_type(&rhs, &lhs),
 						LogicalXor => self.get_logical_xor_result_type(&rhs, &lhs),
-						_ => unreachable!(),
+						DotMemberAccess => unreachable!(),
+						Index => self.get_index_result_type(&rhs, &lhs),
+						
+						UnPlus => unreachable!(),
+						UnMinus => unreachable!(),
+						Not => unreachable!(),
 					};
 					
 					match result {
@@ -346,10 +354,26 @@ impl ExprOperator {
 						.check_and_calc_data_type_in_place(check_context)?;
 					
 					let result = match self {
+						BinPlus => unreachable!(),
+						BinMinus => unreachable!(),
+						Div => unreachable!(),
+						Mul => unreachable!(),
+						Pow => unreachable!(),
+						Equal => unreachable!(),
+						NotEqual => unreachable!(),
+						Greater => unreachable!(),
+						GreaterEqual => unreachable!(),
+						Less => unreachable!(),
+						LessEqual => unreachable!(),
+						LogicalAnd => unreachable!(),
+						LogicalOr => unreachable!(),
+						LogicalXor => unreachable!(),
+						DotMemberAccess => unreachable!(),
+						Index => unreachable!(),
+						
 						UnPlus => self.get_unary_plus_result_type(&op),
 						UnMinus => self.get_unary_minus_result_type(&op),
 						Not => self.get_not_result_type(&op),
-						_ => unreachable!(),
 					};
 					
 					match result {
@@ -511,6 +535,7 @@ impl ExprOperator {
 				LogicalOr => self.apply_logical_or(calc_stack, context),
 				LogicalXor => self.apply_logical_xor(calc_stack, context),
 				DotMemberAccess => unreachable!(),
+				Index => self.apply_index(calc_stack, context),
 			};
 			let opnd: Operand = Operand::Value (value);
 			Symbol {
@@ -697,6 +722,14 @@ impl ExprOperator {
 		}
 	}
 	
+	fn apply_index(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
+		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
+		match (lhs, rhs) {
+			//(Value::String (string), Value::Float32 (index)) => string[index as usize],
+			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
+		}
+	}
+	
 	fn take_2_values(calc_stack: &mut Vec<Symbol>, context: &Context) -> (Value, Value) {
 		let rhs: Value = calc_stack
 			.pop()
@@ -862,6 +895,12 @@ impl ExprOperator {
 		}
 	}
 
+	fn get_index_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
+		match (lhs, rhs) {
+			//(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::String)),
+			_ => return Err(()),
+		}
+	}
 	
 	fn get_unary_plus_result_type(&self, operand: &DataType) -> Result<DataType, ()> {
 		match operand {
@@ -953,6 +992,9 @@ mod tests {
 			
 		assert_eq!(
 			OP_ATTRS[ExprOperator::DotMemberAccess as usize], 
+			OpInfo { arity: OpArity::Binary, rank: 9, assot: OpAssot::Left });			
+		assert_eq!(
+			OP_ATTRS[ExprOperator::Index as usize], 
 			OpInfo { arity: OpArity::Binary, rank: 9, assot: OpAssot::Left });
 	}
 }
