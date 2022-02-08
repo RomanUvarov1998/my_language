@@ -113,7 +113,7 @@ impl ExprOperator {
 			let rhs = if let Symbol { kind: SymbolKind::Operand (opnd), .. } = rhs {
 				opnd
 			} else { unreachable!() };
-				
+			
 			let lhs: Symbol = calc_stack.pop()
 				.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 1, 2)))?;
 				
@@ -402,7 +402,7 @@ impl ExprOperator {
 			let (rhs_pos, rhs) = if let Symbol { pos, kind: SymbolKind::Operand (opnd) } = rhs {
 				(pos, opnd)
 			} else { unreachable!() };
-				
+			
 			let lhs: Symbol = calc_stack
 				.pop()
 				.unwrap();
@@ -613,9 +613,21 @@ impl ExprOperator {
 		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Float32(val1 + val2),
-			(Value::String (mut val1), Value::String (mut val2)) => {
-				val1.append(&mut val2);
-				Value::String(val1)
+			(Value::String (mut s1), Value::String (mut s2)) => {
+				s1.append(&mut s2);
+				Value::String(s1)
+			},
+			(Value::String (mut s), Value::Char (c)) => {
+				s.push(c);
+				Value::String(s)
+			},
+			(Value::Char (c), Value::String (mut s)) => {
+				s.insert(0, c);
+				Value::String(s)
+			},
+			(Value::Char (c1), Value::Char (c2)) => {
+				let chars: Vec<char> = vec![c1, c2];
+				Value::String(chars)
 			},
 			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
@@ -744,7 +756,7 @@ impl ExprOperator {
 				
 				let index: usize = (value.abs().floor() * value.signum()) as usize;
 				
-				Value::from(string[index])
+				Value::Char(string[index])
 			},
 			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
@@ -764,7 +776,7 @@ impl ExprOperator {
 			.unwrap_operand()
 			.calc_in_place(context)
 			.unwrap();
-			
+		
 		(lhs, rhs)
 	}
 	
@@ -810,8 +822,19 @@ impl ExprOperator {
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => 
 				Ok(DataType::Primitive (Primitive::Float32)),
+				
 			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => 
 				Ok(DataType::Primitive (Primitive::String)),
+				
+			(DataType::Primitive (Primitive::Char), DataType::Primitive (Primitive::String)) => 
+				Ok(DataType::Primitive (Primitive::String)),
+				
+			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::Char)) => 
+				Ok(DataType::Primitive (Primitive::String)),
+				
+			(DataType::Primitive (Primitive::Char), DataType::Primitive (Primitive::Char)) => 
+				Ok(DataType::Primitive (Primitive::String)),
+				
 			_ => return Err(()),
 		}
 	}

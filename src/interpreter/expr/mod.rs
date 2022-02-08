@@ -404,7 +404,8 @@ impl ExprContext {
 			TokenContent::Number (..) | 
 				TokenContent::Name (..) |
 				TokenContent::BuiltinName (..) |
-				TokenContent::StringLiteral (..)
+				TokenContent::StringLiteral (..) |
+				TokenContent::CharLiteral (..)
 				=> Ok(false),
 			TokenContent::Bracket (_) 
 				=> self.check_brackets(tok),
@@ -594,7 +595,7 @@ fn unpaired_bracket(pos: CodePos) -> InterpErr {
 #[cfg(test)]
 mod tests {
 	//use super::super::token::*;
-use super::{Expr, ExprContextKind};
+	use super::{Expr, ExprContextKind};
 	use super::symbol::{SymbolKind, Symbol, Operand};
 	use super::super::value::Value;
 	use std::rc::Rc;
@@ -604,7 +605,7 @@ use super::{Expr, ExprContextKind};
 	use super::super::struct_def::StructDef;
 	use super::super::builtin_func::BuiltinFuncDef;
 	use super::expr_operator::ExprOperator;
-use super::super::utils::{NameToken, CodePos, CharPos};
+	use super::super::utils::{NameToken, CodePos, CharPos};
 	
 	#[test]
 	fn check_stack_creation_and_arithmetic_calc() {
@@ -1063,6 +1064,36 @@ use super::super::utils::{NameToken, CodePos, CharPos};
 			SymbolKind::ExprOperator (ExprOperator::Index),
 		],
 		Value::Char('d'));
+	}
+	
+	#[test]
+	fn can_add_char_and_string() {
+		test_expr_and_its_stack_eq_and_value(
+		r#"  'H' + "ello"; "#, 
+		vec![
+			SymbolKind::Operand (Operand::Value (Value::Char('H'))),
+			SymbolKind::Operand (Operand::Value (Value::from("ello"))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+		],
+		Value::from("Hello"));
+		
+		test_expr_and_its_stack_eq_and_value(
+		r#"  "Hell" + 'o';  "#, 
+		vec![
+			SymbolKind::Operand (Operand::Value (Value::from("Hell"))),
+			SymbolKind::Operand (Operand::Value (Value::Char('o'))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+		],
+		Value::from("Hello"));
+		
+		test_expr_and_its_stack_eq_and_value(
+		r#"  'H' + 'i';  "#, 
+		vec![
+			SymbolKind::Operand (Operand::Value (Value::Char('H'))),
+			SymbolKind::Operand (Operand::Value (Value::Char('i'))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+		],
+		Value::from("Hi"));
 	}
 	
 	fn test_expr_and_its_stack_eq_and_value(

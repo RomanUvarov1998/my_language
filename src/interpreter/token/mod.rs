@@ -199,6 +199,7 @@ impl TokensIter {
 									| CharKind::Circumflex
 									| CharKind::Exclamation
 									| CharKind::DoubleQuote
+									| CharKind::SingleQuote
 									| CharKind::LeftSlash
 									| CharKind::LeftBracket
 									| CharKind::RightBracket
@@ -252,6 +253,7 @@ impl TokensIter {
 					CharKind::RightSquaredBracket |
 					CharKind::Eq |
 					CharKind::Letter |
+					CharKind::SingleQuote |
 					CharKind::Underscore |
 					CharKind::Punctuation (_) |
 					CharKind::Whitespace |
@@ -271,6 +273,54 @@ impl TokensIter {
 				},
 				None => return Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 			}
+		}
+	}
+	
+	fn parse_char_literal(&mut self, pos_begin: CharPos) -> Result<Token, TokenErr> {
+		let ch: char = match self.iter.next() {
+			Some(parsed_char) => match parsed_char.kind() {
+				CharKind::Digit (_) |
+					CharKind::Dog |
+					CharKind::Dot |
+					CharKind::Plus |
+					CharKind::Minus |
+					CharKind::Greater |
+					CharKind::Less |
+					CharKind::Asterisk |
+					CharKind::Exclamation |
+					CharKind::Circumflex |
+					CharKind::LeftSlash |
+					CharKind::LeftBracket |
+					CharKind::RightBracket |
+					CharKind::LeftCurlyBracket |
+					CharKind::RightCurlyBracket |
+					CharKind::LeftSquaredBracket |
+					CharKind::RightSquaredBracket |
+					CharKind::Eq |
+					CharKind::Letter |
+					CharKind::Underscore |
+					CharKind::Punctuation (_) |
+					CharKind::Whitespace |
+					CharKind::Invalid |
+					CharKind::DoubleQuote
+						=> parsed_char.ch(),
+						
+					CharKind::SingleQuote |
+					CharKind::NewLine |
+					CharKind::Control
+						=> return Err( TokenErr::Construct (parsed_char) ),
+			},
+			None => return Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		};
+		
+		match self.iter.next() {
+			Some(parsed_char) => match parsed_char.kind() {
+				CharKind::SingleQuote => {
+					Ok( Token::new(pos_begin, parsed_char.pos(), TokenContent::CharLiteral (ch)) )
+				},
+				_ => Err( TokenErr::Construct (parsed_char) ),
+			},
+			None => return Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 		}
 	}
 
@@ -456,6 +506,7 @@ impl TokensIter {
 						=> self.parse_operator_or_comment_or_thin_arrow(ch),
 						
 				CharKind::DoubleQuote => self.parse_string_literal(ch.pos()),
+				CharKind::SingleQuote => self.parse_char_literal(ch.pos()),
 				
 				CharKind::LeftBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Left )) ),
 				CharKind::RightBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Right )) ),
@@ -541,6 +592,7 @@ impl std::fmt::Display for Token {
 pub enum TokenContent {
 	Number (f32),
 	StringLiteral (String),
+	CharLiteral (char),
 	Name (String),
 	BuiltinName (String),
 	Operator (Operator),
@@ -555,6 +607,7 @@ impl std::fmt::Display for TokenContent {
 		match self {
 			TokenContent::Number (val) => write!(f, "'{}'", val),
 			TokenContent::StringLiteral (val) => write!(f, "\"{}\"", val),
+			TokenContent::CharLiteral (val) => write!(f, "'{}'", val),
 			TokenContent::Operator (op) => match op {
 				Operator::Plus => write!(f, "'{}'", "+"),
 				Operator::Minus => write!(f, "'{}'", "-"),
@@ -619,6 +672,10 @@ impl PartialEq for TokenContent {
 			},
 			TokenContent::StringLiteral (s1) => match other {
 				TokenContent::StringLiteral (s2) => s1 == s2,
+				_ => false,
+			},
+			TokenContent::CharLiteral (c1) => match other {
+				TokenContent::CharLiteral (c2) => c1 == c2,
 				_ => false,
 			},
 			TokenContent::Operator (op1) => match other {

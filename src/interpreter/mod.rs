@@ -862,6 +862,21 @@ a[1] = "F";
 		}
 	}
 	
+	#[test]
+	fn can_add_strings_and_chars() {
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+var a: @str = "Hello";
+var b: @char = '!';
+@println(a + a);
+@println(a + b);
+@println(b + a);
+@println(b + b);
+		"#) {
+			Ok(_) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
 	
 	// TODO: add test ans implement member func call of a user-defined struct
 	

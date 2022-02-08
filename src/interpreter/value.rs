@@ -12,7 +12,6 @@ pub enum Value {
 	String (Vec<char>),
 	Bool (bool),
 	Char (char),
-	// TODO: make a struct with a value
 	Struct {
 		struct_def: StructDef,
 		// TODO: try use &str for key to not to copy the whole string

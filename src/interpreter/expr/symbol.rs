@@ -67,6 +67,8 @@ impl Iterator for SymbolIterator<'_> {
 			
 			TokenContent::StringLiteral (s) => Ok( Symbol::new_string_literal(s, pos) ),
 			
+			TokenContent::CharLiteral (c) => Ok( Symbol::new_char_literal(c, pos) ),
+			
 			TokenContent::BuiltinName (name) => {
 				let nt = NameToken::new_with_pos(name, pos, true);
 				Symbol::parse_func_call_or_name_or_struct_literal(self.iter, nt)
@@ -371,6 +373,13 @@ impl Symbol {
 	fn new_string_literal(content: String, pos: CodePos) -> Self {
 		Self {
 			kind: SymbolKind::Operand( Operand::Value (Value::from(content)) ),
+			pos,
+		}
+	}
+	
+	fn new_char_literal(ch: char, pos: CodePos) -> Self {
+		Self {
+			kind: SymbolKind::Operand( Operand::Value (Value::from(ch)) ),
 			pos,
 		}
 	}
