@@ -1044,7 +1044,7 @@ use super::super::utils::{NameToken, CodePos, CharPos};
 			} ) ),
 			SymbolKind::ExprOperator (ExprOperator::Index),
 		],
-		Value::from('H'));
+		Value::Char('H'));
 		
 		test_expr_and_its_stack_eq_and_value(
 		r#"  ("Hello, " + "world!")[32 - 21];  "#, 
@@ -1062,7 +1062,7 @@ use super::super::utils::{NameToken, CodePos, CharPos};
 			} ) ),
 			SymbolKind::ExprOperator (ExprOperator::Index),
 		],
-		Value::from('d'));
+		Value::Char('d'));
 	}
 	
 	fn test_expr_and_its_stack_eq_and_value(

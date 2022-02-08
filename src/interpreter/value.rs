@@ -11,6 +11,7 @@ pub enum Value {
 	Float32 (f32),
 	String (Vec<char>),
 	Bool (bool),
+	Char (char),
 	// TODO: make a struct with a value
 	Struct {
 		struct_def: StructDef,
@@ -26,6 +27,7 @@ impl Value {
 			Value::Float32 (_) => DataType::Primitive (Primitive::Float32),
 			Value::String (_) => DataType::Primitive (Primitive::String),
 			Value::Bool (_) => DataType::Primitive (Primitive::Bool),
+			Value::Char (_) => DataType::Primitive (Primitive::Char),
 			Value::Struct { struct_def, .. } => DataType::Complex(struct_def.clone()), // TODO: try avoid cloning and return reference
 			Value::None => DataType::Primitive (Primitive::None),
 		}
@@ -47,6 +49,10 @@ impl PartialEq for Value {
 			},
 			Value::Bool (b1) => match other {
 				Value::Bool (b2) => b1 == b2,
+				_ => false,
+			},
+			Value::Char (c1) => match other {
+				Value::Char (c2) => c1 == c2,
 				_ => false,
 			},
 			Value::Struct { struct_def: sd1, .. } => match other {
@@ -77,6 +83,7 @@ impl std::fmt::Display for Value {
 			} else {
 				write!(f, "False")
 			},
+			Value::Char (c) => write!(f, "{}", c),
 			Value::Struct { struct_def, fields } => {
 				writeln!(f, "Value of struct '{}' {{", struct_def.inner().name().value())?;
 				for (key, val) in fields {
@@ -109,7 +116,7 @@ impl From<&str> for Value {
 
 impl From<char> for Value {
 	fn from(val: char) -> Self {
-		Value::String(vec![val])
+		Value::Char(val)
 	}
 }
 

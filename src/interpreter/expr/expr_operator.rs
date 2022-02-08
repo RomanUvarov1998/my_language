@@ -917,7 +917,7 @@ impl ExprOperator {
 
 	fn get_index_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::String)),
+			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Char)),
 			_ => return Err(()),
 		}
 	}

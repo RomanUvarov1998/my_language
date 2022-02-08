@@ -21,6 +21,7 @@ impl DataType {
 			"f32" => Some( DataType::Primitive (Primitive::Float32) ),
 			"str" => Some( DataType::Primitive (Primitive::String) ),
 			"bool" => Some( DataType::Primitive (Primitive::Bool) ),
+			"char" => Some( DataType::Primitive (Primitive::Char) ),
 			_ => None,
 		}
 	}
@@ -89,6 +90,7 @@ pub enum Primitive {
 	Float32,
 	String,
 	Bool,
+	Char,
 	Any,
 	None,
 }
@@ -99,6 +101,7 @@ impl Primitive {
 			Primitive::Float32 => Value::from(0_f32),
 			Primitive::String => Value::from(String::new()),
 			Primitive::Bool => Value::from(false),
+			Primitive::Char => Value::from('a'),
 			Primitive::Any => unreachable!(),
 			Primitive::None => unreachable!(),
 		}
@@ -111,6 +114,7 @@ impl std::fmt::Display for Primitive {
 			Primitive::Float32 => write!(f, "f32"),
 			Primitive::String => write!(f, "str"),
 			Primitive::Bool => write!(f, "bool"),
+			Primitive::Char => write!(f, "char"),
 			Primitive::Any => write!(f, "Any"),
 			Primitive::None => write!(f, "None"),
 		}

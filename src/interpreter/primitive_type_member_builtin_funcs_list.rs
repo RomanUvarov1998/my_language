@@ -100,6 +100,23 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			),
 		];
 		
+		let lookup_char = vec![
+			BuiltinFuncDef::new(
+				"to_string",
+				vec![
+					BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Bool)),
+				],
+				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+					if let Value::Char (val) = &args_values[0] {
+						Some( Value::from(val.to_string()) )
+					} else {
+						unreachable!();
+					}
+				}) as BuiltinFuncBody,
+				DataType::Primitive (Primitive::String)
+			),
+		];
+		
 		let lookup_any = Vec::new();
 		
 		let lookup_none = vec![
@@ -123,6 +140,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			lookup_float32,
 			lookup_string,
 			lookup_bool,
+			lookup_char,
 			lookup_any,
 			lookup_none,
 		];
@@ -161,6 +179,9 @@ mod tests {
 		
 		assert_eq!(list.lookup[Primitive::Bool as usize].len(), 1);
 		assert_eq!(list.lookup[Primitive::Bool as usize][0].name(), "to_string");
+		
+		assert_eq!(list.lookup[Primitive::Char as usize].len(), 1);
+		assert_eq!(list.lookup[Primitive::Char as usize][0].name(), "to_string");
 		
 		assert_eq!(list.lookup[Primitive::Any as usize].len(), 0);
 		

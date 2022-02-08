@@ -843,7 +843,7 @@ var a: @f32 = A { a: 43, b: False, }.a.@abs();
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
 var a: @str = "Hello!";
-var b: @str = a[0];
+var b: @char = a[0];
 		"#) {
 			Ok(_) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
