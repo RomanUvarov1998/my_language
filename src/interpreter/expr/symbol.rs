@@ -13,76 +13,79 @@ use super::unexpected;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::collections::VecDeque;
 
-//------------------------------- Symbol ----------------------------------
+//------------------------------- SymbolIterator ----------------------------------
 
-#[derive(Debug, Clone)]
-pub struct Symbol {
-	pub kind: SymbolKind,
-	pub pos: CodePos,
+pub struct SymbolIterator<'tokens_iter> {
+	iter: &'tokens_iter mut TokensIter,
+	expr_context: ExprContext,
+	cached_symbols: VecDeque<Symbol>,
+	prev_is_operand: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SymbolKind {
-	Operand (Operand),
-	LeftBracket,
-	RightBracket,
-	ExprOperator (ExprOperator),
+impl<'tokens_iter> SymbolIterator<'tokens_iter> {
+	pub fn new(iter: &'tokens_iter mut TokensIter, expr_context: ExprContext) -> Self {
+		Self {
+			iter,
+			expr_context,
+			cached_symbols: VecDeque::new(),
+			prev_is_operand: false,
+		}
+	}
 }
 
-impl Symbol {
-	pub fn next_from(tokens_iter: &mut TokensIter, expr_context: &mut ExprContext, prev_is_operand: bool) -> Result<Option<Self>, InterpErr> {
-		let next_token_ref = tokens_iter.peek_or_end_reached_err()?;
-		
-		if expr_context.check_expr_end(next_token_ref)? {
-			return Ok(None);
+impl Iterator for SymbolIterator<'_> {
+	type Item = Result<Symbol, InterpErr>;
+	
+	fn next(&mut self) -> Option<Self::Item> {
+		if let Some(symbol) = self.cached_symbols.pop_front() {
+			return Some(Ok(symbol));
 		}
 		
-		let token = tokens_iter.next().unwrap()?;
+		let next_token_ref: &Token = match self.iter.peek() {
+			Ok(tok_ref_op) => tok_ref_op?,
+			Err(err) => return Some(Err(err.into())),
+		};
+		
+		match self.expr_context.check_expr_end(next_token_ref) {
+			Ok(should_stop) => if should_stop {
+				return None;
+			},
+			Err(err) => return Some(Err(err.into())),
+		}
+		
+		let token = self.iter.next().unwrap().unwrap();
 		
 		let Token { pos, content } = token;
 		
-		match content {
+		let symbol_result: Result<Symbol, InterpErr> = match content {
 			// iterator doesn't give comment tokens by default
 			TokenContent::Comment (_) => unreachable!(),
 			
-			TokenContent::Number (num) => {
-				if prev_is_operand {
-					return Err(unexpected(pos));
-				}				
-				let sym = Symbol::new_number(num, pos);
-				Ok(Some(sym))
-			},
+			TokenContent::Number (num) => Ok( Symbol::new_number(num, pos) ),
 			
-			TokenContent::StringLiteral (s) => {
-				if prev_is_operand {
-					return Err(unexpected(pos));
-				}				
-				let sym = Symbol::new_string_literal(s, pos);
-				Ok(Some(sym))
-			},
+			TokenContent::StringLiteral (s) => Ok( Symbol::new_string_literal(s, pos) ),
 			
 			TokenContent::BuiltinName (name) => {
 				let nt = NameToken::new_with_pos(name, pos, true);
-				let sym = Self::parse_func_call_or_name_or_struct_literal(tokens_iter, nt)?;
-				Ok(Some(sym))
+				Symbol::parse_func_call_or_name_or_struct_literal(self.iter, nt)
 			},
 			
 			TokenContent::Name (name) => {
 				let nt = NameToken::new_with_pos(name, pos, false);
-				let sym = Self::parse_func_call_or_name_or_struct_literal(tokens_iter, nt)?;
-				Ok(Some(sym))
+				Symbol::parse_func_call_or_name_or_struct_literal(self.iter, nt)
 			},
 			
 			TokenContent::Operator (ref tok_op) => {
 				let optr: ExprOperator = match tok_op {
-					Operator::Plus => if prev_is_operand {
+					Operator::Plus => if self.prev_is_operand {
 						ExprOperator::BinPlus
 					} else {
 						ExprOperator::UnPlus
 					},
 					
-					Operator::Minus => if prev_is_operand {
+					Operator::Minus => if self.prev_is_operand {
 						ExprOperator::BinMinus
 					} else {
 						ExprOperator::UnMinus
@@ -102,27 +105,42 @@ impl Symbol {
 					Operator::LogicalOr => ExprOperator::LogicalOr,
 					Operator::LogicalXor => ExprOperator::LogicalXor,
 					
-					Operator::Assign => return Err(unexpected(pos)),
+					Operator::Assign => return Some(Err(unexpected(pos))),
 				};
 				
-				Ok(Some(Symbol {
+				Ok(Symbol {
 					pos,
 					kind: SymbolKind::ExprOperator (optr),
-				} ))
+				} )
 			},
 			
-			TokenContent::Bracket (tok_br) => {
-				let kind: SymbolKind = match tok_br {
-					Bracket::Right => SymbolKind::RightBracket,
-					Bracket::Left => SymbolKind::LeftBracket,
-					Bracket::LeftCurly | Bracket::RightCurly => return Err(unexpected(pos)),
-					Bracket::LeftSquared | Bracket::RightSquared => return Err(unexpected(pos)),
-				};
+			TokenContent::Bracket (tok_br) => match tok_br {
+				Bracket::Right => Ok( Symbol { pos, kind: SymbolKind::RightRoundBracket } ),
 				
-				Ok(Some(Symbol {
-					pos,
-					kind,
-				} ))
+				Bracket::Left => Ok( Symbol { pos, kind: SymbolKind::LeftRoundBracket } ),
+				
+				Bracket::LeftCurly | Bracket::RightCurly => return Some(Err(unexpected(pos))),
+				
+				Bracket::LeftSquared => {
+					// cache Operand::IndexExpr as symbol to be returned next
+					match Symbol::parse_index_value(self.iter) {
+						Ok(sym) => self.cached_symbols.push_back(sym),
+						Err(err) => return Some(Err(err)),
+					};
+					
+					// skip ']' token
+					if let Some( Ok ( Token {
+						content: TokenContent::Bracket (Bracket::RightSquared), .. 
+					} ) ) = self.iter.next() {} else { unreachable!(); }
+					
+					// return '[' as Index operator
+					Ok( Symbol {
+						pos,
+						kind: SymbolKind::ExprOperator (ExprOperator::Index),
+					} )
+				},
+				
+				Bracket::RightSquared => return Some(Err(unexpected(pos))),
 			},
 			
 			TokenContent::Keyword (kw) => {
@@ -133,31 +151,68 @@ impl Symbol {
 						Keyword::Else | 
 						Keyword::While | 
 						Keyword::F | 
-						Keyword::Return => return Err(unexpected(pos)),
+						Keyword::Return => return Some(Err(unexpected(pos))),
 					Keyword::True => SymbolKind::Operand (Operand::Value (Value::from(true))),
 					Keyword::False => SymbolKind::Operand (Operand::Value (Value::from(false))),
 				};
 				
-				Ok(Some(Symbol {
+				Ok(Symbol {
 					pos,
 					kind,
-				} ))
+				} )
 			},
 			
 			TokenContent::StatementOp (ref st_op) => {
 				let kind: SymbolKind = match st_op {
 					StatementOp::Dot => SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
-					_ => return Err(unexpected(pos)),
+					_ => return Some(Err(unexpected(pos))),
 				};
 				
-				Ok(Some(Symbol {
+				Ok( Symbol {
 					pos,
 					kind,
-				} ))
+				} )
 			},
+		};
+		
+		match symbol_result {
+			Ok( Symbol{ kind: SymbolKind::Operand(_), .. } ) => {
+				if self.prev_is_operand {
+					return Some(Err(unexpected(pos))); 
+				}
+				self.prev_is_operand = true;
+			},
+			
+			Ok( Symbol{ kind: SymbolKind::RightRoundBracket, .. } ) => {
+				self.prev_is_operand = true;
+			},
+			
+			_ => {
+				self.prev_is_operand = false;
+			}
 		}
+		
+		Some(symbol_result)
 	}
-	
+}
+
+//------------------------------- Symbol ----------------------------------
+
+#[derive(Debug, Clone)]
+pub struct Symbol {
+	pub kind: SymbolKind,
+	pub pos: CodePos,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SymbolKind {
+	Operand (Operand),
+	LeftRoundBracket,
+	RightRoundBracket,
+	ExprOperator (ExprOperator),
+}
+
+impl Symbol {
 	fn parse_func_call_or_name_or_struct_literal(tokens_iter: &mut TokensIter, name: NameToken) -> Result<Symbol, InterpErr> {
 		match tokens_iter.peek_or_end_reached_err()?.content() {
 			// func call
@@ -280,20 +335,29 @@ impl Symbol {
 		}
 	}
 
-	
-	pub fn new_number(num: f32, pos: CodePos) -> Self {
+	fn parse_index_value(tokens_iter: &mut TokensIter) -> Result<Symbol, InterpErr> {
+		let index_expr = Expr::new(tokens_iter, ExprContextKind::IndexValue)?;
+		Ok( Symbol {
+			pos: index_expr.pos(),
+			kind: SymbolKind::Operand ( Operand::IndexExpr (index_expr) ),
+		} )
+	}
+
+	fn new_number(num: f32, pos: CodePos) -> Self {
 		Self {
 			kind: SymbolKind::Operand( Operand::Value (Value::from(num)) ),
 			pos,
 		}
 	}
-	pub fn new_name(name_tok: NameToken) -> Self {
+	
+	fn new_name(name_tok: NameToken) -> Self {
 		Self {
 			pos: name_tok.pos(),
 			kind: SymbolKind::Operand( Operand::Variable (name_tok) ),
 		}
 	}
-	pub fn new_func_call(func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
+	
+	fn new_func_call(func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
 		let pos = func_name.pos();
 		Self {
 			kind: SymbolKind::Operand( Operand::FuncCall {
@@ -303,7 +367,8 @@ impl Symbol {
 			pos,
 		}
 	}
-	pub fn new_string_literal(content: String, pos: CodePos) -> Self {
+	
+	fn new_string_literal(content: String, pos: CodePos) -> Self {
 		Self {
 			kind: SymbolKind::Operand( Operand::Value (Value::from(content)) ),
 			pos,
@@ -347,6 +412,7 @@ pub enum Operand {
 		fields: Vec<StructLiteralField>,
 	},
 	StructFieldValue (Rc<RefCell<Value>>),
+	IndexExpr (Expr),
 }
 
 impl Eq for Operand {}
@@ -372,6 +438,10 @@ impl PartialEq for Operand {
 			},
 			Operand::StructFieldValue (v1) => match other {
 				Operand::StructFieldValue (v2) => *v1.borrow() == *v2.borrow(),
+				_ => false,
+			},
+			Operand::IndexExpr (se1) => match other {
+				Operand::IndexExpr (se2) => se1 == se2,
 				_ => false,
 			},
 		}
@@ -413,6 +483,8 @@ impl Operand {
 			},
 			
 			Operand::StructFieldValue (value_rc) => value_rc.borrow().get_type(),
+			
+			Operand::IndexExpr (se) => se.check_and_calc_data_type(check_context)?,
 		};
 		
 		Ok(dt)
@@ -480,6 +552,8 @@ impl Operand {
 			},
 			
 			Operand::StructFieldValue (value_rc) => Some(value_rc.borrow().clone()),
+			
+			Operand::IndexExpr (se) => Some(se.calc(context)),
 		}
 	}
 }
@@ -492,6 +566,7 @@ impl std::fmt::Display for Operand {
 			Operand::FuncCall { .. } => write!(f, "function call"),
 			Operand::StructLiteral { .. } => write!(f, "struct literal"),
 			Operand::StructFieldValue (_) => write!(f, "struct field"),
+			Operand::IndexExpr (_) => write!(f, "index expr"),
 		}
 	}
 }

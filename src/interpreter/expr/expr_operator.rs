@@ -41,8 +41,7 @@ pub enum ExprOperator {
 	
 	Pow,
 	
-	DotMemberAccess,
-	
+	DotMemberAccess,	
 	Index,
 }
 
@@ -131,6 +130,12 @@ impl ExprOperator {
 					
 				(_, Operand::StructFieldValue (_)) =>
 					unreachable!(),
+				
+				(_, Operand::IndexExpr (_)) => 
+					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
+				
+				(Operand::IndexExpr (_), _) => 
+					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
 				
 				
 				(Operand::Value (ref value), Operand::Variable (ref var_name)) => {
@@ -318,22 +323,22 @@ impl ExprOperator {
 					let rhs: DataType = rhs.check_and_calc_data_type_in_place(check_context)?;
 					
 					let result = match self {
-						BinPlus => self.get_bin_plus_result_type(&rhs, &lhs),
-						BinMinus => self.get_bin_minus_result_type(&rhs, &lhs),
-						Div => self.get_bin_div_result_type(&rhs, &lhs),
-						Mul => self.get_bin_mul_result_type(&rhs, &lhs),
-						Pow => self.get_bin_pow_result_type(&rhs, &lhs),
-						Equal => self.get_equal_result_type(&rhs, &lhs),
-						NotEqual => self.get_not_equal_result_type(&rhs, &lhs),
-						Greater => self.get_greater_result_type(&rhs, &lhs),
-						GreaterEqual => self.get_greater_equal_result_type(&rhs, &lhs),
-						Less => self.get_less_result_type(&rhs, &lhs),
-						LessEqual => self.get_less_equal_result_type(&rhs, &lhs),
-						LogicalAnd => self.get_logical_and_result_type(&rhs, &lhs),
-						LogicalOr => self.get_logical_or_result_type(&rhs, &lhs),
-						LogicalXor => self.get_logical_xor_result_type(&rhs, &lhs),
+						BinPlus => self.get_bin_plus_result_type(&lhs, &rhs),
+						BinMinus => self.get_bin_minus_result_type(&lhs, &rhs),
+						Div => self.get_bin_div_result_type(&lhs, &rhs),
+						Mul => self.get_bin_mul_result_type(&lhs, &rhs),
+						Pow => self.get_bin_pow_result_type(&lhs, &rhs),
+						Equal => self.get_equal_result_type(&lhs, &rhs),
+						NotEqual => self.get_not_equal_result_type(&lhs, &rhs),
+						Greater => self.get_greater_result_type(&lhs, &rhs),
+						GreaterEqual => self.get_greater_equal_result_type(&lhs, &rhs),
+						Less => self.get_less_result_type(&lhs, &rhs),
+						LessEqual => self.get_less_equal_result_type(&lhs, &rhs),
+						LogicalAnd => self.get_logical_and_result_type(&lhs, &rhs),
+						LogicalOr => self.get_logical_or_result_type(&lhs, &rhs),
+						LogicalXor => self.get_logical_xor_result_type(&lhs, &rhs),
 						DotMemberAccess => unreachable!(),
-						Index => self.get_index_result_type(&rhs, &lhs),
+						Index => self.get_index_result_type(&lhs, &rhs),
 						
 						UnPlus => unreachable!(),
 						UnMinus => unreachable!(),
@@ -414,6 +419,12 @@ impl ExprOperator {
 					unreachable!(),
 					
 				(_, Operand::StructFieldValue (_)) =>
+					unreachable!(),
+				
+				(_, Operand::IndexExpr (_)) => 
+					unreachable!(),
+				
+				(Operand::IndexExpr (_), _) => 
 					unreachable!(),
 				
 				
@@ -725,7 +736,16 @@ impl ExprOperator {
 	fn apply_index(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
 		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
-			//(Value::String (string), Value::Float32 (index)) => string[index as usize],
+			(Value::String (string), Value::Float32 (value)) => {
+				if value.is_nan() {
+					println!("\n\nIndex can't be NAN");
+					std::process::exit(1);
+				}
+				
+				let index: usize = (value.abs().floor() * value.signum()) as usize;
+				
+				Value::from(string[index])
+			},
 			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
@@ -896,8 +916,9 @@ impl ExprOperator {
 	}
 
 	fn get_index_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
+		println!("Got {:#?}, {:#?}", lhs, rhs);
 		match (lhs, rhs) {
-			//(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::String)),
+			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::String)),
 			_ => return Err(()),
 		}
 	}

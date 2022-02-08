@@ -107,6 +107,12 @@ impl From<&str> for Value {
 	}
 }
 
+impl From<char> for Value {
+	fn from(val: char) -> Self {
+		Value::String(vec![val])
+	}
+}
+
 impl From<bool> for Value {
 	fn from(val: bool) -> Self {
 		Value::Bool(val)

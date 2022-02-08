@@ -838,6 +838,19 @@ var a: @f32 = A { a: 43, b: False, }.a.@abs();
 		}
 	}
 	
+	#[test]
+	fn can_read_string_char_by_index() {
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+var a: @str = "Hello!";
+var b: @str = a[0];
+		"#) {
+			Ok(_) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
+	
+	
 	// TODO: add test ans implement member func call of a user-defined struct
 	
 	fn new_name_token(name: &str, is_builtin: bool) -> NameToken {

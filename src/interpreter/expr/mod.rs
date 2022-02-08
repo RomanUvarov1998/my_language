@@ -7,7 +7,7 @@ use super::value::Value;
 use super::data_type::DataType;
 use super::utils::{CharPos, CodePos};
 use super::context::Context;
-use symbol::{Symbol, SymbolKind, Operand};
+use symbol::{SymbolIterator, Symbol, SymbolKind, Operand};
 use expr_operator::{ExprOperator, OpAssot};
 use std::rc::Rc;
 
@@ -44,8 +44,8 @@ impl Expr {
 			match sym.kind() {
 				SymbolKind::Operand (_) => calc_stack.push(sym.clone()), // TODO: avoid cloning symbols
 				
-				SymbolKind::LeftBracket => unreachable!(),
-				SymbolKind::RightBracket => unreachable!(),
+				SymbolKind::LeftRoundBracket => unreachable!(),
+				SymbolKind::RightRoundBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => {
 					let result_sym: Symbol = op.apply(&mut calc_stack, context, sym.pos());
@@ -71,8 +71,8 @@ impl Expr {
 			match sym.kind() {
 				SymbolKind::Operand (_) => type_calc_stack.push(sym.clone()), // TODO: avoid cloning symbols
 				
-				SymbolKind::LeftBracket => unreachable!(),
-				SymbolKind::RightBracket => unreachable!(),
+				SymbolKind::LeftRoundBracket => unreachable!(),
+				SymbolKind::RightRoundBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => {
 					let dt: DataType = op.get_result_data_type(&mut type_calc_stack, check_context, sym.pos())?;
@@ -108,8 +108,8 @@ impl Expr {
 					_ => return Err( ExprErr::NotLhsExprSymbol(sym.pos).into() ),
 				}, // TODO: avoid cloning symbols
 				
-				SymbolKind::LeftBracket => unreachable!(),
-				SymbolKind::RightBracket => unreachable!(),
+				SymbolKind::LeftRoundBracket => unreachable!(),
+				SymbolKind::RightRoundBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => match op {
 					ExprOperator::DotMemberAccess => {
@@ -141,8 +141,8 @@ impl Expr {
 			match sym.kind() {
 				SymbolKind::Operand (_) => calc_stack.push(sym.clone()), // TODO: avoid cloning symbols
 				
-				SymbolKind::LeftBracket => unreachable!(),
-				SymbolKind::RightBracket => unreachable!(),
+				SymbolKind::LeftRoundBracket => unreachable!(),
+				SymbolKind::RightRoundBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => {
 					let result_sym: Symbol = op.apply(&mut calc_stack, context, sym.pos());
@@ -169,8 +169,8 @@ impl Expr {
 					_ => return Err( ExprErr::NotLhsExprSymbol(sym.pos).into() ),
 				}, // TODO: avoid cloning symbols
 				
-				SymbolKind::LeftBracket => unreachable!(),
-				SymbolKind::RightBracket => unreachable!(),
+				SymbolKind::LeftRoundBracket => unreachable!(),
+				SymbolKind::RightRoundBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => match op {
 					ExprOperator::DotMemberAccess => {
@@ -204,8 +204,8 @@ impl Expr {
 					calc_stack.push(sym.clone());
 				}, // TODO: avoid cloning symbols
 				
-				SymbolKind::LeftBracket => unreachable!(),
-				SymbolKind::RightBracket => unreachable!(),
+				SymbolKind::LeftRoundBracket => unreachable!(),
+				SymbolKind::RightRoundBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => {
 					match op {
@@ -235,37 +235,24 @@ impl Expr {
 	fn create_stack(tokens_iter: &mut TokensIter, context_kind: ExprContextKind) -> Result<Vec<Symbol>, InterpErr> {
 		use std::cmp::Ordering;
 		
-		let mut context = ExprContext::new(context_kind);
+		let context = ExprContext::new(context_kind);
 		let mut tmp_stack = Vec::<Symbol>::new();
 		let mut expr_stack = Vec::<Symbol>::new();
-		let mut prev_is_operand = false;
 		
-		'outer: while let Some(symbol) = Symbol::next_from(tokens_iter, &mut context, 
-			prev_is_operand)? 
-		{
+		'outer: for symbol_result in SymbolIterator::new(tokens_iter, context) {
+			let symbol: Symbol = symbol_result?;
+			
 			match symbol.kind() {
-				SymbolKind::Operand(_) => {
-					if prev_is_operand {
-						return Err(unexpected(symbol.pos()));
-					}
-					expr_stack.push(symbol);
-					prev_is_operand = true;
-				},
+				SymbolKind::Operand(_) => expr_stack.push(symbol),
 				
-				SymbolKind::LeftBracket => {
-					tmp_stack.push(symbol);
-					prev_is_operand = false;
-				},
+				SymbolKind::LeftRoundBracket => tmp_stack.push(symbol),
 				
-				SymbolKind::RightBracket => {
+				SymbolKind::RightRoundBracket => {
 					while let Some(top_sym) = tmp_stack.pop() {
 						match top_sym.kind() {
 							SymbolKind::Operand (..) => unreachable!(),
-							SymbolKind::LeftBracket => {
-								prev_is_operand = true;
-								continue 'outer;
-							},
-							SymbolKind::RightBracket => unreachable!(),
+							SymbolKind::LeftRoundBracket => continue 'outer,
+							SymbolKind::RightRoundBracket => unreachable!(),
 							SymbolKind::ExprOperator (..) => expr_stack.push(top_sym),
 						}
 					}
@@ -278,10 +265,7 @@ impl Expr {
 						ExprOperator::UnPlus
 						| ExprOperator::UnMinus
 						| ExprOperator::Not 
-						=> {
-							prev_is_operand = false;
-							tmp_stack.push(symbol);
-						},
+						=> tmp_stack.push(symbol),
 						
 						ExprOperator::LogicalOr
 						| ExprOperator::LogicalAnd
@@ -305,14 +289,14 @@ impl Expr {
 						
 						| ExprOperator::DotMemberAccess
 						| ExprOperator::Index
-						=> {
-							while let Some(top_tok_sym) = tmp_stack.last() {
+						=> {							
+							'tmp_to_expr: while let Some(top_tok_sym) = tmp_stack.last() {
 								match top_tok_sym.kind() {
 									SymbolKind::Operand (..) => unreachable!(),
 									
-									SymbolKind::LeftBracket => break,
+									SymbolKind::LeftRoundBracket => break 'tmp_to_expr,
 									
-									SymbolKind::RightBracket => unreachable!(),
+									SymbolKind::RightRoundBracket => unreachable!(),
 									
 									SymbolKind::ExprOperator ( top_ref ) => {
 										let cmp_result: Ordering = top_ref.rank().cmp(&optr.rank());
@@ -324,7 +308,7 @@ impl Expr {
 											},
 											
 											Ordering::Equal => match (top_ref.assot(), optr.assot()) {
-												(OpAssot::Right, OpAssot::Right) => break,
+												(OpAssot::Right, OpAssot::Right) => break 'tmp_to_expr,
 												
 												_ => {
 													let popped: Symbol = tmp_stack.pop().unwrap();
@@ -332,15 +316,13 @@ impl Expr {
 												},
 											},
 											
-											Ordering::Less => break,
+											Ordering::Less => break 'tmp_to_expr,
 										}
 									}
 								}
 							}
 							
 							tmp_stack.push(symbol);
-							
-							prev_is_operand = false;
 						},
 					}
 				},
@@ -350,8 +332,8 @@ impl Expr {
 		while let Some(top_sym) = tmp_stack.pop() {
 			match top_sym.kind() {
 				SymbolKind::Operand (..) => expr_stack.push(top_sym),
-				SymbolKind::LeftBracket => return Err( unpaired_bracket(top_sym.pos()) ),
-				SymbolKind::RightBracket => unreachable!(),
+				SymbolKind::LeftRoundBracket => return Err( unpaired_bracket(top_sym.pos()) ),
+				SymbolKind::RightRoundBracket => unreachable!(),
 				SymbolKind::ExprOperator (..) => expr_stack.push(top_sym),
 			}
 		}
@@ -392,7 +374,7 @@ pub enum ExprContextKind {
 	FunctionArg,
 	IfCondition,
 	StructFieldValue,
-	ArrayIndex,
+	IndexValue,
 }
 
 pub struct ExprContext {
@@ -437,7 +419,7 @@ impl ExprContext {
 					ExprContextKind::ToReturn => Err(unexpected(tok.pos())),
 					ExprContextKind::FunctionArg => Ok(true),
 					ExprContextKind::StructFieldValue => Ok(true),
-					ExprContextKind::ArrayIndex => Err(unexpected(tok.pos())),
+					ExprContextKind::IndexValue => Err(unexpected(tok.pos())),
 				},
 				StatementOp::Semicolon => match self.kind {
 					ExprContextKind::RightAssignOperand => Ok(true),
@@ -446,7 +428,7 @@ impl ExprContext {
 					ExprContextKind::ToReturn => Ok(true),
 					ExprContextKind::FunctionArg => Err(unexpected(tok.pos())),
 					ExprContextKind::StructFieldValue => Err(unexpected(tok.pos())),
-					ExprContextKind::ArrayIndex => Err(unexpected(tok.pos())),
+					ExprContextKind::IndexValue => Err(unexpected(tok.pos())),
 				}
 			},
 			TokenContent::Keyword (kw) => match kw {
@@ -482,7 +464,7 @@ impl ExprContext {
 							ExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
 							ExprContextKind::StructFieldValue => Err( unpaired_bracket(br_tok.pos()) ),
 							ExprContextKind::FunctionArg => Ok(true),
-							ExprContextKind::ArrayIndex => Err( unpaired_bracket(br_tok.pos()) ),
+							ExprContextKind::IndexValue => Err( unpaired_bracket(br_tok.pos()) ),
 						}
 					}
 				},
@@ -493,7 +475,7 @@ impl ExprContext {
 					ExprContextKind::FunctionArg => Ok(false),
 					ExprContextKind::ToReturn => Ok(false),
 					ExprContextKind::StructFieldValue => Ok(true),
-					ExprContextKind::ArrayIndex => Err(unexpected(br_tok.pos())),
+					ExprContextKind::IndexValue => Err(unexpected(br_tok.pos())),
 				},
 				Bracket::RightCurly => match self.kind {
 					ExprContextKind::RightAssignOperand => Ok(false),
@@ -502,11 +484,11 @@ impl ExprContext {
 					ExprContextKind::FunctionArg => Ok(false),
 					ExprContextKind::ToReturn => Ok(false),
 					ExprContextKind::StructFieldValue => Ok(true),
-					ExprContextKind::ArrayIndex => Err(unexpected(br_tok.pos())),
+					ExprContextKind::IndexValue => Err(unexpected(br_tok.pos())),
 				},
 				Bracket::LeftSquared => Ok(false),
 				Bracket::RightSquared => match self.kind {
-					ExprContextKind::ArrayIndex => Ok(true),
+					ExprContextKind::IndexValue => Ok(true),
 					_ => Ok(false),
 				},
 			},
@@ -546,9 +528,22 @@ impl ExprErr {
 		}
 	}
 	fn wrong_operands_type_for_operator(op: ExprOperator, operator_pos: CodePos, operands_types: &[&DataType]) -> Self {
+		let mut descr: String = format!("Operator '{:?}' can't be applied to operands with type(-s) [", op);
+		
+		let mut is_first = true;
+		for (ind, opt) in operands_types.iter().enumerate() {
+			if !is_first {
+				descr.push_str(", ");
+			}
+			is_first = false;
+			descr.push_str(&format!("{}: {:?}", ind, opt));
+		}
+		
+		descr.push_str("]");
+		
 		ExprErr::WrongOperandsTypeForOperator { 
 			operator_pos,
-			descr: format!("Operator '{:?}' can't be applied to operands with type(-s) {:?}", op, operands_types),
+			descr,
 		}
 	}
 	fn wrong_operands_for_operator(op: ExprOperator, operator_pos: CodePos, operands: &[&Operand]) -> Self {
@@ -633,6 +628,13 @@ use super::super::utils::{NameToken, CodePos, CharPos};
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::Float32(3.125_f32 + 5.4_f32 * 2.46_f32));
+		
+		test_expr_and_its_stack_eq_and_value("6 / 2;", vec![
+			SymbolKind::Operand (Operand::Value (Value::Float32 (6_f32))),
+			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Div),
+		],
+		Value::Float32(6_f32 / 2_f32));
 		
 		test_expr_and_its_stack_eq_and_value("3.125 + 0 + 5.25 * 2.25 - 3.25 / 2 * 4.25;", vec![
 			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
@@ -1028,6 +1030,41 @@ use super::super::utils::{NameToken, CodePos, CharPos};
 		Value::Bool(true));
 	}
 	
+	#[test]
+	fn check_index_operator() {
+		test_expr_and_its_stack_eq_and_value(
+		r#"  "Hello!"[0];"#, 
+		vec![
+			SymbolKind::Operand (Operand::Value (Value::from("Hello!"))),
+			SymbolKind::Operand (Operand::IndexExpr (Expr {
+				expr_stack: Rc::new(vec![
+					Symbol { kind: SymbolKind::Operand (Operand::Value (Value::Float32 (0_f32))), pos: CodePos::from(CharPos::new()) },
+				]),
+				pos: CodePos::from(CharPos::new()),
+			} ) ),
+			SymbolKind::ExprOperator (ExprOperator::Index),
+		],
+		Value::from('H'));
+		
+		test_expr_and_its_stack_eq_and_value(
+		r#"  ("Hello, " + "world!")[32 - 21];  "#, 
+		vec![
+			SymbolKind::Operand (Operand::Value (Value::from("Hello, "))),
+			SymbolKind::Operand (Operand::Value (Value::from("world!"))),
+			SymbolKind::ExprOperator (ExprOperator::BinPlus),
+			SymbolKind::Operand (Operand::IndexExpr (Expr {
+				expr_stack: Rc::new(vec![
+					Symbol { kind: SymbolKind::Operand (Operand::Value (Value::Float32 (32_f32))), pos: CodePos::from(CharPos::new()) },
+					Symbol { kind: SymbolKind::Operand (Operand::Value (Value::Float32 (21_f32))), pos: CodePos::from(CharPos::new()) },
+					Symbol { kind: SymbolKind::ExprOperator (ExprOperator::BinMinus), pos: CodePos::from(CharPos::new()) },
+				]),
+				pos: CodePos::from(CharPos::new()),
+			} ) ),
+			SymbolKind::ExprOperator (ExprOperator::Index),
+		],
+		Value::from('d'));
+	}
+	
 	fn test_expr_and_its_stack_eq_and_value(
 		expr_str: &str, 
 		correct_expr_stack: Vec<SymbolKind>,
@@ -1065,6 +1102,9 @@ use super::super::utils::{NameToken, CodePos, CharPos};
 		}
 		
 		let max_len = std::cmp::max(expr_stack.len(), syms_expr_stack.len());
+		
+		println!("\t\tGOT vs CORRECT");
+		
 		for i in 0..max_len {
 			match syms_expr_stack.get(i) {
 				Some(sym) => print!("{:?}", sym),
@@ -1084,7 +1124,6 @@ use super::super::utils::{NameToken, CodePos, CharPos};
 		
 		panic!("Test failed ^^^");
 	}
-	
 	
 	fn test_expr_and_its_stack_eq(
 		expr_str: &str, 
