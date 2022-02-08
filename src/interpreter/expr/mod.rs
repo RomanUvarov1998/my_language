@@ -181,7 +181,7 @@ impl Expr {
 						}); // TODO: somehow place DataType here, not a massive symbol
 					},
 					_ => return Err( ExprErr::NotLhsExprSymbol(sym.pos).into() ),
-				}
+				},
 			}
 		}
 			
