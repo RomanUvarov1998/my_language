@@ -850,6 +850,18 @@ var b: @str = a[0];
 		}
 	}
 	
+	#[test]
+	fn can_write_string_char_by_index() {
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+var a: @str = "Hello!";
+a[1] = "F";
+		"#) {
+			Ok(_) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
+	
 	
 	// TODO: add test ans implement member func call of a user-defined struct
 	

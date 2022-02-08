@@ -916,7 +916,6 @@ impl ExprOperator {
 	}
 
 	fn get_index_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
-		println!("Got {:#?}, {:#?}", lhs, rhs);
 		match (lhs, rhs) {
 			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::String)),
 			_ => return Err(()),
