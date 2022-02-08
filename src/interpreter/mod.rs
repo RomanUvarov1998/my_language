@@ -93,7 +93,7 @@ impl Interpreter {
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				let str_value: String = match &args_values[0] {
-					Value::String(val) => val.clone(),
+					val @ Value::String(_) => format!("{}", val),
 					_ => unreachable!(),
 				};
 				let result: f32 = str_value.parse::<f32>().unwrap();

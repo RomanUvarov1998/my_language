@@ -54,7 +54,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Float32 (val) = &args_values[0] {
-						Some( Value::String( format!("{}", val) ) )
+						Some( Value::from(format!("{}", val)) )
 					} else {
 						unreachable!();
 					}

@@ -9,7 +9,7 @@ use std::rc::Rc;
 #[derive(Debug, Clone)]
 pub enum Value {
 	Float32 (f32),
-	String (String),
+	String (Vec<char>),
 	Bool (bool),
 	// TODO: make a struct with a value
 	Struct {
@@ -65,7 +65,13 @@ impl std::fmt::Display for Value {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Value::Float32 (v) => write!(f, "{}", v),
-			Value::String (v) => write!(f, "{}", v),
+			Value::String (v) => {
+				write!(f, "'")?;
+				for ch in v {
+					write!(f, "{}", ch)?;
+				}
+				write!(f, "'")
+			},
 			Value::Bool (v) => if *v {
 				write!(f, "True")
 			} else {
@@ -91,13 +97,13 @@ impl From<f32> for Value {
 
 impl From<String> for Value {
 	fn from(val: String) -> Self {
-		Value::String(val)
+		Value::String(val.chars().collect::<Vec<char>>())
 	}
 }
 
 impl From<&str> for Value {
 	fn from(val: &str) -> Self {
-		Value::String(val.to_string())
+		Value::String(val.chars().collect::<Vec<char>>())
 	}
 }
 

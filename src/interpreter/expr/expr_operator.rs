@@ -577,10 +577,9 @@ impl ExprOperator {
 		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Float32(val1 + val2),
-			(Value::String (val1), Value::String (val2)) => {
-				let mut res: String = val1.clone();
-				res.push_str(&val2);
-				Value::String(res)
+			(Value::String (mut val1), Value::String (mut val2)) => {
+				val1.append(&mut val2);
+				Value::String(val1)
 			},
 			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
