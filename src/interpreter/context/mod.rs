@@ -10,6 +10,7 @@ use super::user_func::{UserFuncErr, UserFuncArg, UserFuncDef};
 use super::statement::ReturningBody;
 use super::primitive_type_member_builtin_funcs_list::PrimitiveTypeMemberBuiltinFuncsList;
 use super::struct_def::{StructDef, StructFieldDef, StructDefErr};
+use super::data_type_template::DataTypeTemplate;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -21,6 +22,7 @@ pub struct Context<'prev_context> {
 	builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>,
 	primitive_type_member_builtin_funcs_list: &'prev_context PrimitiveTypeMemberBuiltinFuncsList,
 	struct_defs: Rc<RefCell<Vec<StructDef>>>,
+	struct_def_templates: Rc<RefCell<Vec<DataTypeTemplate>>>,
 	is_root: bool,
 }
 
@@ -36,6 +38,7 @@ impl<'prev_context> Context<'prev_context> {
 			builtin_func_defs,
 			primitive_type_member_builtin_funcs_list,
 			struct_defs: Rc::new(RefCell::new(struct_defs)),
+			struct_def_templates: Rc::new(RefCell::new(Vec::new())),
 			is_root: true,
 		}
 	}
@@ -47,6 +50,7 @@ impl<'prev_context> Context<'prev_context> {
 			builtin_func_defs: &self.builtin_func_defs,
 			primitive_type_member_builtin_funcs_list: &self.primitive_type_member_builtin_funcs_list,
 			struct_defs: Rc::clone(&self.struct_defs),
+			struct_def_templates: Rc::clone(&self.struct_def_templates),
 			is_root: false,
 		}
 	}
@@ -103,6 +107,15 @@ impl<'prev_context> Context<'prev_context> {
 					Err( DataTypeErr::NotDefined { name: name.clone() } )
 				}
 			},
+		}
+	}
+	
+	pub fn add_user_template(&self, template: DataTypeTemplate) {
+		if self.is_root {
+			let mut templ_defs = self.struct_def_templates.borrow_mut();
+			templ_defs.push(template);
+		} else {
+			panic!("Template can only be defined in th global scope");
 		}
 	}
 	
