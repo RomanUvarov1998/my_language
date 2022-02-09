@@ -7,11 +7,10 @@ use super::value::Value;
 use super::data_type::DataType;
 use super::utils::{CharPos, CodePos};
 use super::context::Context;
-use symbol::{SymbolIterator, Symbol, SymbolKind, Operand};
+use symbol::SymbolIterator;
+pub use symbol::{Symbol, Operand, SymbolKind, StructLiteralField};
 use expr_operator::{ExprOperator, OpAssot};
 use std::rc::Rc;
-
-pub use symbol::StructLiteralField;
 
 #[derive(Debug)]
 pub struct Expr {
@@ -35,6 +34,25 @@ impl Expr {
 			expr_stack: Rc::new(expr_stack),
 			pos: CodePos::new(pos_begin, pos_end),
 		} )
+	}
+	
+	pub fn new_from_stack(expr_stack: Vec<Symbol>) -> Self {
+		let mut pos_begin: CharPos = expr_stack[0].pos().begin();
+		let mut pos_end: CharPos = expr_stack[0].pos().end();
+		
+		for sym_ref in &expr_stack {
+			pos_begin = std::cmp::min(sym_ref.pos().begin(), pos_begin);
+			pos_end = std::cmp::max(sym_ref.pos().end(), pos_end);
+		}
+		
+		Self {
+			expr_stack: Rc::new(expr_stack),
+			pos: CodePos::new(pos_begin, pos_end),
+		}
+	}
+	
+	pub fn expr_stack(&self) -> &Vec<Symbol> {
+		&*self.expr_stack
 	}
 	
 	pub fn calc(&self, context: &Context) -> Value {

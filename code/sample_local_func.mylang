@@ -1,0 +1,17 @@
+f factorial(a: @f32) -> @f32 {
+	f get_prev(a: @f32) -> f32 {
+		if (a > 1) {
+			return a * get_prev(a - 1);
+		} else {
+			return 1;
+		}
+	}
+	
+	return get_prev(a);
+}
+
+var a: @f32 = 6;
+
+var fac: @f32 = factorial(a);
+
+@println(fac);

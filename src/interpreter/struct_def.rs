@@ -145,6 +145,15 @@ impl StructDefInner {
 		self.builtin_funcs.push(func_def);
 	}
 	
+	#[allow(dead_code)]
+	pub fn add_user_func_def(&mut self, func_def: UserFuncDef) {
+		if let Some(_) = self.user_funcs.iter().find(|fd| fd.name() == func_def.name()) {
+			panic!("User-defined member function '{}' is already defined", func_def.name());
+		}
+		
+		self.user_funcs.push(func_def);
+	}
+	
 	pub fn find_builtin_func_def(&self, name: &NameToken) -> Result<BuiltinFuncDef, StructDefErr> {
 		match self.builtin_funcs.iter().find(|fd| fd.name() == name.value()) {
 			Some(func_def) => Ok(func_def.clone()),

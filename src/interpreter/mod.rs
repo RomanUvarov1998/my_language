@@ -22,6 +22,7 @@ use data_type::{DataType, BuiltinType};
 use value::Value;
 use primitive_type_member_builtin_funcs_list::PrimitiveTypeMemberBuiltinFuncsList;
 use struct_def::{StructDef, StructDefErr};
+use data_type_template::TemplateErr;
 
 //------------------------ Interpreter --------------------
 
@@ -159,6 +160,7 @@ pub enum InnerErr {
 	Statement (StatementErr),
 	StructDef (StructDefErr),
 	DataType (DataTypeErr),
+	Template (TemplateErr)
 }
 
 impl InterpErr {
@@ -429,6 +431,19 @@ impl From<DataTypeErr> for InterpErr {
 				pos: name.pos(),
 				descr,
 				inner: InnerErr::DataType (err),
+			},
+		}
+	}
+}
+
+impl From<TemplateErr> for InterpErr {
+	fn from(err: TemplateErr) -> InterpErr {
+		let descr: String = format!("{}", err);
+		match err {
+			TemplateErr::NotSatisfiedTypeParam { ref name } => InterpErr {
+				pos: name.pos(),
+				descr,
+				inner: InnerErr::Template (err),
 			},
 		}
 	}

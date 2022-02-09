@@ -413,7 +413,11 @@ pub struct Statement {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum StatementKind {
-	VariableDeclareSet { var_name: NameToken, data_type_name: NameToken, value_expr: Expr },
+	VariableDeclareSet { 
+		var_name: NameToken, 
+		data_type_name: NameToken, 
+		value_expr: Expr,
+	},
 	UserStructDeclare {
 		new_type_name: NameToken,
 		fields: Vec<ParsedStructFieldDef>,
@@ -425,7 +429,10 @@ pub enum StatementKind {
 		body: ReturningBody,
 	},
 	
-	VariableSet { left_expr: Expr, right_expr: Expr },
+	VariableSet { 
+		left_expr: Expr, 
+		right_expr: Expr
+	},
 	FuncCall {
 		left_expr: Expr,
 	},
@@ -443,6 +450,13 @@ pub enum StatementKind {
 }
 
 impl Statement {
+	pub fn new(pos: CodePos, kind: StatementKind) -> Self {
+		Self {
+			pos, 
+			kind,
+		}
+	}
+	
 	pub fn check(
 		&self, 
 		check_context: &mut Context
@@ -464,25 +478,17 @@ impl Statement {
 				}
 			},
 			
-			StatementKind::VariableSet { left_expr, right_expr } => {
-				let right_expr_data_type: DataType = right_expr.check_and_calc_data_type(check_context)?;
-				
-				let left_expr_data_type: DataType = left_expr.check_and_get_variable_to_set_type(check_context)?;
-				
-				if left_expr_data_type != right_expr_data_type {
-					return Err(StatementErr::WrongAssignedType { 
-						lhs_data_type: left_expr_data_type,
-						rhs_data_type: right_expr_data_type, 
-						statement_pos: self.pos(),
-					}.into());
+			StatementKind::UserStructDeclare { new_type_name, fields } => {
+				let mut typed_fields = Vec::<StructFieldDef>::new();
+				for field in fields.iter() {
+					let data_type: DataType = check_context.find_type_by_name(&field.data_type_name)?;					
+					typed_fields.push(StructFieldDef::new(
+						field.name.clone(), data_type));
 				}
+				check_context.add_user_struct(new_type_name.clone(), typed_fields)?;
 			},
-			
-			StatementKind::FuncCall { left_expr } => {
-				left_expr.check_as_standalone_expression(check_context)?;
-			},
-			
-			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {				
+		
+			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {
 				let return_type: DataType = match return_type_name {
 					Some(nt) => check_context.find_type_by_name(nt)?,
 					None => DataType::Builtin (BuiltinType::None),
@@ -516,20 +522,30 @@ impl Statement {
 				body.check(&return_type, &mut next_check_context)?;
 			},
 			
+			
+			StatementKind::VariableSet { left_expr, right_expr } => {
+				let right_expr_data_type: DataType = right_expr.check_and_calc_data_type(check_context)?;
+				
+				let left_expr_data_type: DataType = left_expr.check_and_get_variable_to_set_type(check_context)?;
+				
+				if left_expr_data_type != right_expr_data_type {
+					return Err(StatementErr::WrongAssignedType { 
+						lhs_data_type: left_expr_data_type,
+						rhs_data_type: right_expr_data_type, 
+						statement_pos: self.pos(),
+					}.into());
+				}
+			},
+			
+			StatementKind::FuncCall { left_expr } => {
+				left_expr.check_as_standalone_expression(check_context)?;
+			},
+			
+			
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
 				if let Some(ref expr) = return_expr {
 					expr.check_and_calc_data_type(check_context)?;
 				}
-			},
-		
-			StatementKind::UserStructDeclare { new_type_name, fields } => {
-				let mut typed_fields = Vec::<StructFieldDef>::new();
-				for field in fields.iter() {
-					let data_type: DataType = check_context.find_type_by_name(&field.data_type_name)?;					
-					typed_fields.push(StructFieldDef::new(
-						field.name.clone(), data_type));
-				}
-				check_context.add_user_struct(new_type_name.clone(), typed_fields)?;
 			},
 		
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
@@ -556,15 +572,16 @@ impl Statement {
 					value).unwrap();
 			},
 				
-			StatementKind::VariableSet { left_expr, right_expr } => {
-				let value: Value = right_expr.calc(context);
-				left_expr.set_as_to_lhs(value, context);
+			StatementKind::UserStructDeclare { new_type_name, fields } => {
+				let mut typed_fields = Vec::<StructFieldDef>::new();
+				for field in fields.iter() {
+					let data_type: DataType = context.find_type_by_name(&field.data_type_name).unwrap();					
+					typed_fields.push(StructFieldDef::new(
+						field.name.clone(), data_type));
+				}
+				context.add_user_struct(new_type_name.clone(), typed_fields).unwrap();
 			},
 			
-			StatementKind::FuncCall { left_expr } => {
-				left_expr.run_as_standalone_expression(context);
-			},
-				
 			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {
 				let return_type: DataType = match return_type_name {
 					Some(nt) => context.find_type_by_name(nt).unwrap(),
@@ -581,7 +598,18 @@ impl Statement {
 				
 				context.add_user_func(name.clone(), typed_args, return_type, body.clone()).unwrap();
 			},
-				
+			
+			
+			StatementKind::VariableSet { left_expr, right_expr } => {
+				let value: Value = right_expr.calc(context);
+				left_expr.set_as_to_lhs(value, context);
+			},
+			
+			StatementKind::FuncCall { left_expr } => {
+				left_expr.run_as_standalone_expression(context);
+			},
+			
+			
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
 				return match return_expr {
 					Some(expr) => {
@@ -590,16 +618,6 @@ impl Statement {
 					},
 					None => Some(Value::None),
 				}
-			},
-			
-			StatementKind::UserStructDeclare { new_type_name, fields } => {
-				let mut typed_fields = Vec::<StructFieldDef>::new();
-				for field in fields.iter() {
-					let data_type: DataType = context.find_type_by_name(&field.data_type_name).unwrap();					
-					typed_fields.push(StructFieldDef::new(
-						field.name.clone(), data_type));
-				}
-				context.add_user_struct(new_type_name.clone(), typed_fields).unwrap();
 			},
 			
 			StatementKind::BranchingIfElse { if_bodies, else_body } => {
@@ -628,6 +646,10 @@ impl Statement {
 
 	pub fn pos(&self) -> CodePos {
 		self.pos
+	}
+
+	pub fn kind(&self) -> &StatementKind {
+		&self.kind
 	}
 }
 
@@ -703,6 +725,13 @@ pub struct ConditionalBody {
 }
 
 impl ConditionalBody {
+	pub fn new(condition_expr: Expr, statements: Vec<Statement>) -> Self {
+		Self {
+			condition_expr,
+			statements,
+		}
+	}
+	
 	pub fn condition_expr(&self) -> &Expr {
 		&self.condition_expr
 	}
@@ -758,6 +787,12 @@ pub struct UnconditionalBody {
 }
 
 impl UnconditionalBody {
+	pub fn new(statements: Vec<Statement>) -> Self {
+		Self {
+			statements,
+		}
+	}
+	
 	pub fn statements(&self) -> &Vec<Statement> {
 		&self.statements
 	}
@@ -931,6 +966,14 @@ impl ParsedFuncArgDef {
 			data_type_name,
 		}
 	}
+	
+	pub fn name(&self) -> &NameToken {
+		&self.name
+	}
+	
+	pub fn data_type_name(&self) -> &NameToken {
+		&self.data_type_name
+	}
 }
 
 //------------------- ParsedStructFieldDef --------------------
@@ -947,6 +990,14 @@ impl ParsedStructFieldDef {
 			name,
 			data_type_name,
 		}
+	}
+	
+	pub fn name(&self) -> &NameToken {
+		&self.name
+	}
+	
+	pub fn data_type_name(&self) -> &NameToken {
+		&self.data_type_name
 	}
 }
 

@@ -51,6 +51,16 @@ impl<'prev_context> Context<'prev_context> {
 		}
 	}
 	
+	
+	pub fn push_scope(&mut self) {
+		self.frame.push_scope();
+	}
+	
+	pub fn pop_scope(&mut self) {
+		self.frame.pop_scope();
+	}
+	
+	
 	pub fn add_variable(&mut self, name: NameToken, data_type: DataType, initial_value: Value) -> Result<(), VarErr> {
 		self.frame.get_upper_scope_mut()
 			.add_variable(name, data_type, initial_value)
@@ -115,15 +125,7 @@ impl<'prev_context> Context<'prev_context> {
 			} )
 		}
 	}
-	
-	pub fn push_scope(&mut self) {
-		self.frame.push_scope();
-	}
-	
-	pub fn pop_scope(&mut self) {
-		self.frame.pop_scope();
-	}
-	
+		
 	pub fn find_user_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, UserFuncErr> {
 		if let Ok(func) = self.frame.find_user_func_def(name) {
 			Ok(func)
