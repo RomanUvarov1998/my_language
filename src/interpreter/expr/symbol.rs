@@ -460,10 +460,9 @@ impl PartialEq for Operand {
 impl Operand {
 	pub fn check_and_calc_data_type_in_place(&self, check_context: &Context) -> Result<DataType, InterpErr> {
 		let dt: DataType = match self {
-			Operand::Value (val) => val.get_type().clone(),
+			Operand::Value (val) => val.get_type(),
 			
-			Operand::Variable (name) =>
-				check_context.get_variable_value(&name)?.get_type().clone(),
+			Operand::Variable (name) => check_context.get_variable_value(&name)?.get_type(),
 				
 			Operand::FuncCall { func_name, arg_exprs } => {
 				if func_name.is_builtin() {

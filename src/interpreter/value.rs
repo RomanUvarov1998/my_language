@@ -1,5 +1,6 @@
 use super::data_type::{DataType, Primitive};
 use super::struct_def::StructDef;
+use super::utils::NameToken;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -30,6 +31,12 @@ impl Value {
 			Value::Struct { struct_def, .. } => DataType::Complex(struct_def.clone()), // TODO: try avoid cloning and return reference
 			Value::None => DataType::Primitive (Primitive::None),
 		}
+	}
+	
+	pub fn unwrap_struct_clone_field(&self, field_name: &NameToken) -> Rc<RefCell<Value>> {
+		if let Value::Struct { ref fields, .. } = self {
+			Rc::clone(&fields.get(field_name.value()).unwrap())
+		} else { unreachable!(); }
 	}
 }
 

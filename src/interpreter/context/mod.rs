@@ -80,19 +80,20 @@ impl<'prev_context> Context<'prev_context> {
 	}
 	
 	pub fn find_type_by_name(&self, name: &NameToken) -> Result<DataType, DataTypeErr> {
-		if name.is_builtin() {
-			if let Some(dt) = DataType::primitive_from_name(name) {
-				Ok(dt)
-			} else {
-				Err( DataTypeErr::NotDefined { name: name.clone() } )
-			}
-		} else {
-			if let Some(dt) = self.struct_defs.borrow().iter().find(|sd| sd.inner().name().value() == name.value()) {
-				Ok( DataType::Complex (dt.clone()) )
-			} else {
-				Err( DataTypeErr::NotDefined { name: name.clone() } )
-			}
-		}	
+		match name.value() {
+			"f32" => Ok( DataType::Primitive (Primitive::Float32) ),
+			"str" => Ok( DataType::Primitive (Primitive::String) ),
+			"bool" => Ok( DataType::Primitive (Primitive::Bool) ),
+			"char" => Ok( DataType::Primitive (Primitive::Char) ),
+			_ => {
+				let defs = self.struct_defs.borrow();
+				if let Some(dt) = defs.iter().find(|sd| sd.inner().name().value() == name.value()) {
+					Ok( DataType::Complex (dt.clone()) )
+				} else {
+					Err( DataTypeErr::NotDefined { name: name.clone() } )
+				}
+			},
+		}
 	}
 	
 	pub fn add_user_struct(&mut self, name: NameToken, fields: Vec<StructFieldDef>) -> Result<(), StructDefErr> {
@@ -146,12 +147,46 @@ impl<'prev_context> Context<'prev_context> {
 
 	pub fn find_member_builtin_func_def(
 		&'prev_context self, 
-		data_type: Primitive,
+		data_type: &DataType,
 		func_name: &'prev_context NameToken
-	) -> Result<& 'prev_context BuiltinFuncDef, StructDefErr> 
+	) -> Result<BuiltinFuncDef, StructDefErr> 
 	{
 		assert!(func_name.is_builtin());
-		self.primitive_type_member_builtin_funcs_list.find_func(data_type, func_name)
+		match data_type {
+			DataType::Primitive (dt) => self.primitive_type_member_builtin_funcs_list.find_func(*dt, func_name),
+			DataType::Complex (struct_def) => struct_def.inner().find_builtin_func_def(func_name),
+		}
+	}
+	
+	pub fn find_member_user_func_def(
+		&self, 
+		data_type: &DataType,
+		func_name: &NameToken
+	) -> Result<UserFuncDef, StructDefErr> 
+	{
+		assert!(!func_name.is_builtin());
+		match data_type {
+			DataType::Primitive (_) => todo!(),
+			DataType::Complex (struct_def) => struct_def.inner().find_user_func_def(func_name),
+		}
+	}
+	
+	pub fn find_member_field_def(
+		&self, 
+		data_type: &DataType,
+		field_name: &NameToken
+	) -> Result<StructFieldDef, StructDefErr> 
+	{
+		match data_type {
+			DataType::Primitive (_) => return Err( StructDefErr::NotAStruct {
+				value_pos: field_name.pos(),
+			} ),
+			DataType::Complex (struct_def) => match field_name.is_builtin() {
+				true => return Err( StructDefErr::ComplexDataTypeHasNoBuiltinFields { 
+				name_in_code: field_name.clone() } ),
+				false => struct_def.inner().member_field(field_name),
+			},
+		}
 	}
 }
 

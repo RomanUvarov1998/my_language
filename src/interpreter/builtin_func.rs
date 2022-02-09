@@ -4,19 +4,74 @@ use super::InterpErr;
 use super::utils::{CodePos, NameToken};
 use super::expr::Expr;
 use super::context::Context;
+use std::rc::Rc;
 
 //------------------------- BuiltinFuncDef -----------------------
 
 pub type BuiltinFuncBody = Box<dyn Fn(Vec<Value>) -> Option<Value>>;
 
 pub struct BuiltinFuncDef {
+	inner: Rc<BuiltinFuncDefInner>,
+}
+
+impl BuiltinFuncDef {
+	pub fn new(name: &'static str, args: Vec<BuiltinFuncArg>, body: BuiltinFuncBody, return_type: DataType) -> Self {
+		Self {
+			inner: Rc::new(BuiltinFuncDefInner::new(name, args, body, return_type)),
+		}
+	}
+	
+	pub fn check_args(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
+		self.inner.check_args(func_name, args_exprs, check_context)
+	}
+	
+	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value_type: &DataType, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
+		self.inner.check_args_as_member_function(func_name, args_exprs, value_type, caller_pos, check_context)
+	}
+	
+	pub fn name(&self) -> &'static str {
+		self.inner.name
+	}
+	
+	pub fn return_type(&self) -> &DataType {
+		&self.inner.return_type
+	}
+	
+	pub fn call(&self, args_values: Vec<Value>) -> Option<Value> {
+		(self.inner.body)(args_values)
+	}
+}
+
+impl Clone for BuiltinFuncDef {
+	fn clone(&self) -> Self {
+		Self {
+			inner: Rc::clone(&self.inner),
+		}
+	}
+}
+
+impl std::fmt::Display for BuiltinFuncDef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", *self.inner)
+	}
+}
+
+impl std::fmt::Debug for BuiltinFuncDef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{:?}", *self.inner)
+	}
+}
+
+//------------------------- BuiltinFuncDefInner -----------------------
+
+struct BuiltinFuncDefInner {
 	name: &'static str,
 	args: Vec<BuiltinFuncArg>,
 	body: BuiltinFuncBody,
 	return_type: DataType,
 }
 
-impl BuiltinFuncDef {
+impl BuiltinFuncDefInner {
 	pub fn new(name: &'static str, args: Vec<BuiltinFuncArg>, body: BuiltinFuncBody, return_type: DataType) -> Self {
 		Self {
 			name,
@@ -97,21 +152,9 @@ impl BuiltinFuncDef {
 		
 		Ok(())
 	}
-	
-	pub fn name(&self) -> &'static str {
-		self.name
-	}
-	
-	pub fn return_type(&self) -> &DataType {
-		&self.return_type
-	}
-	
-	pub fn call(&self, args_values: Vec<Value>) -> Option<Value> {
-		(self.body)(args_values)
-	}
 }
 
-impl std::fmt::Display for BuiltinFuncDef {
+impl std::fmt::Display for BuiltinFuncDefInner {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "f {}(", self.name)?;
 		let mut need_comma_before = false;
@@ -128,7 +171,7 @@ impl std::fmt::Display for BuiltinFuncDef {
 	}
 }
 
-impl std::fmt::Debug for BuiltinFuncDef {
+impl std::fmt::Debug for BuiltinFuncDefInner {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("BuiltinFuncDef")
 		 .field("name", &self.name)
@@ -137,6 +180,7 @@ impl std::fmt::Debug for BuiltinFuncDef {
 		 .finish()
 	}
 }
+
 
 //------------------------- BuiltinFuncArg -----------------------
 

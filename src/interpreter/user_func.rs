@@ -5,19 +5,78 @@ use super::utils::{CodePos, NameToken};
 use super::expr::Expr;
 use super::statement::ReturningBody;
 use super::context::Context;
+use std::rc::Rc;
 
 //------------------------- UserFuncDef -----------------------
 
-#[derive(Debug, Clone)]
 pub struct UserFuncDef {
+	inner: Rc<UserFuncDefInner>,
+}
+
+impl UserFuncDef {
+	pub fn new(name: NameToken, args: Vec<UserFuncArg>, return_type: DataType, body: ReturningBody) -> Self {
+		Self {
+			inner: Rc::new(UserFuncDefInner::new(name, args, return_type, body)),
+		}
+	}
+	
+	pub fn check_args(&self, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
+		self.inner.check_args(args_exprs, check_context)
+	}
+	
+	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value_type: &DataType, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
+		self.inner.check_args_as_member_function(func_name, args_exprs, value_type, caller_pos, check_context)
+	}
+	
+	pub fn call(&self, context: &mut Context) -> Option<Value> {
+		self.inner.body.run(context)
+	}
+	
+	pub fn args(&self) -> &Vec<UserFuncArg> {
+		&self.inner.args
+	}
+	
+	pub fn name(&self) -> &NameToken {
+		&self.inner.name
+	}
+
+	pub fn return_type(&self) -> &DataType {
+		&self.inner.return_type
+	}
+}
+
+impl Clone for UserFuncDef {
+	fn clone(&self) -> Self {
+		Self {
+			inner: Rc::clone(&self.inner),
+		}
+	}
+}
+
+impl std::fmt::Display for UserFuncDef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", *self.inner)
+	}
+}
+
+impl std::fmt::Debug for UserFuncDef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{:?}", *self.inner)
+	}
+}
+
+//------------------------- UserFuncDefInner -----------------------
+
+#[derive(Debug, Clone)]
+struct UserFuncDefInner {
 	name: NameToken,
 	args: Vec<UserFuncArg>,
 	return_type: DataType,
 	body: ReturningBody,
 }
 
-impl UserFuncDef {
-	pub fn new(name: NameToken, args: Vec<UserFuncArg>, return_type: DataType, body: ReturningBody) -> Self {
+impl UserFuncDefInner {
+	fn new(name: NameToken, args: Vec<UserFuncArg>, return_type: DataType, body: ReturningBody) -> Self {
 		Self {
 			name,
 			args,
@@ -26,7 +85,7 @@ impl UserFuncDef {
 		}
 	}
 	
-	pub fn check_args(&self, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
+	fn check_args(&self, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() {
 			return Err(UserFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
@@ -56,7 +115,7 @@ impl UserFuncDef {
 		Ok(())
 	}
 	
-	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value_type: &DataType, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
+	fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value_type: &DataType, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() + 1 {
 			return Err( UserFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
@@ -94,25 +153,9 @@ impl UserFuncDef {
 		
 		Ok(())
 	}
-	
-	pub fn call(&self, context: &mut Context) -> Option<Value> {
-		self.body.run(context)
-	}
-	
-	pub fn args(&self) -> &Vec<UserFuncArg> {
-		&self.args
-	}
-	
-	pub fn name(&self) -> &NameToken {
-		&self.name
-	}
-
-	pub fn return_type(&self) -> &DataType {
-		&self.return_type
-	}
 }
 
-impl std::fmt::Display for UserFuncDef {
+impl std::fmt::Display for UserFuncDefInner {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "f {}(", self.name)?;
 		

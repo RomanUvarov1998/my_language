@@ -150,9 +150,9 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 		}
 	}
 	
-	pub fn find_func(&self, data_type: Primitive, name: &NameToken) -> Result<&BuiltinFuncDef, StructDefErr> {
+	pub fn find_func(&self, data_type: Primitive, name: &NameToken) -> Result<BuiltinFuncDef, StructDefErr> {
 		match self.lookup[data_type as usize].iter().find(|fd| fd.name() == name.value()) {
-			Some(func_def) => Ok(func_def),
+			Some(func_def) => Ok(func_def.clone()),
 			None => Err( StructDefErr::BuiltinMemberFuncIsNotDefined { name: name.clone() } )
 		}
 	}

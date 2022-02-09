@@ -1,6 +1,8 @@
 use super::utils::NameToken;
 use super::value::Value;
 use super::data_type::DataType;
+use super::context::Context;
+use super::InterpErr;
 
 //-------------------- VarData --------------
 
@@ -24,7 +26,7 @@ impl VarData {
 					new_var_value: var_value, 
 					variable_type: data_type,
 					var_name: name,
-				} )
+				}.into() )
 		}
 	}
 	
@@ -37,7 +39,7 @@ impl VarData {
 					new_var_value, 
 					variable_type: self.data_type.clone(),
 					var_name: self.name.clone(),
-				} )
+				}.into() )
 		}
 	}
 	

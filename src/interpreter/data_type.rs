@@ -1,8 +1,6 @@
 use super::value::Value;
 use super::struct_def::{StructDef, StructDefErr};
 use super::utils::{NameToken, CodePos};
-use super::context::Context;
-use super::builtin_func::BuiltinFuncDef;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -15,17 +13,7 @@ pub enum DataType {
 	Complex (StructDef),
 }
 
-impl DataType {
-	pub fn primitive_from_name(name: &NameToken) -> Option<Self> {
-		match name.value() {
-			"f32" => Some( DataType::Primitive (Primitive::Float32) ),
-			"str" => Some( DataType::Primitive (Primitive::String) ),
-			"bool" => Some( DataType::Primitive (Primitive::Bool) ),
-			"char" => Some( DataType::Primitive (Primitive::Char) ),
-			_ => None,
-		}
-	}
-	
+impl DataType {	
 	pub fn default_value(&self) -> Value {
 		match self {
 			DataType::Primitive (dt) => dt.default_value(),
@@ -42,33 +30,6 @@ impl DataType {
 					fields, 
 				}
 			}, // TODO: do not use this function for check purposes
-		}
-	}
-	
-	pub fn find_member_builtin_func<'context>(
-		&self, 
-		func_name: &'context NameToken, 
-		context: &'context Context
-	) -> Result<&'context BuiltinFuncDef, StructDefErr> {
-		match self {
-			DataType::Primitive (dt) => {
-				assert!(func_name.is_builtin());
-				context.find_member_builtin_func_def(*dt, func_name)
-			},
-			DataType::Complex (_) => Err( StructDefErr::BuiltinMemberFuncIsNotDefined {
-				name: func_name.clone(),
-			} ),
-		}
-	}
-	
-	pub fn struct_def(&self, value_pos: CodePos) -> Result<&StructDef, StructDefErr> {
-		match self {
-			DataType::Primitive (_) => Err( StructDefErr::NotAStruct {
-				value_pos
-			} ),
-			DataType::Complex (struct_def) => {
-				Ok(struct_def)
-			},
 		}
 	}
 }

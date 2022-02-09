@@ -127,9 +127,9 @@ impl StructDefInner {
 		self.fields.values()
 	}
 	
-	pub fn member_field(&self, name: &NameToken) -> Result<&StructFieldDef, StructDefErr> {
+	pub fn member_field(&self, name: &NameToken) -> Result<StructFieldDef, StructDefErr> {
 		match self.fields.get(name.value()) {
-			Some(field_def) => Ok(field_def),
+			Some(field_def) => Ok(field_def.clone()),
 			None => Err( StructDefErr::FieldDoesNotExist {
 				name_in_code: name.clone(),
 			} ),
@@ -145,16 +145,16 @@ impl StructDefInner {
 		self.builtin_funcs.push(func_def);
 	}
 	
-	pub fn find_builtin_func_def(&self, name: &NameToken) -> Result<&BuiltinFuncDef, StructDefErr> {
+	pub fn find_builtin_func_def(&self, name: &NameToken) -> Result<BuiltinFuncDef, StructDefErr> {
 		match self.builtin_funcs.iter().find(|fd| fd.name() == name.value()) {
-			Some(func_def) => Ok(func_def),
+			Some(func_def) => Ok(func_def.clone()),
 			None => Err( StructDefErr::BuiltinMemberFuncIsNotDefined { name: name.clone() } )
 		}
 	}
 
-	pub fn find_user_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, StructDefErr> {
+	pub fn find_user_func_def(&self, name: &NameToken) -> Result<UserFuncDef, StructDefErr> {
 		match self.user_funcs.iter().find(|fd| fd.name().value() == name.value()) {
-			Some(func_def) => Ok(func_def),
+			Some(func_def) => Ok(func_def.clone()),
 			None => Err( StructDefErr::UserMemberFuncIsNotDefined { name: name.clone() } )
 		}
 	}
@@ -222,6 +222,9 @@ pub enum StructDefErr {
 	UserMemberFuncIsNotDefined {
 		name: NameToken,
 	},
+	ComplexDataTypeHasNoBuiltinFields {
+		name_in_code: NameToken,
+	},
 }
 
 impl std::fmt::Display for StructDefErr {
@@ -248,6 +251,8 @@ impl std::fmt::Display for StructDefErr {
 				write!(f, "Builtin member function '{}' is not defined", &name),
 			StructDefErr::UserMemberFuncIsNotDefined { name } => 
 				write!(f, "User member function '{}' is not defined", &name),
+			StructDefErr::ComplexDataTypeHasNoBuiltinFields { .. } => 
+				write!(f, "Complex data type has no builtin fields"),
 		}
 	}
 }

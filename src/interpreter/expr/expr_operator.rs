@@ -139,52 +139,36 @@ impl ExprOperator {
 				
 				
 				(Operand::Value (ref value), Operand::Variable (ref var_name)) => {
-					let value_type: DataType = value.get_type();
-					
-					if let DataType::Complex (ref struct_def) = value_type {
-						let sd_inner = struct_def.inner();
-						let field_def: &StructFieldDef = sd_inner.member_field(var_name)?;
-						Ok(field_def.data_type().clone())
-					} else {
-						Err( ExprErr::NotStruct (lhs_pos).into() )
-					}
+					let value_type: DataType = value.get_type();					
+					let field_def: StructFieldDef = check_context.find_member_field_def(&value_type, var_name)?;
+					Ok(field_def.data_type().clone())
 				},
 				
 				(Operand::Value (ref value), Operand::FuncCall {
 					ref func_name,
 					ref arg_exprs,
 				}) => {
-					let value_type: DataType = value.get_type();
-					
+					let value_type: DataType = value.get_type();					
 					if func_name.is_builtin() {
-						let func_def: &BuiltinFuncDef = value_type
-							.find_member_builtin_func(&func_name, check_context)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&value_type, func_name)?;
 						
 						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
 						
-						return Ok(func_def.return_type().clone());
+						Ok(func_def.return_type().clone())
 					} else {
-						let sd = value_type.struct_def(lhs_pos)?;
-						let sd_inner = sd.inner();
-						let func_def: &UserFuncDef = sd_inner.find_user_func_def(func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&value_type, func_name)?;
 						
 						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
 						
-						return Ok(func_def.return_type().clone());
+						Ok(func_def.return_type().clone())
 					}
 				},
 				
 								
 				(Operand::Variable (ref var_name_1), Operand::Variable (ref var_name_2)) => {
 					let value_type: &DataType = check_context.get_variable_def(&var_name_1)?.get_type();
-					
-					if let DataType::Complex (struct_def) = value_type {
-						let sd_inner = struct_def.inner();
-						let field_def: &StructFieldDef = sd_inner.member_field(var_name_2)?;
-						Ok(field_def.data_type().clone())
-					} else {
-						Err( ExprErr::NotStruct (var_name_1.pos()).into() )
-					}
+					let field_def: StructFieldDef = check_context.find_member_field_def(value_type, var_name_2)?;
+					Ok(field_def.data_type().clone())
 				},
 				
 				(Operand::Variable (ref var_name), Operand::FuncCall {
@@ -193,118 +177,90 @@ impl ExprOperator {
 				}) => {
 					let value: &Value = check_context.get_variable_value(&var_name)?;
 					let value_type: DataType = value.get_type();
-					
 					if func_name.is_builtin() {
-						let func_def: &BuiltinFuncDef = value_type
-							.find_member_builtin_func(&func_name, check_context)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&value_type, func_name)?;
 						
 						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
 						
-						return Ok(func_def.return_type().clone());
+						Ok(func_def.return_type().clone())
 					} else {
-						let sd = value_type.struct_def(var_name.pos())?;
-						let sd_inner = sd.inner();
-						let func_def: &UserFuncDef = sd_inner.find_user_func_def(func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&value_type, func_name)?;
 						
 						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
 						
-						return Ok(func_def.return_type().clone());
+						Ok(func_def.return_type().clone())
 					}
 				},
 				
 				
 				(ref fc @ Operand::FuncCall { .. }, Operand::Variable (ref var_name)) => {
 					let return_type: DataType = fc.check_and_calc_data_type_in_place(check_context)?;
-					
-					if let DataType::Complex (struct_def) = return_type {
-						let sd_inner = struct_def.inner();
-						let field_def: &StructFieldDef = sd_inner.member_field(var_name)?;
-						Ok(field_def.data_type().clone())
-					} else {
-						Err( ExprErr::NotStruct (lhs_pos).into() )
-					}
+					let field_def: StructFieldDef = check_context.find_member_field_def(&return_type, var_name)?;
+					Ok(field_def.data_type().clone())
 				},
 				
 				(ref fc1 @ Operand::FuncCall { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					let return_type_1: DataType = fc1.check_and_calc_data_type_in_place(check_context)?;
-					
 					if func_name.is_builtin() {
-						let func_def: &BuiltinFuncDef = return_type_1
-							.find_member_builtin_func(&func_name, check_context)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&return_type_1, func_name)?;
 						
 						func_def.check_args_as_member_function(func_name, arg_exprs, &return_type_1, lhs_pos, check_context)?;
 						
-						return Ok(func_def.return_type().clone());
+						Ok(func_def.return_type().clone())
 					} else {
-						let sd = return_type_1.struct_def(lhs_pos)?;
-						let sd_inner = sd.inner();
-						let func_def: &UserFuncDef = sd_inner.find_user_func_def(func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&return_type_1, func_name)?;
 						
 						func_def.check_args_as_member_function(func_name, arg_exprs, &return_type_1, lhs_pos, check_context)?;
 						
-						return Ok(func_def.return_type().clone());
+						Ok(func_def.return_type().clone())
 					}
 				},
 				
 				
 				(sl @ Operand::StructLiteral { .. }, Operand::Variable (ref field_name)) => {
 					let struct_type: DataType = sl.check_and_calc_data_type_in_place(check_context)?;
-					
-					if let DataType::Complex (ref struct_def) = struct_type {
-						let sd_inner = struct_def.inner();
-						let field_def: &StructFieldDef = sd_inner.member_field(field_name)?;
-						Ok(field_def.data_type().clone())
-					} else { unreachable!() }
+					let field_def: StructFieldDef = check_context.find_member_field_def(&struct_type, field_name)?;
+					Ok(field_def.data_type().clone())
 				},
 				
 				(sl @ Operand::StructLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					let struct_type: DataType = sl.check_and_calc_data_type_in_place(check_context)?;
-					
-					if let DataType::Complex (ref struct_def) = struct_type {
-						let sd_inner = struct_def.inner();
+					if func_name.is_builtin() {
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&struct_type, func_name)?;
 						
-						if func_name.is_builtin() {
-							let func_def: &BuiltinFuncDef = sd_inner.find_builtin_func_def(func_name)?;
-							func_def.check_args_as_member_function(func_name, arg_exprs, &struct_type, lhs_pos, check_context)?;
-							Ok(func_def.return_type().clone())
-						} else {
-							let func_def: &BuiltinFuncDef = sd_inner.find_builtin_func_def(func_name)?;
-							func_def.check_args_as_member_function(func_name, arg_exprs, &struct_type, lhs_pos, check_context)?;
-							Ok(func_def.return_type().clone())
-						}
-					} else { unreachable!() }
+						func_def.check_args_as_member_function(func_name, arg_exprs, &struct_type, lhs_pos, check_context)?;
+						
+						Ok(func_def.return_type().clone())
+					} else {
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&struct_type, func_name)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &struct_type, lhs_pos, check_context)?;
+						
+						Ok(func_def.return_type().clone())
+					}
 				},
 				
 				
 				(Operand::ValueRef (ref value_rc), Operand::Variable (ref field_name)) => {
 					let value_type: DataType = value_rc.borrow().get_type();
-					
-					if let DataType::Complex (struct_def) = value_type {
-						let sd_inner = struct_def.inner();
-						let field_def: &StructFieldDef = sd_inner.member_field(field_name)?;
-						Ok(field_def.data_type().clone())
-					} else {
-						Err( ExprErr::NotStruct (lhs_pos).into() )
-					}
+					let field_def: StructFieldDef = check_context.find_member_field_def(&value_type, field_name)?;
+					Ok(field_def.data_type().clone())
 				},
 				
 				(Operand::ValueRef (ref value_rc), Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					let value_type: DataType = value_rc.borrow().get_type();
-					
-					if let DataType::Complex (ref struct_def) = value_type {
-						let sd_inner = struct_def.inner();
+					if func_name.is_builtin() {
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&value_type, func_name)?;
 						
-						if func_name.is_builtin() {
-							let func_def: &BuiltinFuncDef = sd_inner.find_builtin_func_def(func_name)?;
-							func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
-							Ok(func_def.return_type().clone())
-						} else {
-							let func_def: &BuiltinFuncDef = sd_inner.find_builtin_func_def(func_name)?;
-							func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
-							Ok(func_def.return_type().clone())
-						}
+						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						
+						Ok(func_def.return_type().clone())
 					} else {
-						Err( ExprErr::NotStruct (lhs_pos).into() )
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&value_type, func_name)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						
+						Ok(func_def.return_type().clone())
 					}
 				},
 			}
@@ -429,14 +385,12 @@ impl ExprOperator {
 				
 				
 				(Operand::Value (ref value), Operand::Variable (ref var_name)) => {
-					if let Value::Struct { fields, .. } = value {
-						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(var_name.value()).unwrap());
-						let opnd: Operand = Operand::ValueRef(value_rc);
-						Symbol {
-							pos: rhs_pos,
-							kind: SymbolKind::Operand (opnd),
-						}
-					} else { unreachable!() }
+					let value_rc: Rc<RefCell<Value>> = value.unwrap_struct_clone_field(var_name);
+					let opnd: Operand = Operand::ValueRef(value_rc);
+					Symbol {
+						pos: rhs_pos,
+						kind: SymbolKind::Operand (opnd),
+					}
 				},
 				
 				(Operand::Value (ref value), Operand::FuncCall {
@@ -446,17 +400,12 @@ impl ExprOperator {
 				
 				
 				(Operand::Variable (ref var_name_1), Operand::Variable (ref var_name_2)) => {
-					let value: &Value = context.get_variable_value(&var_name_1).unwrap();
-					
-					if let Value::Struct { fields, .. } = value {
-						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(var_name_2.value()).unwrap());
-						let opnd: Operand = Operand::ValueRef (value_rc);
-						Symbol {
-							pos: rhs_pos,
-							kind: SymbolKind::Operand (opnd),
-						}
-					} else {
-						unreachable!();
+					let value: &Value = context.get_variable_value(&var_name_1).unwrap();					
+					let value_rc: Rc<RefCell<Value>> = value.unwrap_struct_clone_field(var_name_2);
+					let opnd: Operand = Operand::ValueRef (value_rc);
+					Symbol {
+						pos: rhs_pos,
+						kind: SymbolKind::Operand (opnd),
 					}
 				},
 				
@@ -464,24 +413,18 @@ impl ExprOperator {
 					ref func_name,
 					ref arg_exprs,
 				}) => {
-					let value: &Value = context.get_variable_value(var_name).unwrap();
-					
+					let value: &Value = context.get_variable_value(var_name).unwrap();					
 					Self::call_member_func_of_value(value, func_name, arg_exprs, context, lhs_pos, rhs_pos)
 				},
 				
 				
 				(ref fc @ Operand::FuncCall { .. }, Operand::Variable (ref var_name)) => {
 					let result: Value = fc.calc_in_place(context).unwrap();
-					
-					if let Value::Struct { fields, .. } = result {
-						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(var_name.value()).unwrap());
-						let opnd: Operand = Operand::ValueRef (value_rc);
-						Symbol {
-							pos: rhs_pos,
-							kind: SymbolKind::Operand (opnd),
-						}
-					} else {
-						unreachable!();
+					let value_rc: Rc<RefCell<Value>> = result.unwrap_struct_clone_field(var_name);
+					let opnd: Operand = Operand::ValueRef (value_rc);
+					Symbol {
+						pos: rhs_pos,
+						kind: SymbolKind::Operand (opnd),
 					}
 				},
 				
@@ -493,15 +436,12 @@ impl ExprOperator {
 				
 				(sl @ Operand::StructLiteral { .. }, Operand::Variable (ref field_name)) => {
 					let struct_value: Value = sl.calc_in_place(context).unwrap();
-					
-					if let Value::Struct { fields, .. } = struct_value {
-						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(field_name.value()).unwrap());
-						let opnd: Operand = Operand::ValueRef(value_rc);
-						Symbol {
-							pos: rhs_pos,
-							kind: SymbolKind::Operand (opnd),
-						}
-					} else { unreachable!() }
+					let value_rc: Rc<RefCell<Value>> = struct_value.unwrap_struct_clone_field(field_name);
+					let opnd: Operand = Operand::ValueRef (value_rc);
+					Symbol {
+						pos: rhs_pos,
+						kind: SymbolKind::Operand (opnd),
+					}
 				},
 				
 				(sl @ Operand::StructLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
@@ -511,15 +451,11 @@ impl ExprOperator {
 				
 				
 				(Operand::ValueRef (ref value_rc), Operand::Variable (ref field_name)) => {
-					if let Value::Struct { ref fields, .. } = *value_rc.borrow() {
-						let value_rc: Rc<RefCell<Value>> = Rc::clone(&fields.get(field_name.value()).unwrap());
-						let opnd: Operand = Operand::ValueRef (value_rc);
-						Symbol {
-							pos: rhs_pos,
-							kind: SymbolKind::Operand (opnd),
-						}
-					} else {
-						unreachable!();
+					let value_rc: Rc<RefCell<Value>> = value_rc.borrow().unwrap_struct_clone_field(field_name);
+					let opnd: Operand = Operand::ValueRef (value_rc);
+					Symbol {
+						pos: rhs_pos,
+						kind: SymbolKind::Operand (opnd),
 					}
 				},
 				
@@ -556,38 +492,25 @@ impl ExprOperator {
 		}
 	}
 	
-	
 	fn call_member_func_of_value(value: &Value, func_name: &NameToken, arg_exprs: &Vec<Expr>, context: &Context, lhs_pos: CodePos, rhs_pos: CodePos) -> Symbol {
-		if func_name.is_builtin() {
-			let func_def: &BuiltinFuncDef = value.get_type()
-				.find_member_builtin_func(&func_name, context).unwrap();
-			
-			let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
-			args_values.push(value.clone());
-			for expr in arg_exprs {
-				let value: Value = expr.calc(context);
-				args_values.push(value);
-			}
-			
-			let value: Value = func_def.call(args_values).unwrap();
-			let opnd: Operand = Operand::Value(value);
-			
-			Symbol {
-				pos: rhs_pos,
-				kind: SymbolKind::Operand (opnd),
-			}
+		let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
+		
+		args_values.push(value.clone());
+		for expr in arg_exprs {
+			let value: Value = expr.calc(context);
+			args_values.push(value);
+		}
+		
+		let value_type: DataType = value.get_type();
+		
+		let value: Value = if func_name.is_builtin() {
+			context.find_member_builtin_func_def(&value_type, func_name)
+				.unwrap()
+				.call(args_values)
+				.unwrap()
 		} else {
-			let value_type: DataType = value.get_type();
-			let sd = value_type.struct_def(lhs_pos).unwrap();
-			let sd_inner = sd.inner();
-			let func_def: &UserFuncDef = sd_inner.find_user_func_def(func_name).unwrap();
-			
-			let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
-			args_values.push(value.clone());
-			for expr in arg_exprs {
-				let value: Value = expr.calc(context);
-				args_values.push(value);
-			}
+			let func_def: UserFuncDef = context.find_member_user_func_def(&value_type, func_name)
+				.unwrap();
 			
 			let mut next_context = context.new_stack_frame_context();
 			
@@ -599,13 +522,14 @@ impl ExprOperator {
 					args_values[i].clone()).unwrap();
 			}
 			
-			let value: Value = func_def.call(&mut next_context).unwrap();
-			let opnd: Operand = Operand::Value(value);
+			func_def.call(&mut next_context).unwrap()
+		};
+		
+		let opnd: Operand = Operand::Value(value);
 			
-			Symbol {
-				pos: rhs_pos,
-				kind: SymbolKind::Operand (opnd),
-			}
+		Symbol {
+			pos: rhs_pos,
+			kind: SymbolKind::Operand (opnd),
 		}
 	}
 	
