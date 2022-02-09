@@ -18,6 +18,10 @@ pub enum Value {
 		// TODO: try use &str for key to not to copy the whole string
 		fields: HashMap<String, Rc<RefCell<Value>>>,
 	},
+	Array {
+		elem_type: DataType,
+		values: Rc<RefCell<Vec<Value>>>,
+	},
 	None,
 }
 
@@ -29,6 +33,7 @@ impl Value {
 			Value::Bool (_) => DataType::Builtin (BuiltinType::Bool),
 			Value::Char (_) => DataType::Builtin (BuiltinType::Char),
 			Value::Struct { struct_def, .. } => DataType::UserDefined(struct_def.clone()), // TODO: try avoid cloning and return reference
+			Value::Array { .. } => DataType::Builtin (BuiltinType::Array),
 			Value::None => DataType::Builtin (BuiltinType::None),
 		}
 	}
@@ -36,6 +41,13 @@ impl Value {
 	pub fn unwrap_struct_clone_field(&self, field_name: &NameToken) -> Rc<RefCell<Value>> {
 		if let Value::Struct { ref fields, .. } = self {
 			Rc::clone(&fields.get(field_name.value()).unwrap())
+		} else { unreachable!(); }
+	}
+	
+	// TODO: add and use more of such functions in 'run' code
+	pub fn unwrap_f32(&self) -> f32 {
+		if let Value::Float32 (v) = self {
+			*v
 		} else { unreachable!(); }
 	}
 }
@@ -63,6 +75,10 @@ impl PartialEq for Value {
 			},
 			Value::Struct { struct_def: sd1, .. } => match other {
 				Value::Struct { struct_def: sd2, .. } => sd1 == sd2,
+				_ => false,
+			},
+			Value::Array { elem_type: et1, values: vs1 } => match other {
+				Value::Array { elem_type: et2, values: vs2 } => et1 == et2 && vs1 == vs2,
 				_ => false,
 			},
 			Value::None => match other {
@@ -96,6 +112,16 @@ impl std::fmt::Display for Value {
 					writeln!(f, "\t{}: {},", key, val.borrow())?;
 				}
 				writeln!(f, "}}")
+			},
+			Value::Array { elem_type, values } => {
+				write!(f, "Array of '{}' [", elem_type)?;
+				let mut is_first = true;
+				for v in values.borrow().iter() {
+					if !is_first { write!(f, ", ")?; }
+					is_first = false;
+					write!(f, "{}", v)?;
+				}
+				write!(f, "]")
 			},
 			Value::None => write!(f, "None"),
 		}

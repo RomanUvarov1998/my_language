@@ -117,6 +117,138 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			),
 		];
 		
+		let lookup_array = vec![
+			BuiltinFuncDef::new(
+				"to_string",
+				vec![
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+				],
+				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+					if let Value::Array { elem_type, values } = &args_values[0] {
+						let mut s: String = format!("Array of '{}' [", elem_type);
+						
+						let mut is_first = true;
+						for v in values.borrow().iter() {
+							if !is_first { s.push_str(", "); }
+							is_first = false;
+							s.push_str(&format!("{}", v));
+						}
+						s.push_str("]");
+				
+						Some( Value::from(s) )
+					} else {
+						unreachable!();
+					}
+				}) as BuiltinFuncBody,
+				DataType::Builtin (BuiltinType::String)
+			),
+			BuiltinFuncDef::new(
+				"len",
+				vec![
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+				],
+				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+					if let Value::Array { values, .. } = &args_values[0] {
+						Some( Value::from(values.borrow().len() as f32) )
+					} else {
+						unreachable!();
+					}
+				}) as BuiltinFuncBody,
+				DataType::Builtin (BuiltinType::Float32)
+			),
+			BuiltinFuncDef::new(
+				"add",
+				vec![
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
+				],
+				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+					let item: Value = args_values[1].clone();
+					if let Value::Array { values, .. } = &args_values[0] {
+						values.borrow_mut().push(item);
+						None
+					} else {
+						unreachable!();
+					}
+				}) as BuiltinFuncBody,
+				DataType::Builtin (BuiltinType::None)
+			),
+			BuiltinFuncDef::new(
+				"get",
+				vec![
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
+				],
+				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+					let ind: f32 = args_values[1].unwrap_f32();
+					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
+					if let Value::Array { values, .. } = &args_values[0] {
+						Some(values.borrow()[ind].clone())
+					} else {
+						unreachable!();
+					}
+				}) as BuiltinFuncBody,
+				DataType::Builtin (BuiltinType::Any)
+			),
+			BuiltinFuncDef::new(
+				"set",
+				vec![
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
+					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
+				],
+				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+					let ind: f32 = args_values[1].unwrap_f32();
+					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
+					let item: Value = args_values[2].clone();
+					if let Value::Array { values, .. } = &args_values[0] {
+						values.borrow_mut()[ind] = item;
+						None
+					} else {
+						unreachable!();
+					}
+				}) as BuiltinFuncBody,
+				DataType::Builtin (BuiltinType::None)
+			),
+			BuiltinFuncDef::new(
+				"remove",
+				vec![
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
+				],
+				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+					let ind: f32 = args_values[1].unwrap_f32();
+					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
+					if let Value::Array { values, .. } = &args_values[0] {
+						Some(values.borrow_mut().remove(ind))
+					} else {
+						unreachable!();
+					}
+				}) as BuiltinFuncBody,
+				DataType::Builtin (BuiltinType::Any)
+			),
+			BuiltinFuncDef::new(
+				"insert",
+				vec![
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
+					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
+				],
+				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+					let ind: f32 = args_values[1].unwrap_f32();
+					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
+					let item: Value = args_values[2].clone();
+					if let Value::Array { values, .. } = &args_values[0] {
+						values.borrow_mut().insert(ind, item);
+						None
+					} else {
+						unreachable!();
+					}
+				}) as BuiltinFuncBody,
+				DataType::Builtin (BuiltinType::None)
+			),
+		];
+		
 		let lookup_any = Vec::new();
 		
 		let lookup_none = vec![
@@ -141,6 +273,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			lookup_string,
 			lookup_bool,
 			lookup_char,
+			lookup_array,
 			lookup_any,
 			lookup_none,
 		];
@@ -182,6 +315,15 @@ mod tests {
 		
 		assert_eq!(list.lookup[BuiltinType::Char as usize].len(), 1);
 		assert_eq!(list.lookup[BuiltinType::Char as usize][0].name(), "to_string");
+		
+		assert_eq!(list.lookup[BuiltinType::Array as usize].len(), 7);
+		assert_eq!(list.lookup[BuiltinType::Array as usize][0].name(), "to_string");
+		assert_eq!(list.lookup[BuiltinType::Array as usize][1].name(), "len");
+		assert_eq!(list.lookup[BuiltinType::Array as usize][2].name(), "add");
+		assert_eq!(list.lookup[BuiltinType::Array as usize][3].name(), "get");
+		assert_eq!(list.lookup[BuiltinType::Array as usize][4].name(), "set");
+		assert_eq!(list.lookup[BuiltinType::Array as usize][5].name(), "remove");
+		assert_eq!(list.lookup[BuiltinType::Array as usize][6].name(), "insert");
 		
 		assert_eq!(list.lookup[BuiltinType::Any as usize].len(), 0);
 		
