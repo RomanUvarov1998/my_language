@@ -3,6 +3,7 @@ mod token;
 mod statement;
 mod var_data;
 mod data_type;
+mod data_type_template;
 mod value;
 mod struct_def;
 mod builtin_func;
