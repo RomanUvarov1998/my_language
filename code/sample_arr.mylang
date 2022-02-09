@@ -1,0 +1,8 @@
+var a: @arr = @create_array();
+@println(a);
+
+var i: @f32 = 0;
+while (i < 10) {
+	a.@add(i);
+	@println(a);
+}
