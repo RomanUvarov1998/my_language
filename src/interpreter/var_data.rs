@@ -1,8 +1,6 @@
 use super::utils::NameToken;
 use super::value::Value;
 use super::data_type::DataType;
-use super::context::Context;
-use super::InterpErr;
 
 //-------------------- VarData --------------
 

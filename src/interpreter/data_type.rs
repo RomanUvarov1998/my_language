@@ -1,6 +1,6 @@
 use super::value::Value;
-use super::struct_def::{StructDef, StructDefErr};
-use super::utils::{NameToken, CodePos};
+use super::struct_def::StructDef;
+use super::utils::NameToken;
 use std::collections::HashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -9,15 +9,15 @@ use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataType {
-	Primitive (Primitive),
-	Complex (StructDef),
+	Builtin (BuiltinType),
+	UserDefined (StructDef),
 }
 
 impl DataType {	
 	pub fn default_value(&self) -> Value {
 		match self {
-			DataType::Primitive (dt) => dt.default_value(),
-			DataType::Complex (sd) => {
+			DataType::Builtin (dt) => dt.default_value(),
+			DataType::UserDefined (sd) => {
 				let mut fields = HashMap::<String, Rc<RefCell<Value>>>::new();
 				let sd_inner = sd.inner();
 				for field_def in sd_inner.field_defs() {
@@ -37,17 +37,17 @@ impl DataType {
 impl std::fmt::Display for DataType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			DataType::Primitive (dt) => write!(f, "{}", dt),
-			DataType::Complex (dt) => write!(f, "Struct '{}'", dt.inner().name().value()),
+			DataType::Builtin (dt) => write!(f, "{}", dt),
+			DataType::UserDefined (dt) => write!(f, "Struct '{}'", dt.inner().name().value()),
 		}
 	}
 }
 
-//--------------------------- Primitive -------------------------
+//--------------------------- BuiltinType -------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
-pub enum Primitive {
+pub enum BuiltinType {
 	Float32,
 	String,
 	Bool,
@@ -56,28 +56,28 @@ pub enum Primitive {
 	None,
 }
 
-impl Primitive {
+impl BuiltinType {
 	pub fn default_value(&self) -> Value {
 		match self {
-			Primitive::Float32 => Value::from(0_f32),
-			Primitive::String => Value::from(String::new()),
-			Primitive::Bool => Value::from(false),
-			Primitive::Char => Value::from('a'),
-			Primitive::Any => unreachable!(),
-			Primitive::None => unreachable!(),
+			BuiltinType::Float32 => Value::from(0_f32),
+			BuiltinType::String => Value::from(String::new()),
+			BuiltinType::Bool => Value::from(false),
+			BuiltinType::Char => Value::from('a'),
+			BuiltinType::Any => unreachable!(),
+			BuiltinType::None => unreachable!(),
 		}
 	}
 }
 
-impl std::fmt::Display for Primitive {
+impl std::fmt::Display for BuiltinType {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Primitive::Float32 => write!(f, "f32"),
-			Primitive::String => write!(f, "str"),
-			Primitive::Bool => write!(f, "bool"),
-			Primitive::Char => write!(f, "char"),
-			Primitive::Any => write!(f, "Any"),
-			Primitive::None => write!(f, "None"),
+			BuiltinType::Float32 => write!(f, "f32"),
+			BuiltinType::String => write!(f, "str"),
+			BuiltinType::Bool => write!(f, "bool"),
+			BuiltinType::Char => write!(f, "char"),
+			BuiltinType::Any => write!(f, "Any"),
+			BuiltinType::None => write!(f, "None"),
 		}
 	}
 }
@@ -89,9 +89,6 @@ pub enum DataTypeErr {
 	NotDefined {
 		name: NameToken,
 	},
-	PrimitiveTypeInitializedAsComplex {
-		type_name_in_code: NameToken,
-	},
 }
 
 impl std::fmt::Display for DataTypeErr {
@@ -101,8 +98,6 @@ impl std::fmt::Display for DataTypeErr {
 				write!(f, "{} dataType '{}' is not defined", 
 					if name.is_builtin() { "Builtin" } else { "User-defined" }, 
 					name.value()),
-			DataTypeErr::PrimitiveTypeInitializedAsComplex { type_name_in_code } => 
-				write!(f, "DataType '{}' value is primitive, but declared as struct", type_name_in_code.value()),
 		}
 	}
 }

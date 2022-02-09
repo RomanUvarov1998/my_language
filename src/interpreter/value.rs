@@ -1,4 +1,4 @@
-use super::data_type::{DataType, Primitive};
+use super::data_type::{DataType, BuiltinType};
 use super::struct_def::StructDef;
 use super::utils::NameToken;
 use std::collections::HashMap;
@@ -24,12 +24,12 @@ pub enum Value {
 impl Value {
 	pub fn get_type(&self) -> DataType {
 		match self {
-			Value::Float32 (_) => DataType::Primitive (Primitive::Float32),
-			Value::String (_) => DataType::Primitive (Primitive::String),
-			Value::Bool (_) => DataType::Primitive (Primitive::Bool),
-			Value::Char (_) => DataType::Primitive (Primitive::Char),
-			Value::Struct { struct_def, .. } => DataType::Complex(struct_def.clone()), // TODO: try avoid cloning and return reference
-			Value::None => DataType::Primitive (Primitive::None),
+			Value::Float32 (_) => DataType::Builtin (BuiltinType::Float32),
+			Value::String (_) => DataType::Builtin (BuiltinType::String),
+			Value::Bool (_) => DataType::Builtin (BuiltinType::Bool),
+			Value::Char (_) => DataType::Builtin (BuiltinType::Char),
+			Value::Struct { struct_def, .. } => DataType::UserDefined(struct_def.clone()), // TODO: try avoid cloning and return reference
+			Value::None => DataType::Builtin (BuiltinType::None),
 		}
 	}
 	

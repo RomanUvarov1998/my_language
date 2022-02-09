@@ -2,7 +2,7 @@ use super::token::*;
 use super::expr::{Expr, ExprContextKind};
 use super::InterpErr;
 use super::value::Value;
-use super::data_type::{DataType, Primitive};
+use super::data_type::{DataType, BuiltinType};
 use super::var_data::VarErr;
 use super::user_func::UserFuncArg;
 use super::utils::{CharPos, CodePos, NameToken};
@@ -485,7 +485,7 @@ impl Statement {
 			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {				
 				let return_type: DataType = match return_type_name {
 					Some(nt) => check_context.find_type_by_name(nt)?,
-					None => DataType::Primitive (Primitive::None),
+					None => DataType::Builtin (BuiltinType::None),
 				};
 				
 				let mut typed_args = Vec::<UserFuncArg>::new();
@@ -568,7 +568,7 @@ impl Statement {
 			StatementKind::UserDefinedFuncDeclare { name, args, return_type_name, body } => {
 				let return_type: DataType = match return_type_name {
 					Some(nt) => context.find_type_by_name(nt).unwrap(),
-					None => DataType::Primitive (Primitive::None),
+					None => DataType::Builtin (BuiltinType::None),
 				};
 				
 				let mut typed_args = Vec::<UserFuncArg>::new();
@@ -713,7 +713,7 @@ impl ConditionalBody {
 	
 	pub fn check(&self, check_context: &mut Context) -> Result<(), InterpErr> {
 		match self.condition_expr.check_and_calc_data_type(check_context)? {
-			DataType::Primitive (Primitive::Bool) => {},
+			DataType::Builtin (BuiltinType::Bool) => {},
 			_ => return Err(StatementErr::IfConditionType { 
 										pos: self.condition_expr().pos(),
 									}.into()),
@@ -814,7 +814,7 @@ impl ReturningBody {
 			}
 		}
 		
-		if !has_return && return_type.ne(&DataType::Primitive (Primitive::None)) {
+		if !has_return && return_type.ne(&DataType::Builtin (BuiltinType::None)) {
 			return Err(StatementErr::UserFuncNotAllFuncPathsReturn {
 				last_statement_pos: CodePos::from(CharPos::new()),
 			}.into());
@@ -838,7 +838,7 @@ impl ReturningBody {
 						let dt: DataType = expr.check_and_calc_data_type(check_context)?;
 						dt
 					},
-					None => DataType::Primitive (Primitive::None),
+					None => DataType::Builtin (BuiltinType::None),
 				};
 				if returned_type.ne(declared_return_type) {
 					Err(StatementErr::UserFuncReturnType {
@@ -876,7 +876,7 @@ impl ReturningBody {
 					all_bodies_return = false;
 				}
 				
-				return if let DataType::Primitive (Primitive::None) = declared_return_type {
+				return if let DataType::Builtin (BuiltinType::None) = declared_return_type {
 					Ok(true)
 				} else {
 					Ok(all_bodies_return)
@@ -891,7 +891,7 @@ impl ReturningBody {
 					}
 				}
 				
-				return if let DataType::Primitive (Primitive::None) = declared_return_type {
+				return if let DataType::Builtin (BuiltinType::None) = declared_return_type {
 					Ok(true)
 				} else {
 					Ok(body_returns)
@@ -1314,7 +1314,7 @@ mod tests {
 		
 			assert_eq!(
 				value_expr.check_and_calc_data_type(&context).unwrap(), 
-				DataType::Primitive (Primitive::Float32));
+				DataType::Builtin (BuiltinType::Float32));
 						
 			assert_eq!(
 				value_expr.calc(&context), 
@@ -1354,7 +1354,7 @@ mod tests {
 		
 		assert_eq!(
 			condition_expr.check_and_calc_data_type(&context).unwrap(), 
-			DataType::Primitive (Primitive::Bool));
+			DataType::Builtin (BuiltinType::Bool));
 					
 		assert_eq!(
 			condition_expr.calc(&context), 
@@ -1415,15 +1415,15 @@ mod tests {
 				
 				assert_eq!(body.statements().len(), 3);
 				
-				context.add_variable(new_name_token("a", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
-				context.add_variable(new_name_token("b", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
+				context.add_variable(new_name_token("a", false), DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32).default_value()).unwrap();
+				context.add_variable(new_name_token("b", false), DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32).default_value()).unwrap();
 				
 				match &body.statements()[0].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2", false));
 						assert_eq!(*data_type_name, new_name_token("f32", true));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
-						assert_eq!(dt, DataType::Primitive (Primitive::Float32));
+						assert_eq!(dt, DataType::Builtin (BuiltinType::Float32));
 					},
 					_ => {
 						println!("Wrong statement:");
@@ -1432,14 +1432,14 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("a2", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
+				context.add_variable(new_name_token("a2", false), DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32).default_value()).unwrap();
 				
 				match &body.statements()[1].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2", false));
 						assert_eq!(*data_type_name, new_name_token("f32", true));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
-						assert_eq!(dt, DataType::Primitive (Primitive::Float32));
+						assert_eq!(dt, DataType::Builtin (BuiltinType::Float32));
 					},
 					_ => {
 						println!("Wrong statement:");
@@ -1448,14 +1448,14 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("b2", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
+				context.add_variable(new_name_token("b2", false), DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32).default_value()).unwrap();
 				
 				match &body.statements()[2].kind {
 					StatementKind::UserDefinedFuncReturn { return_expr } => {
 						let dt: Option<DataType> = return_expr.as_ref()
 							.map(|expr| expr.check_and_calc_data_type(&context).unwrap());
 							
-						assert_eq!(dt, Some(DataType::Primitive (Primitive::Float32)));
+						assert_eq!(dt, Some(DataType::Builtin (BuiltinType::Float32)));
 					},
 					_ => {
 						println!("Wrong statement:");
@@ -1506,15 +1506,15 @@ mod tests {
 				
 				assert_eq!(body.statements().len(), 4);
 				
-				context.add_variable(new_name_token("a", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
-				context.add_variable(new_name_token("b", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
+				context.add_variable(new_name_token("a", false), DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32).default_value()).unwrap();
+				context.add_variable(new_name_token("b", false), DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32).default_value()).unwrap();
 				
 				match &body.statements()[0].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2", false));
 						assert_eq!(*data_type_name, new_name_token("f32", true));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
-						assert_eq!(dt, DataType::Primitive (Primitive::Float32));
+						assert_eq!(dt, DataType::Builtin (BuiltinType::Float32));
 					},
 					_ => {
 						println!("Wrong statement:");
@@ -1523,14 +1523,14 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("a2", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
+				context.add_variable(new_name_token("a2", false), DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32).default_value()).unwrap();
 				
 				match &body.statements()[1].kind {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2", false));
 						assert_eq!(*data_type_name, new_name_token("f32", true));
 						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
-						assert_eq!(dt, DataType::Primitive (Primitive::Float32));
+						assert_eq!(dt, DataType::Builtin (BuiltinType::Float32));
 					},
 					_ => {
 						println!("Wrong statement:");
@@ -1539,7 +1539,7 @@ mod tests {
 					},
 				}
 				
-				context.add_variable(new_name_token("b2", false), DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32).default_value()).unwrap();
+				context.add_variable(new_name_token("b2", false), DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32).default_value()).unwrap();
 				
 				match &body.statements()[2].kind {
 					StatementKind::FuncCall { .. } => {},

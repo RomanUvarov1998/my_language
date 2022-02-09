@@ -1,12 +1,12 @@
 use super::super::token::{Token, TokensIter, TokenContent, Keyword, Operator, Bracket, StatementOp, TokenErr};
 use super::super::InterpErr;
 use super::super::value::Value;
-use super::super::data_type::{DataType, DataTypeErr};
+use super::super::data_type::DataType;
 use super::super::builtin_func::BuiltinFuncDef;
 use super::super::user_func::{UserFuncArg, UserFuncDef};
 use super::super::utils::{CodePos, CharPos, NameToken};
 use super::super::context::Context;
-use super::super::struct_def::StructDef;
+use super::super::struct_def::{StructDef, StructDefErr};
 use super::{Expr, ExprContext, ExprContextKind};
 use super::expr_operator::ExprOperator;
 use super::unexpected;
@@ -481,10 +481,12 @@ impl Operand {
 			Operand::StructLiteral { data_type_name, fields } => {
 				let dt: DataType = check_context.find_type_by_name(data_type_name)?;
 				
-				if let DataType::Complex(ref struct_def) = dt {
+				if let DataType::UserDefined(ref struct_def) = dt {
 					struct_def.check_fields_set(&data_type_name, fields, check_context)?;
 				} else {
-					return Err(DataTypeErr::PrimitiveTypeInitializedAsComplex { type_name_in_code: data_type_name.clone() }.into());
+					return Err( StructDefErr::NotAStruct {
+						value_pos: data_type_name.pos(),
+					}.into() );
 				}
 				
 				dt
@@ -549,7 +551,7 @@ impl Operand {
 						Rc::new(RefCell::new(field.value_expr().calc(context))));
 				}
 				
-				let struct_def: StructDef = if let DataType::Complex(struct_def) = context.find_type_by_name(data_type_name).unwrap() {
+				let struct_def: StructDef = if let DataType::UserDefined(struct_def) = context.find_type_by_name(data_type_name).unwrap() {
 					struct_def
 				} else { unreachable!(); };
 				

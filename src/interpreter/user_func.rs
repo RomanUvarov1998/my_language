@@ -1,4 +1,4 @@
-use super::data_type::{DataType, Primitive};
+use super::data_type::{DataType, BuiltinType};
 use super::value::Value;
 use super::InterpErr;
 use super::utils::{CodePos, NameToken};
@@ -171,7 +171,7 @@ impl std::fmt::Display for UserFuncDefInner {
 		}
 		
 		match &self.return_type {
-			DataType::Primitive (Primitive::None) => write!(f, ")"),
+			DataType::Builtin (BuiltinType::None) => write!(f, ")"),
 			dt @ _ => write!(f, ") -> {}", dt),
 		}
 	}
@@ -203,7 +203,7 @@ impl UserFuncArg {
 
 	pub fn type_check(&self, data_type: &DataType) -> bool {
 		match &self.data_type {
-			DataType::Primitive (Primitive::Any) => true,
+			DataType::Builtin (BuiltinType::Any) => true,
 			_ => self.data_type.eq(data_type),
 		}
 	}

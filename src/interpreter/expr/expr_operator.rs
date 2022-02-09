@@ -1,6 +1,6 @@
 use super::super::InterpErr;
 use super::super::value::Value;
-use super::super::data_type::{DataType, Primitive};
+use super::super::data_type::{DataType, BuiltinType};
 use super::super::builtin_func::BuiltinFuncDef;
 use super::super::user_func::{UserFuncDef, UserFuncArg};
 use super::super::utils::CodePos;
@@ -363,8 +363,8 @@ impl ExprOperator {
 				.pop()
 				.unwrap();
 				
-			let (lhs, lhs_pos) = if let Symbol { kind: SymbolKind::Operand (opnd), pos } = lhs {
-				(opnd, pos)
+			let lhs = if let Symbol { kind: SymbolKind::Operand (opnd), .. } = lhs {
+				opnd
 			} else { unreachable!() };
 			
 			match (&lhs, &rhs) {
@@ -396,7 +396,7 @@ impl ExprOperator {
 				(Operand::Value (ref value), Operand::FuncCall {
 					ref func_name,
 					ref arg_exprs,
-				}) => Self::call_member_func_of_value(value, func_name, arg_exprs, context, lhs_pos, rhs_pos),
+				}) => Self::call_member_func_of_value(value, func_name, arg_exprs, context, rhs_pos),
 				
 				
 				(Operand::Variable (ref var_name_1), Operand::Variable (ref var_name_2)) => {
@@ -414,7 +414,7 @@ impl ExprOperator {
 					ref arg_exprs,
 				}) => {
 					let value: &Value = context.get_variable_value(var_name).unwrap();					
-					Self::call_member_func_of_value(value, func_name, arg_exprs, context, lhs_pos, rhs_pos)
+					Self::call_member_func_of_value(value, func_name, arg_exprs, context, rhs_pos)
 				},
 				
 				
@@ -430,7 +430,7 @@ impl ExprOperator {
 				
 				(ref fc1 @ Operand::FuncCall { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					let result: Value = fc1.calc_in_place(context).unwrap();					
-					Self::call_member_func_of_value(&result, func_name, arg_exprs, context, lhs_pos, rhs_pos)
+					Self::call_member_func_of_value(&result, func_name, arg_exprs, context, rhs_pos)
 				},
 				
 				
@@ -446,7 +446,7 @@ impl ExprOperator {
 				
 				(sl @ Operand::StructLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					let struct_value: Value = sl.calc_in_place(context).unwrap();
-					Self::call_member_func_of_value(&struct_value, func_name, arg_exprs, context, lhs_pos, rhs_pos)
+					Self::call_member_func_of_value(&struct_value, func_name, arg_exprs, context, rhs_pos)
 				},
 				
 				
@@ -460,7 +460,7 @@ impl ExprOperator {
 				},
 				
 				(Operand::ValueRef (ref value_rc), Operand::FuncCall { ref func_name, ref arg_exprs }) =>
-					Self::call_member_func_of_value(&value_rc.borrow(), func_name, arg_exprs, context, lhs_pos, rhs_pos),
+					Self::call_member_func_of_value(&value_rc.borrow(), func_name, arg_exprs, context, rhs_pos),
 			}
 		} else {
 			let value: Value = match self {
@@ -492,7 +492,7 @@ impl ExprOperator {
 		}
 	}
 	
-	fn call_member_func_of_value(value: &Value, func_name: &NameToken, arg_exprs: &Vec<Expr>, context: &Context, lhs_pos: CodePos, rhs_pos: CodePos) -> Symbol {
+	fn call_member_func_of_value(value: &Value, func_name: &NameToken, arg_exprs: &Vec<Expr>, context: &Context, rhs_pos: CodePos) -> Symbol {
 		let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
 		
 		args_values.push(value.clone());
@@ -744,20 +744,20 @@ impl ExprOperator {
 	
 	fn get_bin_plus_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => 
-				Ok(DataType::Primitive (Primitive::Float32)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => 
+				Ok(DataType::Builtin (BuiltinType::Float32)),
 				
-			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => 
-				Ok(DataType::Primitive (Primitive::String)),
+			(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::String)) => 
+				Ok(DataType::Builtin (BuiltinType::String)),
 				
-			(DataType::Primitive (Primitive::Char), DataType::Primitive (Primitive::String)) => 
-				Ok(DataType::Primitive (Primitive::String)),
+			(DataType::Builtin (BuiltinType::Char), DataType::Builtin (BuiltinType::String)) => 
+				Ok(DataType::Builtin (BuiltinType::String)),
 				
-			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::Char)) => 
-				Ok(DataType::Primitive (Primitive::String)),
+			(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::Char)) => 
+				Ok(DataType::Builtin (BuiltinType::String)),
 				
-			(DataType::Primitive (Primitive::Char), DataType::Primitive (Primitive::Char)) => 
-				Ok(DataType::Primitive (Primitive::String)),
+			(DataType::Builtin (BuiltinType::Char), DataType::Builtin (BuiltinType::Char)) => 
+				Ok(DataType::Builtin (BuiltinType::String)),
 				
 			_ => return Err(()),
 		}
@@ -765,127 +765,127 @@ impl ExprOperator {
 	
 	fn get_bin_minus_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Float32)),
 			_ => return Err(()),
 		}
 	}
 	
 	fn get_bin_mul_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Float32)),
 			_ => return Err(()),
 		}
 	}
 	
 	fn get_bin_div_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Float32)),
 			_ => return Err(()),
 		}
 	}
 	
 	fn get_bin_pow_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Float32)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Float32)),
 			_ => return Err(()),
 		}
 	}
 	
 	fn get_equal_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
-			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
-			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Bool)),
+			(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::String)) => Ok(DataType::Builtin (BuiltinType::Bool)),
+			(DataType::Builtin (BuiltinType::Bool), DataType::Builtin (BuiltinType::Bool)) => Ok(DataType::Builtin (BuiltinType::Bool)),
 			_ => return Err(()),
 		}
 	}
 
 	fn get_not_equal_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
-			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
-			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Bool)),
+			(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::String)) => Ok(DataType::Builtin (BuiltinType::Bool)),
+			(DataType::Builtin (BuiltinType::Bool), DataType::Builtin (BuiltinType::Bool)) => Ok(DataType::Builtin (BuiltinType::Bool)),
 			_ => return Err(()),
 		}
 	}
 
 	fn get_greater_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
-			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Bool)),
+			(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::String)) => Ok(DataType::Builtin (BuiltinType::Bool)),
 			_ => return Err(()),
 		}
 	}
 
 	fn get_greater_equal_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
-			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Bool)),
+			(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::String)) => Ok(DataType::Builtin (BuiltinType::Bool)),
 			_ => return Err(()),
 		}
 	}
 
 	fn get_less_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
-			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Bool)),
+			(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::String)) => Ok(DataType::Builtin (BuiltinType::Bool)),
 			_ => return Err(()),
 		}
 	}
 
 	fn get_less_equal_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Float32), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Bool)),
-			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::String)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Builtin (BuiltinType::Float32), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Bool)),
+			(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::String)) => Ok(DataType::Builtin (BuiltinType::Bool)),
 			_ => return Err(()),
 		}
 	}
 
 	fn get_logical_and_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Builtin (BuiltinType::Bool), DataType::Builtin (BuiltinType::Bool)) => Ok(DataType::Builtin (BuiltinType::Bool)),
 			_ => return Err(()),
 		}
 	}
 
 	fn get_logical_or_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Builtin (BuiltinType::Bool), DataType::Builtin (BuiltinType::Bool)) => Ok(DataType::Builtin (BuiltinType::Bool)),
 			_ => return Err(()),
 		}
 	}
 
 	fn get_logical_xor_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::Bool), DataType::Primitive (Primitive::Bool)) => Ok(DataType::Primitive (Primitive::Bool)),
+			(DataType::Builtin (BuiltinType::Bool), DataType::Builtin (BuiltinType::Bool)) => Ok(DataType::Builtin (BuiltinType::Bool)),
 			_ => return Err(()),
 		}
 	}
 
 	fn get_index_result_type(&self, lhs: &DataType, rhs: &DataType) -> Result<DataType, ()> {
 		match (lhs, rhs) {
-			(DataType::Primitive (Primitive::String), DataType::Primitive (Primitive::Float32)) => Ok(DataType::Primitive (Primitive::Char)),
+			(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::Float32)) => Ok(DataType::Builtin (BuiltinType::Char)),
 			_ => return Err(()),
 		}
 	}
 	
 	fn get_unary_plus_result_type(&self, operand: &DataType) -> Result<DataType, ()> {
 		match operand {
-			DataType::Primitive (Primitive::Float32) => Ok(DataType::Primitive (Primitive::Float32)),
+			DataType::Builtin (BuiltinType::Float32) => Ok(DataType::Builtin (BuiltinType::Float32)),
 			_ => return Err(()),
 		}
 	}
 	
 	fn get_unary_minus_result_type(&self, operand: &DataType) -> Result<DataType, ()> {
 		match operand {
-			DataType::Primitive (Primitive::Float32) => Ok(DataType::Primitive (Primitive::Float32)),
+			DataType::Builtin (BuiltinType::Float32) => Ok(DataType::Builtin (BuiltinType::Float32)),
 			_ => return Err(()),
 		}
 	}
 	
 	fn get_not_result_type(&self, operand: &DataType) -> Result<DataType, ()> {
 		match operand {
-			DataType::Primitive (Primitive::Bool) => Ok(DataType::Primitive (Primitive::Bool)),
+			DataType::Builtin (BuiltinType::Bool) => Ok(DataType::Builtin (BuiltinType::Bool)),
 			_ => return Err(()),
 		}
 	}

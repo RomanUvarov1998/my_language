@@ -17,7 +17,7 @@ use user_func::UserFuncErr;
 use var_data::VarErr;
 use utils::CodePos;
 use context::Context;
-use data_type::{DataType, Primitive};
+use data_type::{DataType, BuiltinType};
 use value::Value;
 use primitive_type_member_builtin_funcs_list::PrimitiveTypeMemberBuiltinFuncsList;
 use struct_def::{StructDef, StructDefErr};
@@ -37,25 +37,25 @@ impl Interpreter {
 		builtin_func_defs.push(BuiltinFuncDef::new(
 			"print",
 			vec![
-				BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Any)),
+				BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Any)),
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				print!("{}", args_values[0]);
 				None
 			}) as BuiltinFuncBody,
-			DataType::Primitive (Primitive::None)
+			DataType::Builtin (BuiltinType::None)
 		));
 		
 		builtin_func_defs.push(BuiltinFuncDef::new(
 			"println",
 			vec![
-				BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Any)),
+				BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Any)),
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				println!("{}", args_values[0]);
 				None
 			}) as BuiltinFuncBody,
-			DataType::Primitive (Primitive::None)
+			DataType::Builtin (BuiltinType::None)
 		));
 		
 		builtin_func_defs.push(BuiltinFuncDef::new(
@@ -64,13 +64,13 @@ impl Interpreter {
 			Box::new(|_args_values: Vec<Value>| -> Option<Value> {
 				std::process::exit(0)
 			}) as BuiltinFuncBody,
-			DataType::Primitive (Primitive::None)
+			DataType::Builtin (BuiltinType::None)
 		));
 		
 		builtin_func_defs.push(BuiltinFuncDef::new(
 			"input",
 			vec![
-				BuiltinFuncArg::new("prompt".to_string(), DataType::Primitive (Primitive::String)),
+				BuiltinFuncArg::new("prompt".to_string(), DataType::Builtin (BuiltinType::String)),
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				use std::io::{self, Write};
@@ -83,13 +83,13 @@ impl Interpreter {
 				
 				Some(Value::from(input.trim_end().clone()))
 			}) as BuiltinFuncBody,
-			DataType::Primitive (Primitive::String)
+			DataType::Builtin (BuiltinType::String)
 		));
 		
 		builtin_func_defs.push(BuiltinFuncDef::new(
 			"str_to_f32",
 			vec![
-				BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::String)),
+				BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::String)),
 			],
 			Box::new(|args_values: Vec<Value>| -> Option<Value> {
 				let str_value: String = match &args_values[0] {
@@ -99,7 +99,7 @@ impl Interpreter {
 				let result: f32 = str_value.parse::<f32>().unwrap();
 				Some(Value::from(result))
 			}) as BuiltinFuncBody,
-			DataType::Primitive (Primitive::Float32)
+			DataType::Builtin (BuiltinType::Float32)
 		));
 		
 		Self {
@@ -234,11 +234,6 @@ impl From<ExprErr> for InterpErr {
 			ExprErr::NotEnoughOperandsForOperator { operator_pos, ref descr } => InterpErr {
 				pos: operator_pos,
 				descr: descr.clone(),
-				inner: InnerErr::Expr (err),
-			},
-			ExprErr::NotStruct (pos) => InterpErr {
-				pos,
-				descr: format!("{}", err),
 				inner: InnerErr::Expr (err),
 			},
 			ExprErr::NotLhsExprSymbol (pos) => InterpErr {
@@ -434,11 +429,6 @@ impl From<DataTypeErr> for InterpErr {
 				descr,
 				inner: InnerErr::DataType (err),
 			},
-			DataTypeErr::PrimitiveTypeInitializedAsComplex { ref type_name_in_code } => InterpErr {
-				pos: type_name_in_code.pos(),
-				descr,
-				inner: InnerErr::DataType (err),
-			},
 		}
 	}
 }
@@ -473,8 +463,8 @@ mod tests {
 		
 		match int.check_and_run("var a: @f32 = \"hello\";") {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::WrongType { 
-				value_data_type: DataType::Primitive (Primitive::String), 
-				variable_type: DataType::Primitive (Primitive::Float32),
+				value_data_type: DataType::Builtin (BuiltinType::String), 
+				variable_type: DataType::Builtin (BuiltinType::Float32),
 				var_name,
 			}), .. } ) if var_name == nt => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
@@ -482,8 +472,8 @@ mod tests {
 		
 		match int.check_and_run("var a: @str = 4;") {
 			Err(InterpErr { inner: InnerErr::Var(VarErr::WrongType { 
-				value_data_type: DataType::Primitive (Primitive::Float32), 
-				variable_type: DataType::Primitive (Primitive::String),
+				value_data_type: DataType::Builtin (BuiltinType::Float32), 
+				variable_type: DataType::Builtin (BuiltinType::String),
 				var_name,
 			}), .. } ) if var_name == nt => {},
 			res @ _ => panic!("Wrong result: {:?}", res),

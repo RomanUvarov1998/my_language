@@ -1,5 +1,5 @@
 use super::builtin_func::{BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody};
-use super::data_type::{DataType, Primitive};
+use super::data_type::{DataType, BuiltinType};
 use super::utils::NameToken;
 use super::value::Value;
 use super::struct_def::StructDefErr;
@@ -16,7 +16,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"abs",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Float32)),
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Float32 (val) = &args_values[0] {
@@ -25,12 +25,12 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 						unreachable!();
 					}
 				}) as BuiltinFuncBody,
-				DataType::Primitive (Primitive::Float32)
+				DataType::Builtin (BuiltinType::Float32)
 			),
 			BuiltinFuncDef::new(
 				"sign",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Float32)),
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Float32 (val) = &args_values[0] {
@@ -45,12 +45,12 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 						unreachable!();
 					}
 				}) as BuiltinFuncBody,
-				DataType::Primitive (Primitive::Float32)
+				DataType::Builtin (BuiltinType::Float32)
 			),
 			BuiltinFuncDef::new(
 				"to_string",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Float32)),
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Float32 (val) = &args_values[0] {
@@ -59,7 +59,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 						unreachable!();
 					}
 				}) as BuiltinFuncBody,
-				DataType::Primitive (Primitive::String)
+				DataType::Builtin (BuiltinType::String)
 			),
 		];
 		
@@ -67,7 +67,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"len",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::String)),
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::String)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::String (val) = &args_values[0] {
@@ -76,7 +76,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 						unreachable!();
 					}
 				}) as BuiltinFuncBody,
-				DataType::Primitive (Primitive::Float32)
+				DataType::Builtin (BuiltinType::Float32)
 			),
 		];
 		
@@ -84,7 +84,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"to_string",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Bool)),
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Bool)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Bool (val) = &args_values[0] {
@@ -96,7 +96,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 						unreachable!();
 					}
 				}) as BuiltinFuncBody,
-				DataType::Primitive (Primitive::String)
+				DataType::Builtin (BuiltinType::String)
 			),
 		];
 		
@@ -104,7 +104,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"to_string",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Bool)),
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Bool)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Char (val) = &args_values[0] {
@@ -113,7 +113,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 						unreachable!();
 					}
 				}) as BuiltinFuncBody,
-				DataType::Primitive (Primitive::String)
+				DataType::Builtin (BuiltinType::String)
 			),
 		];
 		
@@ -123,7 +123,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"to_string",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Primitive (Primitive::Bool)),
+					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Bool)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::None = &args_values[0] {
@@ -132,7 +132,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 						unreachable!();
 					}
 				}) as BuiltinFuncBody,
-				DataType::Primitive (Primitive::String)
+				DataType::Builtin (BuiltinType::String)
 			),
 		];
 		
@@ -150,7 +150,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 		}
 	}
 	
-	pub fn find_func(&self, data_type: Primitive, name: &NameToken) -> Result<BuiltinFuncDef, StructDefErr> {
+	pub fn find_func(&self, data_type: BuiltinType, name: &NameToken) -> Result<BuiltinFuncDef, StructDefErr> {
 		match self.lookup[data_type as usize].iter().find(|fd| fd.name() == name.value()) {
 			Some(func_def) => Ok(func_def.clone()),
 			None => Err( StructDefErr::BuiltinMemberFuncIsNotDefined { name: name.clone() } )
@@ -163,29 +163,29 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 #[cfg(test)]
 mod tests {
 	use super::PrimitiveTypeMemberBuiltinFuncsList;
-	use super::super::data_type::Primitive;
+	use super::super::data_type::BuiltinType;
 	
 	#[test]
 	fn test_loopkup_table() {
 		let list = PrimitiveTypeMemberBuiltinFuncsList::new();
 		
-		assert_eq!(list.lookup[Primitive::Float32 as usize].len(), 3);
-		assert_eq!(list.lookup[Primitive::Float32 as usize][0].name(), "abs");
-		assert_eq!(list.lookup[Primitive::Float32 as usize][1].name(), "sign");
-		assert_eq!(list.lookup[Primitive::Float32 as usize][2].name(), "to_string");
+		assert_eq!(list.lookup[BuiltinType::Float32 as usize].len(), 3);
+		assert_eq!(list.lookup[BuiltinType::Float32 as usize][0].name(), "abs");
+		assert_eq!(list.lookup[BuiltinType::Float32 as usize][1].name(), "sign");
+		assert_eq!(list.lookup[BuiltinType::Float32 as usize][2].name(), "to_string");
 		
-		assert_eq!(list.lookup[Primitive::String as usize].len(), 1);
-		assert_eq!(list.lookup[Primitive::String as usize][0].name(), "len");
+		assert_eq!(list.lookup[BuiltinType::String as usize].len(), 1);
+		assert_eq!(list.lookup[BuiltinType::String as usize][0].name(), "len");
 		
-		assert_eq!(list.lookup[Primitive::Bool as usize].len(), 1);
-		assert_eq!(list.lookup[Primitive::Bool as usize][0].name(), "to_string");
+		assert_eq!(list.lookup[BuiltinType::Bool as usize].len(), 1);
+		assert_eq!(list.lookup[BuiltinType::Bool as usize][0].name(), "to_string");
 		
-		assert_eq!(list.lookup[Primitive::Char as usize].len(), 1);
-		assert_eq!(list.lookup[Primitive::Char as usize][0].name(), "to_string");
+		assert_eq!(list.lookup[BuiltinType::Char as usize].len(), 1);
+		assert_eq!(list.lookup[BuiltinType::Char as usize][0].name(), "to_string");
 		
-		assert_eq!(list.lookup[Primitive::Any as usize].len(), 0);
+		assert_eq!(list.lookup[BuiltinType::Any as usize].len(), 0);
 		
-		assert_eq!(list.lookup[Primitive::None as usize].len(), 1);
-		assert_eq!(list.lookup[Primitive::None as usize][0].name(), "to_string");
+		assert_eq!(list.lookup[BuiltinType::None as usize].len(), 1);
+		assert_eq!(list.lookup[BuiltinType::None as usize][0].name(), "to_string");
 	}
 }

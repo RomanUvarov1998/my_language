@@ -517,7 +517,6 @@ pub enum ExprErr {
 		operator_pos: CodePos,
 		descr: String,
 	},
-	NotStruct (CodePos),
 	NotLhsExprSymbol (CodePos),
 }
 
@@ -576,7 +575,6 @@ impl std::fmt::Display for ExprErr {
 			ExprErr::WrongOperandsTypeForOperator { ref descr, .. } => write!(f, "{}", descr),
 			ExprErr::WrongOperandsForOperator { ref descr, .. } => write!(f, "{}", descr),
 			ExprErr::NotEnoughOperandsForOperator { ref descr, .. } => write!(f, "{}", descr),
-			ExprErr::NotStruct (_) => write!(f, "Value is not a struct"),
 			ExprErr::NotLhsExprSymbol (_) => write!(f, "Not allowed to use as left hand side of '=' operator"),
 		}
 	}
