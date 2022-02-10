@@ -1,7 +1,7 @@
 use super::super::token::{Token, TokensIter, TokenContent, Keyword, Operator, Bracket, StatementOp, TokenErr};
 use super::super::InterpErr;
 use super::super::value::Value;
-use super::super::data_type::DataType;
+use super::super::data_type::{DataType, BuiltinType};
 use super::super::builtin_func::BuiltinFuncDef;
 use super::super::user_func::{UserFuncArg, UserFuncDef};
 use super::super::utils::{CodePos, CharPos, NameToken};
@@ -154,8 +154,8 @@ impl Iterator for SymbolIterator<'_> {
 						Keyword::While | 
 						Keyword::F | 
 						Keyword::Return => return Some(Err(unexpected(pos))),
-					Keyword::True => SymbolKind::Operand (Operand::Value (Value::from(true))),
-					Keyword::False => SymbolKind::Operand (Operand::Value (Value::from(false))),
+					Keyword::True => SymbolKind::Operand (Operand::Constant (Value::from(true))),
+					Keyword::False => SymbolKind::Operand (Operand::Constant (Value::from(false))),
 				};
 				
 				Ok(Symbol {
@@ -347,7 +347,7 @@ impl Symbol {
 
 	fn new_number(num: f32, pos: CodePos) -> Self {
 		Self {
-			kind: SymbolKind::Operand( Operand::Value (Value::from(num)) ),
+			kind: SymbolKind::Operand( Operand::Constant (Value::from(num)) ),
 			pos,
 		}
 	}
@@ -372,14 +372,14 @@ impl Symbol {
 	
 	fn new_string_literal(content: String, pos: CodePos) -> Self {
 		Self {
-			kind: SymbolKind::Operand( Operand::Value (Value::from(content)) ),
+			kind: SymbolKind::Operand( Operand::Constant (Value::from(content)) ),
 			pos,
 		}
 	}
 	
 	fn new_char_literal(ch: char, pos: CodePos) -> Self {
 		Self {
-			kind: SymbolKind::Operand( Operand::Value (Value::from(ch)) ),
+			kind: SymbolKind::Operand( Operand::Constant (Value::from(ch)) ),
 			pos,
 		}
 	}
@@ -410,7 +410,7 @@ impl PartialEq for Symbol {
 
 #[derive(Debug, Clone)]
 pub enum Operand {
-	Value (Value),
+	Constant (Value),
 	Variable (NameToken),
 	FuncCall {
 		func_name: NameToken, 
@@ -421,6 +421,10 @@ pub enum Operand {
 		fields: Vec<StructLiteralField>,
 	},
 	ValueRef (Rc<RefCell<Value>>),
+	StringCharRefByInd {
+		string_value: Rc<RefCell<Vec<char>>>,
+		index: usize,
+	},
 	IndexExpr (Expr),
 }
 
@@ -429,8 +433,8 @@ impl Eq for Operand {}
 impl PartialEq for Operand {
 	fn eq(&self, other: &Self) -> bool {
 		match self {
-			Operand::Value (v1) => match other {
-				Operand::Value (v2) => v1 == v2,
+			Operand::Constant (v1) => match other {
+				Operand::Constant (v2) => v1 == v2,
 				_ => false,
 			},
 			Operand::Variable (op1) => match other {
@@ -449,6 +453,10 @@ impl PartialEq for Operand {
 				Operand::ValueRef (v2) => *v1.borrow() == *v2.borrow(),
 				_ => false,
 			},
+			Operand::StringCharRefByInd { string_value: sv1, index: ind1 } => match other {
+				Operand::StringCharRefByInd { string_value: sv2, index: ind2 } => *sv1.borrow() == *sv2.borrow() && ind1 == ind2,
+				_ => false,
+			},
 			Operand::IndexExpr (se1) => match other {
 				Operand::IndexExpr (se2) => se1 == se2,
 				_ => false,
@@ -460,9 +468,9 @@ impl PartialEq for Operand {
 impl Operand {
 	pub fn check_and_calc_data_type_in_place(&self, check_context: &Context) -> Result<DataType, InterpErr> {
 		let dt: DataType = match self {
-			Operand::Value (val) => val.get_type(),
+			Operand::Constant (val) => val.get_type(),
 			
-			Operand::Variable (name) => check_context.get_variable_value(&name)?.get_type(),
+			Operand::Variable (name) => check_context.get_variable_value(&name)?.borrow().get_type(),
 				
 			Operand::FuncCall { func_name, arg_exprs } => {
 				if func_name.is_builtin() {
@@ -494,7 +502,9 @@ impl Operand {
 			
 			Operand::ValueRef (value_rc) => value_rc.borrow().get_type(),
 			
-			Operand::IndexExpr (se) => se.check_and_calc_data_type(check_context)?,
+			Operand::IndexExpr (se) => se.check_as_rhs_and_calc_data_type(check_context)?,
+			
+			Operand::StringCharRefByInd { .. } => DataType::Builtin (BuiltinType::Char),
 		};
 		
 		Ok(dt)
@@ -502,9 +512,9 @@ impl Operand {
 	
 	pub fn calc_in_place(&self, context: &Context) -> Option<Value> {
 		match self {
-			Operand::Value (val) => Some(val.clone()), // TODO: try do it without cloning values
+			Operand::Constant (c) => Some(c.clone()), // TODO: try do it without cloning values
 			
-			Operand::Variable (name) => Some(context.get_variable_value(&name).unwrap().clone()),
+			Operand::Variable (name) => Some(context.get_variable_value(&name).unwrap().borrow().clone()),
 			
 			Operand::FuncCall { func_name, arg_exprs } => {
 				if func_name.is_builtin() {
@@ -513,7 +523,7 @@ impl Operand {
 					let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
 					
 					for expr in arg_exprs {
-						let value: Value = expr.calc(context);
+						let value: Value = expr.calc_as_rhs(context);
 						args_values.push(value);
 					}
 					
@@ -524,7 +534,7 @@ impl Operand {
 					let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len());
 					
 					for expr in arg_exprs {
-						let value: Value = expr.calc(context);
+						let value: Value = expr.calc_as_rhs(context);
 						args_values.push(value);
 					}
 					
@@ -546,9 +556,11 @@ impl Operand {
 				let mut calculated_fields = HashMap::<String, Rc<RefCell<Value>>>::new();
 				
 				for field in fields {
-					calculated_fields.insert(
-						field.field_name().value().to_string(), 
-						Rc::new(RefCell::new(field.value_expr().calc(context))));
+					assert_eq!(
+						calculated_fields.insert(
+							field.field_name().value().to_string(), 
+							Rc::new(RefCell::new(field.value_expr().calc_as_rhs(context)))),
+						None);
 				}
 				
 				let struct_def: StructDef = if let DataType::UserDefined(struct_def) = context.find_type_by_name(data_type_name).unwrap() {
@@ -563,7 +575,12 @@ impl Operand {
 			
 			Operand::ValueRef (value_rc) => Some(value_rc.borrow().clone()),
 			
-			Operand::IndexExpr (se) => Some(se.calc(context)),
+			Operand::IndexExpr (se) => Some(se.calc_as_rhs(context)),
+			
+			Operand::StringCharRefByInd { string_value, index } => {
+				let ch: char = string_value.borrow()[*index];
+				Some( Value::Char(ch) )
+			},
 		}
 	}
 }
@@ -571,12 +588,13 @@ impl Operand {
 impl std::fmt::Display for Operand {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Operand::Value (_) => write!(f, "value literal"),
+			Operand::Constant (c) => write!(f, "constant {}", c),
 			Operand::Variable (_) => write!(f, "variable"),
 			Operand::FuncCall { .. } => write!(f, "function call"),
 			Operand::StructLiteral { .. } => write!(f, "struct literal"),
 			Operand::ValueRef (_) => write!(f, "struct field"),
 			Operand::IndexExpr (_) => write!(f, "index expr"),
+			Operand::StringCharRefByInd { ref string_value, index } => write!(f, "{}th char of {:?}", index, *string_value.borrow()),
 		}
 	}
 }

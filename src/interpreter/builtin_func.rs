@@ -92,7 +92,7 @@ impl BuiltinFuncDefInner {
 		}
 						
 		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
-			.map(|expr| expr.check_and_calc_data_type(check_context))
+			.map(|expr| expr.check_as_rhs_and_calc_data_type(check_context))
 			.collect();
 			
 		let args_data_types: Vec<DataType> = args_data_types_result?;
@@ -123,7 +123,7 @@ impl BuiltinFuncDefInner {
 		}
 						
 		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
-			.map(|expr| expr.check_and_calc_data_type(check_context))
+			.map(|expr| expr.check_as_rhs_and_calc_data_type(check_context))
 			.collect();
 			
 		let args_data_types: Vec<DataType> = args_data_types_result?;

@@ -70,8 +70,8 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::String)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
-					if let Value::String (val) = &args_values[0] {
-						Some( Value::Float32( val.len() as f32 ) )
+					if let Value::String (chars_rc) = &args_values[0] {
+						Some( Value::Float32( chars_rc.borrow().len() as f32 ) )
 					} else {
 						unreachable!();
 					}

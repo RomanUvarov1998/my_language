@@ -56,7 +56,7 @@ impl StructDef {
 					if !defined_fields.insert(field_name.clone()) {
 						return Err( StructDefErr::FieldAlreadySet { name_in_code: field.field_name().clone() }.into() );
 					}
-					let expr_data_type: DataType = field.value_expr().check_and_calc_data_type(check_context)?;
+					let expr_data_type: DataType = field.value_expr().check_as_rhs_and_calc_data_type(check_context)?;
 					if field_def_ref.data_type != expr_data_type {
 						return Err( StructDefErr::FieldSetTypeErr { 
 							name_in_code: field.field_name().clone(),

@@ -75,7 +75,7 @@ impl<'prev_context> Context<'prev_context> {
 		var.set(value)
 	}
 	
-	pub fn get_variable_value(&self, name: &NameToken) -> Result<&Value, VarErr> {
+	pub fn get_variable_value(&self, name: &NameToken) -> Result<Rc<RefCell<Value>>, VarErr> {
 		Ok(self.frame.find_var(name)?.get_value())
 	}
 	
@@ -231,10 +231,10 @@ mod tests {
 		let nt_b = new_name_token("b", false);
 		
 		context.add_variable(nt_a.clone(), DataType::Builtin (BuiltinType::Float32), Value::from(3_f32)).unwrap();
-		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::from(3_f32)));
+		assert_eq!(*context.get_variable_value(&nt_a).unwrap().borrow(), Value::from(3_f32));
 		assert_eq!(context.get_variable_def_mut(&nt_a).unwrap().get_type(), &DataType::Builtin (BuiltinType::Float32));
 		context.set_variable(&nt_a, Value::from(1_f32)).unwrap();
-		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(1_f32)));
+		assert_eq!(*context.get_variable_value(&nt_a).unwrap().borrow(), Value::Float32(1_f32));
 		assert_eq!(context.get_variable_def_mut(&nt_a).unwrap().get_type(), &DataType::Builtin (BuiltinType::Float32));
 		
 		assert_eq!(
@@ -243,10 +243,10 @@ mod tests {
 		
 		context.push_scope();
 		context.add_variable(nt_a.clone(), DataType::Builtin (BuiltinType::Float32), Value::from(3_f32)).unwrap();
-		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::from(3_f32)));		
+		assert_eq!(*context.get_variable_value(&nt_a).unwrap().borrow(), Value::from(3_f32));		
 		assert_eq!(context.get_variable_def_mut(&nt_a).unwrap().get_type(), &DataType::Builtin (BuiltinType::Float32));
 		context.set_variable(&nt_a, Value::from(3_f32)).unwrap();
-		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(3_f32)));
+		assert_eq!(*context.get_variable_value(&nt_a).unwrap().borrow(), Value::Float32(3_f32));
 		assert_eq!(context.get_variable_def_mut(&nt_a).unwrap().get_type(), &DataType::Builtin (BuiltinType::Float32));
 		
 		assert_eq!(
@@ -254,13 +254,13 @@ mod tests {
 			Err( VarErr::AlreadyExists { name: nt_a.clone() } ));	
 			
 		context.add_variable(nt_b.clone(), DataType::Builtin (BuiltinType::Float32), Value::from(3_f32)).unwrap();
-		assert_eq!(context.get_variable_value(&nt_b), Ok(&Value::from(3_f32)));		
+		assert_eq!(*context.get_variable_value(&nt_b).unwrap().borrow(), Value::from(3_f32));
 		assert_eq!(context.get_variable_def_mut(&nt_b).unwrap().get_type(), &DataType::Builtin (BuiltinType::Float32));
 		context.set_variable(&nt_b, Value::from(5_f32)).unwrap();
-		assert_eq!(context.get_variable_value(&nt_b), Ok(&Value::Float32(5_f32)));
+		assert_eq!(*context.get_variable_value(&nt_b).unwrap().borrow(), Value::Float32(5_f32));
 		assert_eq!(context.get_variable_def_mut(&nt_b).unwrap().get_type(), &DataType::Builtin (BuiltinType::Float32));
 		
-		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(3_f32)));
+		assert_eq!(*context.get_variable_value(&nt_a).unwrap().borrow(), Value::Float32(3_f32));
 		assert_eq!(context.get_variable_def_mut(&nt_a).unwrap().get_type(), &DataType::Builtin (BuiltinType::Float32));
 			
 		context.pop_scope();	
@@ -271,7 +271,7 @@ mod tests {
 			context.get_variable_value(&nt_b),
 			Err( VarErr::NotDefined { name: nt_b.clone() } ));	
 		
-		assert_eq!(context.get_variable_value(&nt_a), Ok(&Value::Float32(1_f32)));
+		assert_eq!(*context.get_variable_value(&nt_a).unwrap().borrow(), Value::Float32(1_f32));
 		assert_eq!(context.get_variable_def_mut(&nt_a).unwrap().get_type(), &DataType::Builtin (BuiltinType::Float32));
 	}
 	
@@ -288,7 +288,7 @@ mod tests {
 		
 		context.add_variable(nt.clone(), DataType::Builtin (BuiltinType::Float32), Value::Float32(2_f32)).unwrap();
 		
-		assert_eq!(context.get_variable_value(&nt), Ok(&Value::Float32(2_f32)));
+		assert_eq!(*context.get_variable_value(&nt).unwrap().borrow(), Value::Float32(2_f32));
 		
 		assert_eq!(context.get_variable_def_mut(&nt).unwrap().get_type(), &DataType::Builtin (BuiltinType::Float32));
 	}

@@ -8,6 +8,8 @@ use super::user_func::UserFuncArg;
 use super::utils::{CharPos, CodePos, NameToken};
 use super::context::Context;
 use super::struct_def::StructFieldDef;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct StatementsIter {
 	tokens_iter: TokensIter,
@@ -468,7 +470,7 @@ impl Statement {
 				let default_value = data_type.default_value();
 				check_context.add_variable(var_name.clone(), data_type.clone(), default_value)?;
 				
-				let expr_data_type: DataType = value_expr.check_and_calc_data_type(check_context)?;
+				let expr_data_type: DataType = value_expr.check_as_rhs_and_calc_data_type(check_context)?;
 				if data_type.clone() != expr_data_type {
 					return Err(VarErr::WrongType { 
 						value_data_type: expr_data_type, 
@@ -524,9 +526,9 @@ impl Statement {
 			
 			
 			StatementKind::VariableSet { left_expr, right_expr } => {
-				let right_expr_data_type: DataType = right_expr.check_and_calc_data_type(check_context)?;
+				let right_expr_data_type: DataType = right_expr.check_as_rhs_and_calc_data_type(check_context)?;
 				
-				let left_expr_data_type: DataType = left_expr.check_and_get_variable_to_set_type(check_context)?;
+				let left_expr_data_type: DataType = left_expr.check_as_lhs_and_calc_data_type(check_context)?;
 				
 				if left_expr_data_type != right_expr_data_type {
 					return Err(StatementErr::WrongAssignedType { 
@@ -538,13 +540,13 @@ impl Statement {
 			},
 			
 			StatementKind::FuncCall { left_expr } => {
-				left_expr.check_as_standalone_expression(check_context)?;
+				left_expr.check_as_standalone(check_context)?;
 			},
 			
 			
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
 				if let Some(ref expr) = return_expr {
-					expr.check_and_calc_data_type(check_context)?;
+					expr.check_as_rhs_and_calc_data_type(check_context)?;
 				}
 			},
 		
@@ -565,7 +567,7 @@ impl Statement {
 		match &self.kind {					
 			StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 				let data_type: DataType = context.find_type_by_name(data_type_name).unwrap();
-				let value: Value = value_expr.calc(context);
+				let value: Value = value_expr.calc_as_rhs(context);
 				context.add_variable(
 					var_name.clone(), 
 					data_type,
@@ -601,19 +603,19 @@ impl Statement {
 			
 			
 			StatementKind::VariableSet { left_expr, right_expr } => {
-				let value: Value = right_expr.calc(context);
-				left_expr.set_as_to_lhs(value, context);
+				let value: Value = right_expr.calc_as_rhs(context);
+				left_expr.calc_as_lhs_and_set(value, context);
 			},
 			
 			StatementKind::FuncCall { left_expr } => {
-				left_expr.run_as_standalone_expression(context);
+				left_expr.run_as_standalone(context);
 			},
 			
 			
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
 				return match return_expr {
 					Some(expr) => {
-						let value: Value = expr.calc(context);
+						let value: Value = expr.calc_as_rhs(context);
 						Some(value)
 					},
 					None => Some(Value::None),
@@ -741,7 +743,7 @@ impl ConditionalBody {
 	}
 	
 	pub fn check(&self, check_context: &mut Context) -> Result<(), InterpErr> {
-		match self.condition_expr.check_and_calc_data_type(check_context)? {
+		match self.condition_expr.check_as_rhs_and_calc_data_type(check_context)? {
 			DataType::Builtin (BuiltinType::Bool) => {},
 			_ => return Err(StatementErr::IfConditionType { 
 										pos: self.condition_expr().pos(),
@@ -758,7 +760,7 @@ impl ConditionalBody {
 	}
 	
 	pub fn run_if_true(&self, context: &mut Context) -> (bool, Option<Value>) {
-		match self.condition_expr().calc(context) {
+		match self.condition_expr().calc_as_rhs(context) {
 			Value::Bool(true) => {
 				context.push_scope();
 				
@@ -870,7 +872,7 @@ impl ReturningBody {
 			StatementKind::UserDefinedFuncReturn { return_expr } => {
 				let returned_type: DataType = match return_expr {
 					Some(expr) => {
-						let dt: DataType = expr.check_and_calc_data_type(check_context)?;
+						let dt: DataType = expr.check_as_rhs_and_calc_data_type(check_context)?;
 						dt
 					},
 					None => DataType::Builtin (BuiltinType::None),
@@ -1078,7 +1080,7 @@ mod tests {
 					value_expr
 				} => {
 					assert_eq!(data_type_name, new_name_token("f32", true));
-					assert_eq!(value_expr.calc(&context), Value::from(3_f32));
+					assert_eq!(value_expr.calc_as_rhs(&context), Value::from(3_f32));
 					assert_eq!(var_name, new_name_token("a", false));
 				},
 			_ => panic!("wrong statement: {:?}", st),
@@ -1108,7 +1110,7 @@ mod tests {
 					value_expr
 				} => {
 					assert_eq!(data_type_name, new_name_token("f32", true));
-					assert_eq!(value_expr.calc(&context), Value::from(3_f32));
+					assert_eq!(value_expr.calc_as_rhs(&context), Value::from(3_f32));
 					assert_eq!(var_name, nt);
 				},
 			_ => panic!("wrong statement: {:?}", st),
@@ -1124,7 +1126,7 @@ mod tests {
 					value_expr
 				} => {
 					assert_eq!(data_type_name, new_name_token("str", true));
-					assert_eq!(value_expr.calc(&context), Value::from("hello"));
+					assert_eq!(value_expr.calc_as_rhs(&context), Value::from("hello"));
 					assert_eq!(var_name, nt);
 				},
 			_ => panic!("wrong statement: {:?}", st),
@@ -1140,7 +1142,7 @@ mod tests {
 					value_expr
 				} => {
 					assert_eq!(data_type_name, new_name_token("bool", true));
-					assert_eq!(value_expr.calc(&context), Value::from(true));
+					assert_eq!(value_expr.calc_as_rhs(&context), Value::from(true));
 					assert_eq!(var_name, nt);
 				},
 			_ => panic!("wrong statement: {:?}", st),
@@ -1364,11 +1366,11 @@ mod tests {
 			assert_eq!(data_type_name, new_name_token("f32", true));
 		
 			assert_eq!(
-				value_expr.check_and_calc_data_type(&context).unwrap(), 
+				value_expr.check_as_rhs_and_calc_data_type(&context).unwrap(), 
 				DataType::Builtin (BuiltinType::Float32));
 						
 			assert_eq!(
-				value_expr.calc(&context), 
+				value_expr.calc_as_rhs(&context), 
 				Value::from(3_f32));
 		} else {
 			panic!("Wrong statement: {:?}", st);
@@ -1404,11 +1406,11 @@ mod tests {
 			Vec::<StructDef>::new());
 		
 		assert_eq!(
-			condition_expr.check_and_calc_data_type(&context).unwrap(), 
+			condition_expr.check_as_rhs_and_calc_data_type(&context).unwrap(), 
 			DataType::Builtin (BuiltinType::Bool));
 					
 		assert_eq!(
-			condition_expr.calc(&context), 
+			condition_expr.calc_as_rhs(&context), 
 			Value::Bool(conditional_result));
 		
 		assert_eq!(statements.len(), 2);
@@ -1473,7 +1475,7 @@ mod tests {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2", false));
 						assert_eq!(*data_type_name, new_name_token("f32", true));
-						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
+						let dt: DataType = value_expr.check_as_rhs_and_calc_data_type(&context).unwrap();
 						assert_eq!(dt, DataType::Builtin (BuiltinType::Float32));
 					},
 					_ => {
@@ -1489,7 +1491,7 @@ mod tests {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2", false));
 						assert_eq!(*data_type_name, new_name_token("f32", true));
-						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
+						let dt: DataType = value_expr.check_as_rhs_and_calc_data_type(&context).unwrap();
 						assert_eq!(dt, DataType::Builtin (BuiltinType::Float32));
 					},
 					_ => {
@@ -1504,7 +1506,7 @@ mod tests {
 				match &body.statements()[2].kind {
 					StatementKind::UserDefinedFuncReturn { return_expr } => {
 						let dt: Option<DataType> = return_expr.as_ref()
-							.map(|expr| expr.check_and_calc_data_type(&context).unwrap());
+							.map(|expr| expr.check_as_rhs_and_calc_data_type(&context).unwrap());
 							
 						assert_eq!(dt, Some(DataType::Builtin (BuiltinType::Float32)));
 					},
@@ -1564,7 +1566,7 @@ mod tests {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("a2", false));
 						assert_eq!(*data_type_name, new_name_token("f32", true));
-						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
+						let dt: DataType = value_expr.check_as_rhs_and_calc_data_type(&context).unwrap();
 						assert_eq!(dt, DataType::Builtin (BuiltinType::Float32));
 					},
 					_ => {
@@ -1580,7 +1582,7 @@ mod tests {
 					StatementKind::VariableDeclareSet { var_name, data_type_name, value_expr } => {
 						assert_eq!(*var_name, new_name_token("b2", false));
 						assert_eq!(*data_type_name, new_name_token("f32", true));
-						let dt: DataType = value_expr.check_and_calc_data_type(&context).unwrap();
+						let dt: DataType = value_expr.check_as_rhs_and_calc_data_type(&context).unwrap();
 						assert_eq!(dt, DataType::Builtin (BuiltinType::Float32));
 					},
 					_ => {
@@ -1604,7 +1606,7 @@ mod tests {
 				match &body.statements()[3].kind {
 					StatementKind::UserDefinedFuncReturn { return_expr } => {
 						let dt: Option<DataType> = return_expr.as_ref()
-							.map(|expr| expr.check_and_calc_data_type(&context).unwrap());
+							.map(|expr| expr.check_as_rhs_and_calc_data_type(&context).unwrap());
 							
 						assert_eq!(dt, None);
 					},

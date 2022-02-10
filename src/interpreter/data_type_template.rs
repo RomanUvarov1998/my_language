@@ -228,7 +228,7 @@ impl UserFuncDefTemplate {
 		for sym in expr.expr_stack() {
 			let resolved_sym: Symbol = match sym.kind() {
 				SymbolKind::Operand (opnd) => match opnd {
-					Operand::Value (_) => sym.clone(),
+					Operand::Constant (_) => sym.clone(),
 					Operand::Variable (_) => sym.clone(),
 					Operand::FuncCall { func_name, arg_exprs } => {
 						let mut resolved_arg_exprs = Vec::<Expr>::new();
@@ -262,6 +262,7 @@ impl UserFuncDefTemplate {
 						}
 					},
 					Operand::ValueRef (_) => unreachable!(),
+					Operand::StringCharRefByInd { .. } => unreachable!(),
 					Operand::IndexExpr (expr) => Symbol {
 						pos: sym.pos(),
 						kind: SymbolKind::Operand (Operand::IndexExpr (

@@ -7,10 +7,10 @@ use std::rc::Rc;
 
 //------------------- Value -------------------
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Value {
 	Float32 (f32),
-	String (Vec<char>),
+	String (Rc<RefCell<Vec<char>>>),
 	Bool (bool),
 	Char (char),
 	Struct {
@@ -49,6 +49,55 @@ impl Value {
 		if let Value::Float32 (v) = self {
 			*v
 		} else { unreachable!(); }
+	}
+	
+	pub fn unwrap_str_clone_inner_rc(&self) -> Rc<RefCell<Vec<char>>> {
+		if let Value::String (chars) = self {
+			Rc::clone(&chars)
+		} else { unreachable!(); }
+	}
+	
+	pub fn unwrap_str_get_char(&self, index: usize) -> char {
+		if let Value::String (chars) = self {
+			chars.borrow()[index]
+		} else { unreachable!(); }
+	}
+}
+
+impl Clone for Value {
+	fn clone(&self) -> Self {
+		match self {
+			Value::Float32 (val) => Value::Float32 (*val),
+			Value::String (chars_vec_rc) => {
+				let vec_cloned: Vec<char> = chars_vec_rc.borrow().clone();
+				Value::String(Rc::new(RefCell::new(vec_cloned)))
+			},
+			Value::Bool (val) => Value::Bool (*val),
+			Value::Char (val) => Value::Char(*val),
+			Value::Struct { struct_def, fields } => {
+				let mut fields_cloned = HashMap::<String, Rc<RefCell<Value>>>::with_capacity(fields.capacity());
+				
+				for (key, value_rc) in fields.iter() {
+					let value_cloned: Value = value_rc.borrow().clone();
+					fields_cloned.insert(
+						key.clone(), 
+						Rc::new(RefCell::new(value_cloned)));
+				}
+				
+				Value::Struct {
+					struct_def: struct_def.clone(),
+					fields: fields_cloned,
+				}
+			},
+			Value::Array { elem_type, values } => {
+				let elems_vec_cloned: Vec<Value> = values.borrow().clone();
+				Value::Array {
+					elem_type: elem_type.clone(),
+					values: Rc::new(RefCell::new(elems_vec_cloned)),
+				}
+			},
+			Value::None => Value::None,
+		}
 	}
 }
 
@@ -95,7 +144,7 @@ impl std::fmt::Display for Value {
 			Value::Float32 (v) => write!(f, "{}", v),
 			Value::String (v) => {
 				write!(f, "'")?;
-				for ch in v {
+				for ch in v.borrow().iter() {
 					write!(f, "{}", ch)?;
 				}
 				write!(f, "'")
@@ -136,13 +185,15 @@ impl From<f32> for Value {
 
 impl From<String> for Value {
 	fn from(val: String) -> Self {
-		Value::String(val.chars().collect::<Vec<char>>())
+		let chars_vec: Vec<char> = val.chars().collect();
+		Value::String(Rc::new(RefCell::new(chars_vec)))
 	}
 }
 
 impl From<&str> for Value {
 	fn from(val: &str) -> Self {
-		Value::String(val.chars().collect::<Vec<char>>())
+		let chars_vec: Vec<char> = val.chars().collect();
+		Value::String(Rc::new(RefCell::new(chars_vec)))
 	}
 }
 

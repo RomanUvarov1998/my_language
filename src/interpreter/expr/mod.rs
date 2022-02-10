@@ -10,6 +10,7 @@ use super::context::Context;
 use symbol::SymbolIterator;
 pub use symbol::{Symbol, Operand, SymbolKind, StructLiteralField};
 use expr_operator::{ExprOperator, OpAssot};
+use std::cell::RefCell;
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -51,11 +52,17 @@ impl Expr {
 		}
 	}
 	
+	
 	pub fn expr_stack(&self) -> &Vec<Symbol> {
 		&*self.expr_stack
 	}
 	
-	pub fn calc(&self, context: &Context) -> Value {
+	pub fn pos(&self) -> CodePos {
+		self.pos
+	}
+	
+	
+	pub fn calc_as_rhs(&self, context: &Context) -> Value {
 		let mut calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
 		
 		for sym in self.expr_stack.iter() {
@@ -82,7 +89,7 @@ impl Expr {
 		result
 	}
 	
-	pub fn check_and_calc_data_type(&self, check_context: &Context) -> Result<DataType, InterpErr> {
+	pub fn check_as_rhs_and_calc_data_type(&self, check_context: &Context) -> Result<DataType, InterpErr> {
 		let mut type_calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
 		
 		for sym in self.expr_stack.iter() {
@@ -96,7 +103,7 @@ impl Expr {
 					let dt: DataType = op.get_result_data_type(&mut type_calc_stack, check_context, sym.pos())?;
 					type_calc_stack.push(Symbol { 
 						pos: sym.pos(), 
-						kind: SymbolKind::Operand (Operand::Value(dt.default_value())),
+						kind: SymbolKind::Operand (Operand::Constant(dt.default_value())),
 					}); // TODO: somehow place DataType here, not a massive symbol
 				}, 
 			}
@@ -112,11 +119,7 @@ impl Expr {
 		Ok(data_type)
 	}
 
-	pub fn pos(&self) -> CodePos {
-		self.pos
-	}
-	
-	pub fn check_as_standalone_expression(&self, check_context: &Context) -> Result<(), InterpErr> {
+	pub fn check_as_standalone(&self, check_context: &Context) -> Result<(), InterpErr> {
 		let mut type_calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
 		
 		for sym in self.expr_stack.iter() {
@@ -134,7 +137,7 @@ impl Expr {
 						let dt: DataType = op.get_result_data_type(&mut type_calc_stack, check_context, sym.pos())?;
 						type_calc_stack.push(Symbol { 
 							pos: sym.pos(), 
-							kind: SymbolKind::Operand (Operand::Value(dt.default_value())),
+							kind: SymbolKind::Operand (Operand::Constant(dt.default_value())),
 						}); // TODO: somehow place DataType here, not a massive symbol
 					},
 					_ => return Err( ExprErr::NotLhsExprSymbol(sym.pos).into() ),
@@ -152,7 +155,7 @@ impl Expr {
 		Ok(())
 	}
 	
-	pub fn run_as_standalone_expression(&self, context: &Context) {
+	pub fn run_as_standalone(&self, context: &Context) {
 		let mut calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
 		
 		for sym in self.expr_stack.iter() {
@@ -177,13 +180,13 @@ impl Expr {
 			.calc_in_place(context);
 	}
 	
-	pub fn check_and_get_variable_to_set_type(&self, check_context: &Context) -> Result<DataType, InterpErr> {
+	pub fn check_as_lhs_and_calc_data_type(&self, check_context: &Context) -> Result<DataType, InterpErr> {
 		let mut type_calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
 		
 		for sym in self.expr_stack.iter() {
 			match sym.kind() {
 				SymbolKind::Operand (opnd) => match opnd {
-					Operand::Variable(_) | Operand::FuncCall { .. } => type_calc_stack.push(sym.clone()),
+					Operand::Variable(_) | Operand::FuncCall { .. } | Operand::IndexExpr (_) => type_calc_stack.push(sym.clone()),
 					_ => return Err( ExprErr::NotLhsExprSymbol(sym.pos).into() ),
 				}, // TODO: avoid cloning symbols
 				
@@ -191,11 +194,11 @@ impl Expr {
 				SymbolKind::RightRoundBracket => unreachable!(),
 				
 				SymbolKind::ExprOperator (op) => match op {
-					ExprOperator::DotMemberAccess => {
+					ExprOperator::DotMemberAccess | ExprOperator::Index => {
 						let dt: DataType = op.get_result_data_type(&mut type_calc_stack, check_context, sym.pos())?;
 						type_calc_stack.push(Symbol { 
 							pos: sym.pos(), 
-							kind: SymbolKind::Operand (Operand::Value(dt.default_value())),
+							kind: SymbolKind::Operand (Operand::Constant(dt.default_value())),
 						}); // TODO: somehow place DataType here, not a massive symbol
 					},
 					_ => return Err( ExprErr::NotLhsExprSymbol(sym.pos).into() ),
@@ -213,7 +216,7 @@ impl Expr {
 		Ok(data_type)
 	}
 	
-	pub fn set_as_to_lhs(&self, value: Value, context: &mut Context) {
+	pub fn calc_as_lhs_and_set(&self, value: Value, context: &mut Context) {
 		let mut calc_stack = Vec::<Symbol>::with_capacity(self.expr_stack.len());
 					
 		for sym in self.expr_stack.iter() {
@@ -227,7 +230,7 @@ impl Expr {
 				
 				SymbolKind::ExprOperator (op) => {
 					match op {
-						ExprOperator::DotMemberAccess => {
+						ExprOperator::DotMemberAccess | ExprOperator::Index => {
 							let result_sym: Symbol = op.apply(&mut calc_stack, context, sym.pos());
 							calc_stack.push(result_sym);
 						},
@@ -245,10 +248,19 @@ impl Expr {
 		
 		match last_opnd {
 			Operand::Variable (var_name) => context.set_variable(&var_name, value).unwrap(),
-			Operand::ValueRef (value_rc) => *value_rc.borrow_mut() = value,
-			opnd @ _ => panic!("Wrong last operand: {:#?}", opnd),
+			Operand::ValueRef (value_rc) => {
+				*value_rc.borrow_mut() = value;
+			},
+			Operand::StringCharRefByInd { string_value, index } => {
+				if let Value::Char(ch) = value {
+					string_value.borrow_mut()[index] = ch;
+				} else { unreachable!(); }
+			},
+			Operand::IndexExpr (_) | Operand::Constant (_) | Operand::FuncCall { .. } | Operand::StructLiteral { .. } => 
+				panic!("Wrong last operand: {:#?}", last_opnd),
 		}
 	}
+	
 	
 	fn create_stack(tokens_iter: &mut TokensIter, context_kind: ExprContextKind) -> Result<Vec<Symbol>, InterpErr> {
 		use std::cmp::Ordering;
@@ -626,63 +638,63 @@ mod tests {
 	#[test]
 	fn check_stack_creation_and_arithmetic_calc() {
 		test_expr_and_its_stack_eq_and_value("3.125;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3.125_f32))),
 		],
 		Value::Float32(3.125_f32));
 		
 		test_expr_and_its_stack_eq_and_value("3.125 + 5.4;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (5.4_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (5.4_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::Float32(3.125_f32 + 5.4_f32));
 		
 		test_expr_and_its_stack_eq_and_value("3.125 + 5.4 * 2.46;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (5.4_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2.46_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (5.4_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2.46_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::Float32(3.125_f32 + 5.4_f32 * 2.46_f32));
 		
 		test_expr_and_its_stack_eq_and_value("6 / 2;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (6_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (6_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Div),
 		],
 		Value::Float32(6_f32 / 2_f32));
 		
 		test_expr_and_its_stack_eq_and_value("3.125 + 0 + 5.25 * 2.25 - 3.25 / 2 * 4.25;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (0_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (0_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (5.25_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2.25_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (5.25_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2.25_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3.25_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3.25_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Div),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (4.25_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (4.25_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 			SymbolKind::ExprOperator (ExprOperator::BinMinus),
 		],
 		Value::Float32(3.125_f32 + 0.0_f32 + 5.25_f32 * 2.25_f32 - 3.25_f32 / 2.0_f32 * 4.25_f32));
 		
 		test_expr_and_its_stack_eq_and_value("3.125 + -5.25 * 2.25;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (5.25_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (5.25_f32))),
 			SymbolKind::ExprOperator (ExprOperator::UnMinus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2.25_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2.25_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::Float32(3.125_f32 + -5.25_f32 * 2.25_f32));
 		
 		test_expr_and_its_stack_eq_and_value("2.5 * ---5.5;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2.5_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (5.5_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2.5_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (5.5_f32))),
 			SymbolKind::ExprOperator (ExprOperator::UnMinus),
 			SymbolKind::ExprOperator (ExprOperator::UnMinus),
 			SymbolKind::ExprOperator (ExprOperator::UnMinus),
@@ -691,88 +703,88 @@ mod tests {
 		Value::Float32(2.5_f32 * ---5.5_f32));
 		
 		test_expr_and_its_stack_eq_and_value("1.125 * (3.125 + 2.125);", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (1.125_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (1.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2.125_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 		],
 		Value::Float32(1.125_f32 * (3.125_f32 + 2.125_f32)));
 		
 		test_expr_and_its_stack_eq_and_value("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (33_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (4_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (33_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (4_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (5_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (5_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (10_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (10_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Div),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (30_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (30_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinMinus),
 		],
 		Value::Float32(33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32));
 		
 		test_expr_and_its_stack_eq_and_value("-(8 - 2.125 * 5.125 + 4.125) / -3.125;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (8_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2.125_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (5.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (8_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (5.125_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 			SymbolKind::ExprOperator (ExprOperator::BinMinus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (4.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (4.125_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 			SymbolKind::ExprOperator (ExprOperator::UnMinus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3.125_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3.125_f32))),
 			SymbolKind::ExprOperator (ExprOperator::UnMinus),
 			SymbolKind::ExprOperator (ExprOperator::Div),
 		],
 		Value::Float32(-(8_f32 - 2.125_f32 * 5.125_f32 + 4.125_f32) / -3.125_f32));
 		
 		test_expr_and_its_stack_eq_and_value("33 + (1 + 2 * (3 + 4) + 5) / 10 - 30;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (33_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (4_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (33_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (4_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 			SymbolKind::ExprOperator (ExprOperator::Mul),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (5_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (5_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (10_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (10_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Div),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (30_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (30_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinMinus),
 		],
 		Value::Float32(33_f32 + (1_f32 + 2_f32 * (3_f32 + 4_f32) + 5_f32) / 10_f32 - 30_f32));
 		
 		test_expr_and_its_stack_eq_and_value("2^2;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Pow),
 		],
 		Value::Float32(2_f32.powf(2_f32)));
 		
 		test_expr_and_its_stack_eq_and_value("-2^2+4;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Pow),
 			SymbolKind::ExprOperator (ExprOperator::UnMinus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (4_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (4_f32))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::Float32(-2_f32.powf(2_f32) + 4_f32));
 		
 		test_expr_and_its_stack_eq_and_value("3^1^2;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Pow),
 			SymbolKind::ExprOperator (ExprOperator::Pow),
 		],
@@ -790,7 +802,7 @@ mod tests {
 						pos: zero_pos,
 						expr_stack: Rc::new(vec![
 							Symbol {
-								kind: SymbolKind::Operand (Operand::Value (Value::from(2_f32))),
+								kind: SymbolKind::Operand (Operand::Constant (Value::from(2_f32))),
 								pos: zero_pos,
 							},
 						]),
@@ -801,7 +813,7 @@ mod tests {
 						pos: zero_pos,
 						expr_stack: Rc::new(vec![
 							Symbol {
-								kind: SymbolKind::Operand (Operand::Value (Value::from(4_f32))),
+								kind: SymbolKind::Operand (Operand::Constant (Value::from(4_f32))),
 								pos: zero_pos,
 							},
 						]),
@@ -817,7 +829,7 @@ mod tests {
 						pos: zero_pos,
 						expr_stack: Rc::new(vec![
 							Symbol {
-								kind: SymbolKind::Operand (Operand::Value (Value::from(4_f32))),
+								kind: SymbolKind::Operand (Operand::Constant (Value::from(4_f32))),
 								pos: zero_pos,
 							},
 						]),
@@ -828,7 +840,7 @@ mod tests {
 						pos: zero_pos,
 						expr_stack: Rc::new(vec![
 							Symbol {
-								kind: SymbolKind::Operand (Operand::Value (Value::from(9_f32))),
+								kind: SymbolKind::Operand (Operand::Constant (Value::from(9_f32))),
 								pos: zero_pos,
 							},
 						]),
@@ -874,7 +886,7 @@ mod tests {
 		]);
 		
 		test_expr_and_its_stack_eq("2 * a.foo1(c.foo3().foo5() - 3) ^ b.foo2() / d.foo4();", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
 			SymbolKind::Operand (Operand::Variable (new_name_token("a", false))),
 			SymbolKind::Operand (Operand::FuncCall {
 				func_name: new_name_token("foo1", false),
@@ -894,7 +906,7 @@ mod tests {
 								arg_exprs: Vec::new(),
 							}), pos: zero_pos, },
 							Symbol { kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess), pos: zero_pos, },
-							Symbol { kind: SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))), pos: zero_pos, },
+							Symbol { kind: SymbolKind::Operand (Operand::Constant (Value::Float32 (3_f32))), pos: zero_pos, },
 							Symbol { kind: SymbolKind::ExprOperator (ExprOperator::BinMinus), pos: zero_pos, },
 						]),
 					},
@@ -934,113 +946,113 @@ mod tests {
 	#[test]
 	fn check_stack_creation_and_bool_calc() {
 		test_expr_and_its_stack_eq_and_value("False;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (false))),
 		],
 		Value::Bool(false));
 		
 		test_expr_and_its_stack_eq_and_value("True;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (true))),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq_and_value("!True;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (true))),
 			SymbolKind::ExprOperator (ExprOperator::Not),
 		],
 		Value::Bool(false));
 		
 		test_expr_and_its_stack_eq_and_value("!False;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::Not),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq_and_value("True == True;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
-			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (true))),
 			SymbolKind::ExprOperator (ExprOperator::Equal),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq_and_value("False == False;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
-			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (false))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::Equal),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq_and_value("True != False;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
-			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::NotEqual),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq_and_value("True land False;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
-			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::LogicalAnd),
 		],
 		Value::Bool(false));
 		
 		test_expr_and_its_stack_eq_and_value("True lor False;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
-			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::LogicalOr),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq_and_value("True lxor False;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Bool (true))),
-			SymbolKind::Operand (Operand::Value (Value::Bool (false))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (true))),
+			SymbolKind::Operand (Operand::Constant (Value::Bool (false))),
 			SymbolKind::ExprOperator (ExprOperator::LogicalXor),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq_and_value("2 > 3;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Greater),
 		],
 		Value::Bool(false));
 		
 		test_expr_and_its_stack_eq_and_value("!(2 > 3);", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Greater),
 			SymbolKind::ExprOperator (ExprOperator::Not),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq_and_value("2 >= 3;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3_f32))),
 			SymbolKind::ExprOperator (ExprOperator::GreaterEqual),
 		],
 		Value::Bool(false));
 		
 		test_expr_and_its_stack_eq_and_value("2 < 3;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Less),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq_and_value("2 <= 3;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (2_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3_f32))),
 			SymbolKind::ExprOperator (ExprOperator::LessEqual),
 		],
 		Value::Bool(true));
 		
 		test_expr_and_its_stack_eq_and_value("1 + 1 ^ 10 <= 27 / 9;", vec![
-			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (1_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (10_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (10_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Pow),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (27_f32))),
-			SymbolKind::Operand (Operand::Value (Value::Float32 (9_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (27_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (9_f32))),
 			SymbolKind::ExprOperator (ExprOperator::Div),
 			SymbolKind::ExprOperator (ExprOperator::LessEqual),
 		],
@@ -1052,10 +1064,10 @@ mod tests {
 		test_expr_and_its_stack_eq_and_value(
 		r#"  "Hello!"[0];"#, 
 		vec![
-			SymbolKind::Operand (Operand::Value (Value::from("Hello!"))),
+			SymbolKind::Operand (Operand::Constant (Value::from("Hello!"))),
 			SymbolKind::Operand (Operand::IndexExpr (Expr {
 				expr_stack: Rc::new(vec![
-					Symbol { kind: SymbolKind::Operand (Operand::Value (Value::Float32 (0_f32))), pos: CodePos::from(CharPos::new()) },
+					Symbol { kind: SymbolKind::Operand (Operand::Constant (Value::Float32 (0_f32))), pos: CodePos::from(CharPos::new()) },
 				]),
 				pos: CodePos::from(CharPos::new()),
 			} ) ),
@@ -1066,13 +1078,13 @@ mod tests {
 		test_expr_and_its_stack_eq_and_value(
 		r#"  ("Hello, " + "world!")[32 - 21];  "#, 
 		vec![
-			SymbolKind::Operand (Operand::Value (Value::from("Hello, "))),
-			SymbolKind::Operand (Operand::Value (Value::from("world!"))),
+			SymbolKind::Operand (Operand::Constant (Value::from("Hello, "))),
+			SymbolKind::Operand (Operand::Constant (Value::from("world!"))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 			SymbolKind::Operand (Operand::IndexExpr (Expr {
 				expr_stack: Rc::new(vec![
-					Symbol { kind: SymbolKind::Operand (Operand::Value (Value::Float32 (32_f32))), pos: CodePos::from(CharPos::new()) },
-					Symbol { kind: SymbolKind::Operand (Operand::Value (Value::Float32 (21_f32))), pos: CodePos::from(CharPos::new()) },
+					Symbol { kind: SymbolKind::Operand (Operand::Constant (Value::Float32 (32_f32))), pos: CodePos::from(CharPos::new()) },
+					Symbol { kind: SymbolKind::Operand (Operand::Constant (Value::Float32 (21_f32))), pos: CodePos::from(CharPos::new()) },
 					Symbol { kind: SymbolKind::ExprOperator (ExprOperator::BinMinus), pos: CodePos::from(CharPos::new()) },
 				]),
 				pos: CodePos::from(CharPos::new()),
@@ -1087,8 +1099,8 @@ mod tests {
 		test_expr_and_its_stack_eq_and_value(
 		r#"  'H' + "ello"; "#, 
 		vec![
-			SymbolKind::Operand (Operand::Value (Value::Char('H'))),
-			SymbolKind::Operand (Operand::Value (Value::from("ello"))),
+			SymbolKind::Operand (Operand::Constant (Value::Char('H'))),
+			SymbolKind::Operand (Operand::Constant (Value::from("ello"))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::from("Hello"));
@@ -1096,8 +1108,8 @@ mod tests {
 		test_expr_and_its_stack_eq_and_value(
 		r#"  "Hell" + 'o';  "#, 
 		vec![
-			SymbolKind::Operand (Operand::Value (Value::from("Hell"))),
-			SymbolKind::Operand (Operand::Value (Value::Char('o'))),
+			SymbolKind::Operand (Operand::Constant (Value::from("Hell"))),
+			SymbolKind::Operand (Operand::Constant (Value::Char('o'))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::from("Hello"));
@@ -1105,8 +1117,8 @@ mod tests {
 		test_expr_and_its_stack_eq_and_value(
 		r#"  'H' + 'i';  "#, 
 		vec![
-			SymbolKind::Operand (Operand::Value (Value::Char('H'))),
-			SymbolKind::Operand (Operand::Value (Value::Char('i'))),
+			SymbolKind::Operand (Operand::Constant (Value::Char('H'))),
+			SymbolKind::Operand (Operand::Constant (Value::Char('i'))),
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::from("Hi"));
@@ -1139,7 +1151,7 @@ mod tests {
 				&primitive_type_member_funcs_list,
 				Vec::<StructDef>::new());
 			
-			let ans: Value = expr.calc(&context);
+			let ans: Value = expr.calc_as_rhs(&context);
 			
 			if ans != result {
 				panic!("Wrong result for code '{}': {:?} != {:?}", expr_str, ans, result);

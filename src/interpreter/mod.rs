@@ -866,7 +866,7 @@ var b: @char = a[0];
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
 var a: @str = "Hello!";
-a[1] = "F";
+a[1] = 'F';
 		"#) {
 			Ok(_) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),

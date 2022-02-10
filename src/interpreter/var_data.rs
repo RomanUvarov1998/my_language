@@ -1,13 +1,15 @@
 use super::utils::NameToken;
 use super::value::Value;
 use super::data_type::DataType;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 //-------------------- VarData --------------
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct VarData {
 	name: NameToken,
-	var_value: Value,
+	var_value: Rc<RefCell<Value>>,
 	data_type: DataType,
 }
 
@@ -16,7 +18,7 @@ impl VarData {
 		if data_type == var_value.get_type() {
 			Ok( VarData {
 				name,
-				var_value,
+				var_value: Rc::new(RefCell::new(var_value)),
 				data_type,
 			} )
 		} else {
@@ -30,7 +32,7 @@ impl VarData {
 	
 	pub fn set(&mut self, new_var_value: Value) -> Result<(), VarErr> {
 		if self.data_type == new_var_value.get_type() {
-			self.var_value = new_var_value;
+			self.var_value = Rc::new(RefCell::new(new_var_value));
 			Ok(())
 		} else {
 			Err( VarErr::WrongValue { 
@@ -41,8 +43,8 @@ impl VarData {
 		}
 	}
 	
-	pub fn get_value(&self) -> &Value {
-		&self.var_value
+	pub fn get_value(&self) -> Rc<RefCell<Value>> {
+		Rc::clone(&self.var_value)
 	}
 	
 	pub fn get_type(&self) -> &DataType {
