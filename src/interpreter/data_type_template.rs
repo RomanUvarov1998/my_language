@@ -7,6 +7,7 @@ use super::data_type::{DataType, BuiltinType};
 use super::user_func::{UserFuncDef, UserFuncArg};
 use super::InterpErr;
 use super::expr::{Expr, Symbol, SymbolKind, Operand, StructLiteralField};
+use super::utils::HashMapInsertPanic;
 
 //------------------------- DataTypeTemplate -----------------------
 
@@ -31,17 +32,15 @@ impl DataTypeTemplate {
 	}
 	
 	pub fn add_field_template(&mut self, field_template: StructFieldDefTemplate) {
-		assert_eq!(self.fields.insert(
+		self.fields.insert_assert_not_replace(
 			field_template.name.value().to_string(),
-			field_template),
-			None);
+			field_template);
 	}
 	
 	pub fn add_user_func_template(&mut self, user_func_template: UserFuncDefTemplate) {
-		assert_eq!(self.user_funcs.insert(
+		self.user_funcs.insert_assert_not_replace(
 			user_func_template.name.value().to_string(),
-			user_func_template),
-			None);
+			user_func_template);
 	}
 	
 	pub fn generate_type_def(&self, type_params: &HashMap<String, String>, context: &Context) -> StructDef {
