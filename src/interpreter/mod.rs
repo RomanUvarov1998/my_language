@@ -123,7 +123,7 @@ impl Interpreter {
 	
 		while let Some(statement_result) = self.statements_iter.next() {
 			let st: Statement = statement_result?;
-			st.check(&mut check_context)?;
+			st.check(&mut check_context)?; // TODO: make check() functions collect all errors and then print them all
 			statements.push(st);
 		}
 		
@@ -134,7 +134,7 @@ impl Interpreter {
 			struct_defs);
 		
 		for st_ref in &statements {
-			st_ref.run(&mut run_context);
+			st_ref.run(&mut run_context); // TODO: make run() functions return Result, which propagates from inside and delivers Err() when index is out of array bounds
 		}
 		
 		Ok(())
