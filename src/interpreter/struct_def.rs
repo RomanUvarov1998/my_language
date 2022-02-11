@@ -140,14 +140,14 @@ impl StructDefInner {
 	pub fn add_builtin_func_def(&mut self, func_def: BuiltinFuncDef) {
 		self.builtin_funcs.insert_assert_not_replace(
 			func_def.name().to_string(),
-			func_def);
+			func_def); // TODO: return Result instead of panicking
 	}
 	
 	#[allow(dead_code)]
 	pub fn add_user_func_def(&mut self, func_def: UserFuncDef) {
 		self.user_funcs.insert_assert_not_replace(
 			func_def.name().value().to_string(),
-			func_def);
+			func_def); // TODO: return Result instead of panicking
 	}
 	
 	pub fn find_builtin_func_def(&self, name: &NameToken) -> Result<BuiltinFuncDef, StructDefErr> {
