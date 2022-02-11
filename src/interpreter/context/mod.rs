@@ -136,20 +136,22 @@ impl<'prev_context> Context<'prev_context> {
 	}
 	
 	pub fn find_type_by_name(&self, name: &NameToken) -> Result<DataType, DataTypeErr> {
-		match name.value() {
-			"f32" => Ok( DataType::Builtin (BuiltinType::Float32) ),
-			"str" => Ok( DataType::Builtin (BuiltinType::String) ),
-			"bool" => Ok( DataType::Builtin (BuiltinType::Bool) ),
-			"char" => Ok( DataType::Builtin (BuiltinType::Char) ),
-			"untyped_array" => Ok( DataType::Builtin (BuiltinType::Array) ),
-			_ => {
-				let defs = self.struct_defs.borrow();
-				if let Some(dt) = defs.iter().find(|sd| sd.inner().name().value() == name.value()) {
-					Ok( DataType::UserDefined (dt.clone()) )
-				} else {
-					Err( DataTypeErr::NotDefined { name: name.clone() } )
-				}
-			},
+		if name.is_builtin() {
+			match name.value() {
+				"f32" => Ok( DataType::Builtin (BuiltinType::Float32) ),
+				"str" => Ok( DataType::Builtin (BuiltinType::String) ),
+				"bool" => Ok( DataType::Builtin (BuiltinType::Bool) ),
+				"char" => Ok( DataType::Builtin (BuiltinType::Char) ),
+				"untyped_array" => Ok( DataType::Builtin (BuiltinType::UntypedArray) ),
+				_ => Err( DataTypeErr::NotDefined { name: name.clone() } ),
+			}
+		} else {
+			let defs = self.struct_defs.borrow();
+			if let Some(dt) = defs.iter().find(|sd| sd.inner().name().value() == name.value()) {
+				Ok( DataType::UserDefined (dt.clone()) )
+			} else {
+				Err( DataTypeErr::NotDefined { name: name.clone() } )
+			}
 		}
 	}
 	
@@ -165,6 +167,10 @@ impl<'prev_context> Context<'prev_context> {
 	}
 	
 	pub fn add_user_struct(&mut self, name: NameToken, fields: Vec<StructFieldDef>) -> Result<(), StructDefErr> {
+		if name.is_builtin() {
+			return Err( StructDefErr::CannotDefineAsBuiltin { name: name.clone() } );
+		}
+		
 		if self.is_root {
 			let mut defs = self.struct_defs.borrow_mut();
 			

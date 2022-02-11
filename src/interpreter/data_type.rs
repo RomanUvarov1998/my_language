@@ -60,7 +60,7 @@ pub enum BuiltinType {
 	String,
 	Bool,
 	Char,
-	Array,
+	UntypedArray,
 	Any,
 	None,
 }
@@ -72,7 +72,7 @@ impl BuiltinType {
 			BuiltinType::String => Value::from(String::new()),
 			BuiltinType::Bool => Value::from(false),
 			BuiltinType::Char => Value::from('a'),
-			BuiltinType::Array => Value::Array {
+			BuiltinType::UntypedArray => Value::UntypedArray {
 				values: Rc::new(RefCell::new(Vec::new())),
 			},
 			BuiltinType::Any => Value::Any,
@@ -88,7 +88,7 @@ impl std::fmt::Display for BuiltinType {
 			BuiltinType::String => write!(f, "str"),
 			BuiltinType::Bool => write!(f, "bool"),
 			BuiltinType::Char => write!(f, "char"),
-			BuiltinType::Array => write!(f, "array"),
+			BuiltinType::UntypedArray => write!(f, "untyped array"),
 			BuiltinType::Any => write!(f, "Any"),
 			BuiltinType::None => write!(f, "None"),
 		}

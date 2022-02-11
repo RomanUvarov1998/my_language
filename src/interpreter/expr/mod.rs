@@ -1179,7 +1179,7 @@ mod tests {
 				],
 			}),
 		],
-		Value::Array {
+		Value::UntypedArray {
 			values: Rc::new(RefCell::new(vec![
 				Value::from(1_f32),
 				Value::from(2_f32),

@@ -558,7 +558,7 @@ impl Operand {
 				dt
 			},
 			
-			Operand::ArrayLiteral { .. } => DataType::Builtin (BuiltinType::Array),
+			Operand::ArrayLiteral { .. } => DataType::Builtin (BuiltinType::UntypedArray),
 			
 			Operand::ValueRef (value_rc) => value_rc.borrow().get_type(),
 			
@@ -638,7 +638,7 @@ impl Operand {
 			Operand::ArrayLiteral { ref elements_exprs } => {
 				let mut values: Vec<Value> = elements_exprs.iter().map(|expr| expr.calc_as_rhs(context)).collect();
 				
-				Value::Array {
+				Value::UntypedArray {
 					values: Rc::new(RefCell::new(values)),
 				}
 			},

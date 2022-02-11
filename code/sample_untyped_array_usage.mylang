@@ -1,3 +1,11 @@
+struct f32 {
+	value: @f32,
+}
+
+var ff: f32 = f32 {
+	value: 3,
+};
+
 var a: @untyped_array = [1, 2, 3];
 
 @println("Should print '[1, 2, 3]':");

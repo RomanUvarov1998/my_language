@@ -200,6 +200,9 @@ pub enum StructDefErr {
 	StructDefNotInRootContext {
 		struct_pos: CodePos,
 	},
+	CannotDefineAsBuiltin {
+		name: NameToken,
+	},
 	StructDefIsAlreadyDefined {
 		defined_name: NameToken,
 	},
@@ -235,7 +238,9 @@ impl std::fmt::Display for StructDefErr {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			StructDefErr::NotAStruct { .. } =>
-				write!(f, "Struct definitions can only be in the global scope"),
+				write!(f, "Not a struct"),
+			StructDefErr::CannotDefineAsBuiltin { name } =>
+				write!(f, "Cannot define data type '{}' as builtin", name.value()),
 			StructDefErr::StructDefNotInRootContext { .. } =>
 				write!(f, "Struct definitions can only be in the global scope"),
 			StructDefErr::StructDefIsAlreadyDefined { defined_name } => 

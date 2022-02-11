@@ -10,14 +10,14 @@ use std::rc::Rc;
 #[derive(Debug)]
 pub enum Value {
 	Float32 (f32),
-	String (Rc<RefCell<Vec<char>>>), // TODO: implement string using Value::Array and template for Array<Value::Char>
+	String (Rc<RefCell<Vec<char>>>), // TODO: implement string using Value::UntypedArray and template for Array<Value::Char>
 	Bool (bool),
 	Char (char),
 	Struct {
 		struct_def: StructDef,
 		fields: HashMap<String, Rc<RefCell<Value>>>,
 	},
-	Array {
+	UntypedArray {
 		values: Rc<RefCell<Vec<Value>>>,
 	},
 	Any, // TODO: added for typechecking purposes, remove it later and use another context for code checking. With such another context instead of setting variables to default value using DataType::default_value(), just mark them as 'initialized'
@@ -32,7 +32,7 @@ impl Value {
 			Value::Bool (_) => DataType::Builtin (BuiltinType::Bool),
 			Value::Char (_) => DataType::Builtin (BuiltinType::Char),
 			Value::Struct { struct_def, .. } => DataType::UserDefined(struct_def.clone()), // TODO: try avoid cloning and return reference
-			Value::Array { .. } => DataType::Builtin (BuiltinType::Array),
+			Value::UntypedArray { .. } => DataType::Builtin (BuiltinType::UntypedArray),
 			Value::Any => DataType::Builtin (BuiltinType::Any),
 			Value::None => DataType::Builtin (BuiltinType::None),
 		}
@@ -58,9 +58,9 @@ impl Value {
 					fields: fields_cloned,
 				}
 			},
-			Value::Array { ref values } => {
+			Value::UntypedArray { ref values } => {
 				let elems_vec_cloned: Vec<Value> = values.borrow().clone();
-				Value::Array {
+				Value::UntypedArray {
 					values: Rc::clone(values),
 				}
 			},
@@ -120,9 +120,9 @@ impl Clone for Value {
 					fields: fields_cloned,
 				}
 			},
-			Value::Array { values } => {
+			Value::UntypedArray { values } => {
 				let elems_vec_cloned: Vec<Value> = values.borrow().clone();
-				Value::Array {
+				Value::UntypedArray {
 					values: Rc::new(RefCell::new(elems_vec_cloned)),
 				}
 			},
@@ -157,8 +157,8 @@ impl PartialEq for Value {
 				Value::Struct { struct_def: sd2, .. } => sd1 == sd2,
 				_ => false,
 			},
-			Value::Array { values: vs1 } => match other {
-				Value::Array { values: vs2 } => vs1 == vs2,
+			Value::UntypedArray { values: vs1 } => match other {
+				Value::UntypedArray { values: vs2 } => vs1 == vs2,
 				_ => false,
 			},
 			Value::Any => match other {
@@ -196,7 +196,7 @@ impl std::fmt::Display for Value {
 				}
 				writeln!(f, "}}")
 			},
-			Value::Array { values } => {
+			Value::UntypedArray { values } => {
 				write!(f, "Array [")?;
 				let mut is_first = true;
 				for v in values.borrow().iter() {

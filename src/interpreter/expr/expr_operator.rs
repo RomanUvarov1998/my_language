@@ -376,7 +376,7 @@ impl ExprOperator {
 				(_, DataType::Builtin (BuiltinType::Any)) => Ok(DataType::Builtin (BuiltinType::Any)),
 				(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::Float32)) 
 					=> Ok(DataType::Builtin (BuiltinType::Char)),
-				(DataType::Builtin (BuiltinType::Array), DataType::Builtin (BuiltinType::Float32)) 
+				(DataType::Builtin (BuiltinType::UntypedArray), DataType::Builtin (BuiltinType::Float32)) 
 					=> Ok(DataType::Builtin (BuiltinType::Any)),
 				_ => Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into())
 			}
@@ -646,7 +646,7 @@ impl ExprOperator {
 							string_value: Rc::clone(chars_rc),
 							index,
 						},
-						Value::Array { ref values } => Operand::ArrayElementRefByInd {
+						Value::UntypedArray { ref values } => Operand::ArrayElementRefByInd {
 							array_elements: Rc::clone(values),
 							index,
 						},
@@ -670,7 +670,7 @@ impl ExprOperator {
 							string_value: Rc::clone(chars_rc),
 							index,
 						},
-						Value::Array { ref values } => Operand::ArrayElementRefByInd {
+						Value::UntypedArray { ref values } => Operand::ArrayElementRefByInd {
 							array_elements: Rc::clone(values),
 							index,
 						},
@@ -693,7 +693,7 @@ impl ExprOperator {
 							string_value: Rc::clone(chars_rc),
 							index,
 						},
-						Value::Array { ref values } => Operand::ArrayElementRefByInd {
+						Value::UntypedArray { ref values } => Operand::ArrayElementRefByInd {
 							array_elements: Rc::clone(values),
 							index,
 						},
@@ -806,17 +806,17 @@ impl ExprOperator {
 				Value::String(Rc::new(RefCell::new(chars)))
 			},
 			
-			(Value::Array { values: vals1 }, Value::Array { values: vals2 }) => {
+			(Value::UntypedArray { values: vals1 }, Value::UntypedArray { values: vals2 }) => {
 				vals1.borrow_mut().append(&mut *vals2.borrow_mut());
-				Value::Array { values: vals1 }
+				Value::UntypedArray { values: vals1 }
 			},
-			(Value::Array { values }, value) => {
+			(Value::UntypedArray { values }, value) => {
 				values.borrow_mut().push(value);
-				Value::Array { values }
+				Value::UntypedArray { values }
 			},
-			(value, Value::Array { values }) => {
+			(value, Value::UntypedArray { values }) => {
 				values.borrow_mut().insert(0, value);
-				Value::Array { values }
+				Value::UntypedArray { values }
 			},
 			
 			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
@@ -1005,11 +1005,11 @@ impl ExprOperator {
 			(DataType::Builtin (BuiltinType::Char), DataType::Builtin (BuiltinType::Char)) => 
 				Ok(DataType::Builtin (BuiltinType::String)),
 				
-			(DataType::Builtin (BuiltinType::Array), _) => 
-				Ok(DataType::Builtin (BuiltinType::Array)),
+			(DataType::Builtin (BuiltinType::UntypedArray), _) => 
+				Ok(DataType::Builtin (BuiltinType::UntypedArray)),
 				
-			(_, DataType::Builtin (BuiltinType::Array)) => 
-				Ok(DataType::Builtin (BuiltinType::Array)),
+			(_, DataType::Builtin (BuiltinType::UntypedArray)) => 
+				Ok(DataType::Builtin (BuiltinType::UntypedArray)),
 				
 			_ => return Err(()),
 		}

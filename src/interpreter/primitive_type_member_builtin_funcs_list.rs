@@ -121,10 +121,10 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"to_string",
 				vec![
-					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::UntypedArray)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Value {
-					if let Value::Array { .. } = &args_values[0] {
+					if let Value::UntypedArray { .. } = &args_values[0] {
 						let s: String = format!("{}", &args_values[0]);
 						Value::from(s)
 					} else {
@@ -136,10 +136,10 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"len",
 				vec![
-					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::UntypedArray)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Value {
-					if let Value::Array { values, .. } = &args_values[0] {
+					if let Value::UntypedArray { values, .. } = &args_values[0] {
 						Value::from(values.borrow().len() as f32)
 					} else {
 						unreachable!();
@@ -150,12 +150,12 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"add",
 				vec![
-					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::UntypedArray)),
 					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Value {
 					let item: Value = args_values[1].clone();
-					if let Value::Array { values, .. } = &args_values[0] {
+					if let Value::UntypedArray { values, .. } = &args_values[0] {
 						values.borrow_mut().push(item);
 						Value::None
 					} else {
@@ -167,13 +167,13 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"get",
 				vec![
-					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::UntypedArray)),
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Value {
 					let ind: f32 = args_values[1].unwrap_f32();
 					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
-					if let Value::Array { values, .. } = &args_values[0] {
+					if let Value::UntypedArray { values, .. } = &args_values[0] {
 						values.borrow()[ind].clone()
 					} else {
 						unreachable!();
@@ -184,7 +184,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"set",
 				vec![
-					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::UntypedArray)),
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
 				],
@@ -192,7 +192,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 					let ind: f32 = args_values[1].unwrap_f32();
 					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
 					let item: Value = args_values[2].clone();
-					if let Value::Array { values, .. } = &args_values[0] {
+					if let Value::UntypedArray { values, .. } = &args_values[0] {
 						values.borrow_mut()[ind] = item;
 						Value::None
 					} else {
@@ -204,13 +204,13 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"remove",
 				vec![
-					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::UntypedArray)),
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Value {
 					let ind: f32 = args_values[1].unwrap_f32();
 					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
-					if let Value::Array { values, .. } = &args_values[0] {
+					if let Value::UntypedArray { values, .. } = &args_values[0] {
 						values.borrow_mut().remove(ind)
 					} else {
 						unreachable!();
@@ -221,7 +221,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"insert",
 				vec![
-					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::UntypedArray)),
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
 				],
@@ -229,7 +229,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 					let ind: f32 = args_values[1].unwrap_f32();
 					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
 					let item: Value = args_values[2].clone();
-					if let Value::Array { values, .. } = &args_values[0] {
+					if let Value::UntypedArray { values, .. } = &args_values[0] {
 						values.borrow_mut().insert(ind, item);
 						Value::None
 					} else {
@@ -307,14 +307,14 @@ mod tests {
 		assert_eq!(list.lookup[BuiltinType::Char as usize].len(), 1);
 		assert_eq!(list.lookup[BuiltinType::Char as usize][0].name(), "to_string");
 		
-		assert_eq!(list.lookup[BuiltinType::Array as usize].len(), 7);
-		assert_eq!(list.lookup[BuiltinType::Array as usize][0].name(), "to_string");
-		assert_eq!(list.lookup[BuiltinType::Array as usize][1].name(), "len");
-		assert_eq!(list.lookup[BuiltinType::Array as usize][2].name(), "add");
-		assert_eq!(list.lookup[BuiltinType::Array as usize][3].name(), "get");
-		assert_eq!(list.lookup[BuiltinType::Array as usize][4].name(), "set");
-		assert_eq!(list.lookup[BuiltinType::Array as usize][5].name(), "remove");
-		assert_eq!(list.lookup[BuiltinType::Array as usize][6].name(), "insert");
+		assert_eq!(list.lookup[BuiltinType::UntypedArray as usize].len(), 7);
+		assert_eq!(list.lookup[BuiltinType::UntypedArray as usize][0].name(), "to_string");
+		assert_eq!(list.lookup[BuiltinType::UntypedArray as usize][1].name(), "len");
+		assert_eq!(list.lookup[BuiltinType::UntypedArray as usize][2].name(), "add");
+		assert_eq!(list.lookup[BuiltinType::UntypedArray as usize][3].name(), "get");
+		assert_eq!(list.lookup[BuiltinType::UntypedArray as usize][4].name(), "set");
+		assert_eq!(list.lookup[BuiltinType::UntypedArray as usize][5].name(), "remove");
+		assert_eq!(list.lookup[BuiltinType::UntypedArray as usize][6].name(), "insert");
 		
 		assert_eq!(list.lookup[BuiltinType::Any as usize].len(), 0);
 		

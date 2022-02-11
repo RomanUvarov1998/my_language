@@ -368,6 +368,11 @@ impl From<StructDefErr> for InterpErr {
 				descr,
 				inner: InnerErr::StructDef (err),
 			},
+			StructDefErr::CannotDefineAsBuiltin { ref name } => InterpErr {
+				pos: name.pos(),
+				descr,
+				inner: InnerErr::StructDef (err),
+			},
 			StructDefErr::StructDefNotInRootContext { struct_pos } => InterpErr {
 				pos: struct_pos,
 				descr,
