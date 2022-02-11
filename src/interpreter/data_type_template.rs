@@ -10,6 +10,7 @@ use super::expr::{Expr, Symbol, SymbolKind, Operand, StructLiteralField};
 
 //------------------------- DataTypeTemplate -----------------------
 
+#[derive(Debug)]
 pub struct DataTypeTemplate {
 	name: &'static str,
 	fields: HashMap<String, StructFieldDefTemplate>, // TODO: try using &str
@@ -23,6 +24,10 @@ impl DataTypeTemplate {
 			fields: HashMap::new(),
 			user_funcs: HashMap::new(),
 		}
+	}
+	
+	pub fn name(&self) -> &'static str {
+		self.name
 	}
 	
 	pub fn add_field_template(&mut self, field_template: StructFieldDefTemplate) {

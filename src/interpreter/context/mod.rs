@@ -2,7 +2,7 @@ mod call_stack_frame;
 
 use call_stack_frame::CallStackFrame;
 use super::builtin_func::{BuiltinFuncDef, BuiltinFuncErr};
-use super::utils::NameToken;
+use super::utils::{NameToken, HashMapInsertPanic};
 use super::value::Value;
 use super::data_type::{DataType, BuiltinType, DataTypeErr};
 use super::var_data::{VarData, VarErr};
@@ -13,6 +13,7 @@ use super::struct_def::{StructDef, StructFieldDef, StructDefErr};
 use super::data_type_template::DataTypeTemplate;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::collections::HashMap;
 
 //---------------------- Context -----------------------
 
@@ -22,7 +23,7 @@ pub struct Context<'prev_context> {
 	builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>,
 	primitive_type_member_builtin_funcs_list: &'prev_context PrimitiveTypeMemberBuiltinFuncsList,
 	struct_defs: Rc<RefCell<Vec<StructDef>>>,
-	struct_def_templates: Rc<RefCell<Vec<DataTypeTemplate>>>,
+	struct_def_templates: Rc<RefCell<HashMap<String, DataTypeTemplate>>>,
 	is_root: bool,
 }
 
@@ -38,7 +39,7 @@ impl<'prev_context> Context<'prev_context> {
 			builtin_func_defs,
 			primitive_type_member_builtin_funcs_list,
 			struct_defs: Rc::new(RefCell::new(struct_defs)),
-			struct_def_templates: Rc::new(RefCell::new(Vec::new())),
+			struct_def_templates: Rc::new(RefCell::new(HashMap::new())),
 			is_root: true,
 		}
 	}
@@ -113,7 +114,9 @@ impl<'prev_context> Context<'prev_context> {
 	pub fn add_user_template(&self, template: DataTypeTemplate) {
 		if self.is_root {
 			let mut templ_defs = self.struct_def_templates.borrow_mut();
-			templ_defs.push(template);
+			templ_defs.insert_assert_not_replace(
+				template.name().to_string(),
+				template); // TODO: return Result instead of panicking
 		} else {
 			panic!("Template can only be defined in th global scope");
 		}
