@@ -16,7 +16,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"abs",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Float32)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Float32 (val) = &args_values[0] {
@@ -30,7 +30,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"sign",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Float32)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Float32 (val) = &args_values[0] {
@@ -50,7 +50,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"to_string",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Float32)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Float32 (val) = &args_values[0] {
@@ -67,7 +67,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"len",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::String)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::String)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::String (chars_rc) = &args_values[0] {
@@ -84,7 +84,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"to_string",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Bool)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Bool)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Bool (val) = &args_values[0] {
@@ -104,7 +104,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"to_string",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Bool)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Bool)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Char (val) = &args_values[0] {
@@ -121,7 +121,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"to_string",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Array { elem_type, values } = &args_values[0] {
@@ -145,7 +145,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"len",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::Array { values, .. } = &args_values[0] {
@@ -159,7 +159,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"add",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
@@ -176,7 +176,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"get",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
@@ -193,7 +193,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"set",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
 				],
@@ -213,7 +213,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"remove",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
@@ -230,7 +230,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"insert",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Array)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
 				],
@@ -255,7 +255,7 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 			BuiltinFuncDef::new(
 				"to_string",
 				vec![
-					BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Bool)),
+					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::None)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
 					if let Value::None = &args_values[0] {
