@@ -1,11 +1,10 @@
 use super::utils::{NameToken, CodePos, CharPos};
-use super::statement::{Statement, StatementKind, ReturningBody, ParsedFuncArgDef, ParsedStructFieldDef, ConditionalBody, UnconditionalBody};
+use super::statement::{Statement, StatementKind, ReturningBody, ParsedFuncArgDef, ConditionalBody, UnconditionalBody};
 use std::collections::HashMap;
-use super::struct_def::{StructDef, StructFieldDef, StructDefErr};
+use super::struct_def::{StructDef, StructFieldDef};
 use super::context::Context;
 use super::data_type::{DataType, BuiltinType};
 use super::user_func::{UserFuncDef, UserFuncArg};
-use super::InterpErr;
 use super::expr::{Expr, Symbol, SymbolKind, Operand, StructLiteralField};
 use super::utils::HashMapInsertPanic;
 
@@ -59,9 +58,9 @@ impl DataTypeTemplate {
 			fields.push(StructFieldDef::new(name_nt, dt));
 		}
 			
-		let mut sd = StructDef::new(name_nt, fields).unwrap();
+		let sd = StructDef::new(name_nt, fields).unwrap();
 		
-		for (f_name, func) in self.user_funcs.iter() {
+		for func in self.user_funcs.values() {
 			let fd: UserFuncDef = func.generate(type_params, context);
 			sd.inner_mut().add_user_func_def(fd);
 		}
@@ -98,7 +97,7 @@ pub struct UserFuncDefTemplate {
 
 impl UserFuncDefTemplate {
 	fn generate(&self, type_params: &HashMap<String, String>, context: &Context) -> UserFuncDef {
-		let mut args: Vec<UserFuncArg> = Self::resolve_user_member_function_args(type_params, &self.args, context);
+		let args: Vec<UserFuncArg> = Self::resolve_user_member_function_args(type_params, &self.args, context);
 		
 		let return_type: DataType = context.find_type_by_name(&self.return_type_name).unwrap();
 		
@@ -152,7 +151,7 @@ impl UserFuncDefTemplate {
 				StatementKind::VariableSet { left_expr, right_expr } => 
 					StatementKind::VariableSet {
 						left_expr: Self::resolve_expr(type_params, left_expr, &next_context),
-						right_expr: Self::resolve_expr(type_params, left_expr, &next_context),
+						right_expr: Self::resolve_expr(type_params, right_expr, &next_context),
 					},
 				StatementKind::FuncCall { left_expr } => 
 					StatementKind::FuncCall {

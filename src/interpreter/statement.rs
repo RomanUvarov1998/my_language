@@ -8,7 +8,6 @@ use super::user_func::UserFuncArg;
 use super::utils::{CharPos, CodePos, NameToken};
 use super::context::Context;
 use super::struct_def::StructFieldDef;
-use std::cell::RefCell;
 use std::rc::Rc;
 
 pub struct StatementsIter {

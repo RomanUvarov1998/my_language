@@ -300,8 +300,8 @@ impl ExprOperator {
 			let lhs: Symbol = calc_stack.pop()
 				.ok_or(InterpErr::from(ExprErr::not_enough_operands_for_operator(operator_pos, 1, 2)))?;
 				
-			let (lhs, lhs_pos) = if let Symbol { kind: SymbolKind::Operand (opnd), pos } = lhs {
-				(opnd, pos)
+			let lhs = if let Symbol { kind: SymbolKind::Operand (opnd), .. } = lhs {
+				opnd
 			} else { unreachable!() };
 				
 			let (lhs_dt, rhs_dt): (DataType, DataType) = match (&lhs, &rhs) {
@@ -534,7 +534,7 @@ impl ExprOperator {
 					Self::call_member_func_of_value_ref(Rc::clone(&value_rc), func_name, arg_exprs, context, rhs_pos),
 				
 				
-				(Operand::StringCharRefByInd { string_value, index }, Operand::Variable (ref field_name)) =>
+				(Operand::StringCharRefByInd { .. }, Operand::Variable (_)) =>
 					unreachable!(),
 				
 				(Operand::StringCharRefByInd { ref string_value, index }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
@@ -695,15 +695,15 @@ impl ExprOperator {
 		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Float32(val1 + val2),
-			(Value::String (mut s1), Value::String (mut s2)) => {
+			(Value::String (s1), Value::String (s2)) => {
 				s1.borrow_mut().append(&mut *s2.borrow_mut());
 				Value::String(s1)
 			},
-			(Value::String (mut s), Value::Char (c)) => {
+			(Value::String (s), Value::Char (c)) => {
 				s.borrow_mut().push(c);
 				Value::String(s)
 			},
-			(Value::Char (c), Value::String (mut s)) => {
+			(Value::Char (c), Value::String (s)) => {
 				s.borrow_mut().insert(0, c);
 				Value::String(s)
 			},
@@ -823,23 +823,6 @@ impl ExprOperator {
 		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
 			(Value::Bool (val1), Value::Bool (val2)) => Value::Bool(val1 ^ val2),
-			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
-		}
-	}
-	
-	fn apply_index(&self, calc_stack: &mut Vec<Symbol>, context: &Context) -> Value {
-		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
-		match (lhs, rhs) {
-			(Value::String (chars_vec_rc), Value::Float32 (value)) => {
-				if value.is_nan() {
-					println!("\n\nIndex can't be NAN");
-					std::process::exit(1);
-				}
-				
-				let index: usize = (value.abs().floor() * value.signum()) as usize;
-				
-				Value::Char(chars_vec_rc.borrow()[index])
-			},
 			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
