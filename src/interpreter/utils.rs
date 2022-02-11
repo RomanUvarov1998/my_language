@@ -1,5 +1,6 @@
 use super::token::{Token, TokenContent, TokenErr};
 use super::InterpErr;
+use std::collections::HashMap;
 
 //--------------------- NameToken --------------------------
 
@@ -147,5 +148,28 @@ impl std::cmp::Ord for CharPos {
 impl std::fmt::Display for CharPos {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "{}:{}", self.line, self.col)
+	}
+}
+
+//------------------------------ HashMapTrait ----------------------------
+
+pub trait HashMapInsertPanic<K, V>
+where
+	K: std::fmt::Display + Eq + std::hash::Hash,
+	V: std::fmt::Debug
+{
+	fn insert_assert_not_replace(&mut self, key: K, value: V);
+}
+
+impl<K, V> HashMapInsertPanic<K, V> for HashMap<K, V>
+where
+	K: std::fmt::Display + Eq + std::hash::Hash,
+	V: std::fmt::Debug
+{
+	fn insert_assert_not_replace(&mut self, key: K, value: V) {
+		if let Some(old_value) = self.get(&key) {
+			panic!("HashMap for key {}, already contains value {:#?}", key, old_value);
+		}
+		self.insert(key, value);
 	}
 }
