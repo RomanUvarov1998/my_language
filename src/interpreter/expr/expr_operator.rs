@@ -120,7 +120,23 @@ impl ExprOperator {
 			let (lhs, lhs_pos) = if let Symbol { kind: SymbolKind::Operand (opnd), pos } = lhs {
 				(opnd, pos)
 			} else { unreachable!() };
-				
+			
+			let lhs_data_type: DataType = match &lhs {
+				Operand::Constant (ref value) => value.get_type(),
+				Operand::Variable (ref var_name_1) => check_context.get_variable_def(&var_name_1)?.get_type().clone(),
+				ref fc @ Operand::FuncCall { .. } => fc.check_and_calc_data_type_in_place(check_context)?,
+				sl @ Operand::StructLiteral { .. } => sl.check_and_calc_data_type_in_place(check_context)?,
+				arr @ Operand::ArrayLiteral { .. } => arr.check_and_calc_data_type_in_place(check_context)?, // check exprs inside array
+				Operand::ValueRef (ref value_rc) => value_rc.borrow().get_type(),
+				Operand::IndexExpr (_) => return Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
+				lhs @ Operand::StringCharRefByInd { .. } => lhs.check_and_calc_data_type_in_place(check_context)?,
+				lhs @ Operand::ArrayElementRefByInd { .. } => lhs.check_and_calc_data_type_in_place(check_context)?,
+			};
+			
+			if lhs_data_type.is_any() {
+				return Ok(DataType::Builtin (BuiltinType::Any));
+			}
+			
 			match (&lhs, &rhs) {
 				(_, Operand::Constant (_)) =>
 					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
@@ -147,107 +163,88 @@ impl ExprOperator {
 					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
 				
 				
-				(Operand::Constant (ref value), Operand::Variable (ref var_name)) => {
-					let value_type: DataType = value.get_type();
-					// if value_type.is_any() {
-						// DataType::Builtin (BuiltinType::Any)
-					// } else {
-						let field_def: StructFieldDef = check_context.find_member_field_def(&value_type, var_name)?;
-						Ok(field_def.data_type().clone())
-					// }
+				(Operand::Constant (_), Operand::Variable (ref var_name)) => {		
+					let field_def: StructFieldDef = check_context.find_member_field_def(&lhs_data_type, var_name)?;
+					Ok(field_def.data_type().clone())
 				},
 				
-				(Operand::Constant (ref value), Operand::FuncCall {
-					ref func_name,
-					ref arg_exprs,
-				}) => {
-					let value_type: DataType = value.get_type();					
+				(Operand::Constant (_), Operand::FuncCall { ref func_name, ref arg_exprs }) => {				
 					if func_name.is_builtin() {
-						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&value_type, func_name)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					} else {
-						let func_def: UserFuncDef = check_context.find_member_user_func_def(&value_type, func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					}
 				},
 				
 								
-				(Operand::Variable (ref var_name_1), Operand::Variable (ref var_name_2)) => {
-					let value_type: &DataType = check_context.get_variable_def(&var_name_1)?.get_type();
-					let field_def: StructFieldDef = check_context.find_member_field_def(value_type, var_name_2)?;
+				(Operand::Variable (_), Operand::Variable (ref var_name_2)) => {
+					let field_def: StructFieldDef = check_context.find_member_field_def(&lhs_data_type, var_name_2)?;
 					Ok(field_def.data_type().clone())
 				},
 				
-				(Operand::Variable (ref var_name), Operand::FuncCall {
-					ref func_name,
-					ref arg_exprs,
-				}) => {
-					let value_rc: Rc<RefCell<Value>> = check_context.get_variable_value(&var_name)?;
-					let value_type: DataType = value_rc.borrow().get_type();
+				(Operand::Variable (_), Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					if func_name.is_builtin() {
-						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&value_type, func_name)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					} else {
-						let func_def: UserFuncDef = check_context.find_member_user_func_def(&value_type, func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					}
 				},
 				
 				
-				(ref fc @ Operand::FuncCall { .. }, Operand::Variable (ref var_name)) => {
-					let return_type: DataType = fc.check_and_calc_data_type_in_place(check_context)?;
-					let field_def: StructFieldDef = check_context.find_member_field_def(&return_type, var_name)?;
+				(Operand::FuncCall { .. }, Operand::Variable (ref var_name)) => {
+					let field_def: StructFieldDef = check_context.find_member_field_def(&lhs_data_type, var_name)?;
 					Ok(field_def.data_type().clone())
 				},
 				
-				(ref fc1 @ Operand::FuncCall { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
-					let return_type_1: DataType = fc1.check_and_calc_data_type_in_place(check_context)?;
+				(Operand::FuncCall { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					if func_name.is_builtin() {
-						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&return_type_1, func_name)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &return_type_1, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					} else {
-						let func_def: UserFuncDef = check_context.find_member_user_func_def(&return_type_1, func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &return_type_1, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					}
 				},
 				
 				
-				(sl @ Operand::StructLiteral { .. }, Operand::Variable (ref field_name)) => {
-					let struct_type: DataType = sl.check_and_calc_data_type_in_place(check_context)?;
-					let field_def: StructFieldDef = check_context.find_member_field_def(&struct_type, field_name)?;
+				(Operand::StructLiteral { .. }, Operand::Variable (ref field_name)) => {
+					let field_def: StructFieldDef = check_context.find_member_field_def(&lhs_data_type, field_name)?;
 					Ok(field_def.data_type().clone())
 				},
 				
-				(sl @ Operand::StructLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
-					let struct_type: DataType = sl.check_and_calc_data_type_in_place(check_context)?;
+				(Operand::StructLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					if func_name.is_builtin() {
-						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&struct_type, func_name)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &struct_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					} else {
-						let func_def: UserFuncDef = check_context.find_member_user_func_def(&struct_type, func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &struct_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					}
@@ -257,43 +254,39 @@ impl ExprOperator {
 				(Operand::ArrayLiteral { .. }, Operand::Variable (_)) =>
 					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
 					
-				(arr @ Operand::ArrayLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
-					arr.check_and_calc_data_type_in_place(check_context)?; // check exprs inside array
-					let arr_dt = DataType::Builtin (BuiltinType::Array);
+				(Operand::ArrayLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					if func_name.is_builtin() {
-						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&arr_dt, func_name)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &arr_dt, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					} else {
-						let func_def: UserFuncDef = check_context.find_member_user_func_def(&arr_dt, func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &arr_dt, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					}
 				},
 				
 				
-				(Operand::ValueRef (ref value_rc), Operand::Variable (ref field_name)) => {
-					let value_type: DataType = value_rc.borrow().get_type();
-					let field_def: StructFieldDef = check_context.find_member_field_def(&value_type, field_name)?;
+				(Operand::ValueRef (_), Operand::Variable (ref field_name)) => {
+					let field_def: StructFieldDef = check_context.find_member_field_def(&lhs_data_type, field_name)?;
 					Ok(field_def.data_type().clone())
 				},
 				
-				(Operand::ValueRef (ref value_rc), Operand::FuncCall { ref func_name, ref arg_exprs }) => {
-					let value_type: DataType = value_rc.borrow().get_type();
+				(Operand::ValueRef (_), Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					if func_name.is_builtin() {
-						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&value_type, func_name)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					} else {
-						let func_def: UserFuncDef = check_context.find_member_user_func_def(&value_type, func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					}
@@ -303,18 +296,17 @@ impl ExprOperator {
 				(Operand::StringCharRefByInd { .. }, Operand::Variable (_)) =>
 					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
 				
-				(lhs @ Operand::StringCharRefByInd { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
-					let value_type: DataType = lhs.check_and_calc_data_type_in_place(check_context)?;
+				(Operand::StringCharRefByInd { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					if func_name.is_builtin() {
-						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&value_type, func_name)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					} else {
-						let func_def: UserFuncDef = check_context.find_member_user_func_def(&value_type, func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					}
@@ -325,18 +317,17 @@ impl ExprOperator {
 				(Operand::ArrayElementRefByInd { .. }, Operand::Variable (_)) =>
 					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
 					
-				(lhs @ Operand::ArrayElementRefByInd { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
-					let value_type: DataType = lhs.check_and_calc_data_type_in_place(check_context)?;
+				(Operand::ArrayElementRefByInd { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
 					if func_name.is_builtin() {
-						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&value_type, func_name)?;
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					} else {
-						let func_def: UserFuncDef = check_context.find_member_user_func_def(&value_type, func_name)?;
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&lhs_data_type, func_name)?;
 						
-						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						func_def.check_args_as_member_function(func_name, arg_exprs, &lhs_data_type, lhs_pos, check_context)?;
 						
 						Ok(func_def.return_type().clone())
 					}
@@ -358,7 +349,7 @@ impl ExprOperator {
 				opnd
 			} else { unreachable!() };
 				
-			let (lhs_dt, rhs_dt): (DataType, DataType) = match (&lhs, &rhs) {
+			let (lhs_dt, rhs_dt): (DataType, DataType) = match (&lhs, &rhs) {				
 				(Operand::Constant (ref value), Operand::IndexExpr (expr)) => {
 					let var_type: DataType = value.get_type();
 					let expr_type: DataType = expr.check_as_rhs_and_calc_data_type(check_context)?;
@@ -381,6 +372,8 @@ impl ExprOperator {
 			};
 			
 			match (lhs_dt, rhs_dt) {
+				(DataType::Builtin (BuiltinType::Any), _) => Ok(DataType::Builtin (BuiltinType::Any)),
+				(_, DataType::Builtin (BuiltinType::Any)) => Ok(DataType::Builtin (BuiltinType::Any)),
 				(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::Float32)) 
 					=> Ok(DataType::Builtin (BuiltinType::Char)),
 				(DataType::Builtin (BuiltinType::Array), DataType::Builtin (BuiltinType::Float32)) 
@@ -401,6 +394,8 @@ impl ExprOperator {
 					
 					let lhs: DataType = lhs.check_and_calc_data_type_in_place(check_context)?;
 					let rhs: DataType = rhs.check_and_calc_data_type_in_place(check_context)?;
+					
+					if lhs.is_any() || rhs.is_any() { return Ok(DataType::Builtin (BuiltinType::Any)); }
 					
 					let result = match self {
 						BinPlus => self.get_bin_plus_result_type(&lhs, &rhs),
@@ -552,7 +547,7 @@ impl ExprOperator {
 				
 				
 				(ref fc @ Operand::FuncCall { .. }, Operand::Variable (ref var_name)) => {
-					let result: Value = fc.calc_in_place(context).unwrap();
+					let result: Value = fc.calc_in_place(context);
 					let value_rc: Rc<RefCell<Value>> = result.unwrap_struct_clone_field(var_name);
 					let opnd: Operand = Operand::ValueRef (value_rc);
 					Symbol {
@@ -562,13 +557,13 @@ impl ExprOperator {
 				},
 				
 				(ref fc1 @ Operand::FuncCall { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
-					let result: Value = fc1.calc_in_place(context).unwrap();					
+					let result: Value = fc1.calc_in_place(context);					
 					Self::call_member_func_of_value(&result, func_name, arg_exprs, context, rhs_pos)
 				},
 				
 				
 				(sl @ Operand::StructLiteral { .. }, Operand::Variable (ref field_name)) => {
-					let struct_value: Value = sl.calc_in_place(context).unwrap();
+					let struct_value: Value = sl.calc_in_place(context);
 					let value_rc: Rc<RefCell<Value>> = struct_value.unwrap_struct_clone_field(field_name);
 					let opnd: Operand = Operand::ValueRef (value_rc);
 					Symbol {
@@ -578,7 +573,7 @@ impl ExprOperator {
 				},
 				
 				(sl @ Operand::StructLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
-					let struct_value: Value = sl.calc_in_place(context).unwrap();
+					let struct_value: Value = sl.calc_in_place(context);
 					Self::call_member_func_of_value(&struct_value, func_name, arg_exprs, context, rhs_pos)
 				},
 				
@@ -587,7 +582,7 @@ impl ExprOperator {
 					unreachable!(),
 				
 				(al @ Operand::ArrayLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
-					let struct_value: Value = al.calc_in_place(context).unwrap();
+					let struct_value: Value = al.calc_in_place(context);
 					Self::call_member_func_of_value(&struct_value, func_name, arg_exprs, context, rhs_pos)
 				},
 				
@@ -669,12 +664,19 @@ impl ExprOperator {
 					let index: usize = (index.abs().floor() * index.signum()) as usize;
 					
 					let var_value_rc: Rc<RefCell<Value>> = context.get_variable_value(&var_name).unwrap();
-					let chars_rc: Rc<RefCell<Vec<char>>> = var_value_rc.borrow().unwrap_str_clone_inner_rc();
 					
-					let opnd = Operand::StringCharRefByInd {
-						string_value: chars_rc,
-						index,
+					let opnd = match &*var_value_rc.borrow() {
+						Value::String (ref chars_rc) => Operand::StringCharRefByInd {
+							string_value: Rc::clone(chars_rc),
+							index,
+						},
+						Value::Array { ref values } => Operand::ArrayElementRefByInd {
+							array_elements: Rc::clone(values),
+							index,
+						},
+						_ => unreachable!(),
 					};
+					
 					Symbol {
 						kind: SymbolKind::Operand (opnd),
 						pos: CodePos::new(lhs_pos.begin(), rhs_pos.end()),
@@ -682,16 +684,22 @@ impl ExprOperator {
 				},
 				
 				(Operand::ValueRef (ref value_rc), Operand::IndexExpr (expr)) => {
-					let string_value: Rc<RefCell<Vec<char>>> = value_rc.borrow().unwrap_str_clone_inner_rc();
-					
 					let index: Value = expr.calc_as_rhs(context);
 					let index: f32 = index.unwrap_f32();
 					let index: usize = (index.abs().floor() * index.signum()) as usize;
 					
-					let opnd = Operand::StringCharRefByInd {
-						string_value,
-						index,
+					let opnd = match &*value_rc.borrow() {
+						Value::String (ref chars_rc) => Operand::StringCharRefByInd {
+							string_value: Rc::clone(chars_rc),
+							index,
+						},
+						Value::Array { ref values } => Operand::ArrayElementRefByInd {
+							array_elements: Rc::clone(values),
+							index,
+						},
+						_ => unreachable!(),
 					};
+					
 					Symbol {
 						kind: SymbolKind::Operand (opnd),
 						pos: CodePos::new(lhs_pos.begin(), rhs_pos.end()),
@@ -739,7 +747,7 @@ impl ExprOperator {
 	fn call_member_func_of_value(value: &Value, func_name: &NameToken, arg_exprs: &Vec<Expr>, context: &Context, rhs_pos: CodePos) -> Symbol {
 		let mut args_values = Vec::<Value>::with_capacity(arg_exprs.len() + 1);
 		
-		args_values.push(value.clone());
+		args_values.push(value.get_clone_with_the_same_inner());
 		for expr in arg_exprs {
 			let value: Value = expr.calc_as_rhs(context);
 			args_values.push(value);
@@ -751,7 +759,6 @@ impl ExprOperator {
 			context.find_member_builtin_func_def(&value_type, func_name)
 				.unwrap()
 				.call(args_values)
-				.unwrap()
 		} else {
 			let func_def: UserFuncDef = context.find_member_user_func_def(&value_type, func_name)
 				.unwrap();
@@ -766,7 +773,7 @@ impl ExprOperator {
 					args_values[i].clone()).unwrap();
 			}
 			
-			func_def.call(&mut next_context).unwrap()
+			func_def.call(&mut next_context)
 		};
 		
 		let opnd: Operand = Operand::Constant(value);
@@ -781,6 +788,7 @@ impl ExprOperator {
 		let (lhs, rhs): (Value, Value) = Self::take_2_values(calc_stack, context);
 		match (lhs, rhs) {
 			(Value::Float32 (val1), Value::Float32 (val2)) => Value::Float32(val1 + val2),
+			
 			(Value::String (s1), Value::String (s2)) => {
 				s1.borrow_mut().append(&mut *s2.borrow_mut());
 				Value::String(s1)
@@ -797,6 +805,20 @@ impl ExprOperator {
 				let chars: Vec<char> = vec![c1, c2];
 				Value::String(Rc::new(RefCell::new(chars)))
 			},
+			
+			(Value::Array { values: vals1 }, Value::Array { values: vals2 }) => {
+				vals1.borrow_mut().append(&mut *vals2.borrow_mut());
+				Value::Array { values: vals1 }
+			},
+			(Value::Array { values }, value) => {
+				values.borrow_mut().push(value);
+				Value::Array { values }
+			},
+			(value, Value::Array { values }) => {
+				values.borrow_mut().insert(0, value);
+				Value::Array { values }
+			},
+			
 			ops @ _ => panic!("Wrong types {:?} for operand {:?}", ops, self),
 		}
 	}
@@ -918,15 +940,13 @@ impl ExprOperator {
 			.pop()
 			.unwrap()
 			.unwrap_operand()
-			.calc_in_place(context)
-			.unwrap();
+			.calc_in_place(context);
 			
 		let lhs: Value = calc_stack
 			.pop()
 			.unwrap()
 			.unwrap_operand()
-			.calc_in_place(context)
-			.unwrap();
+			.calc_in_place(context);
 		
 		(lhs, rhs)
 	}
@@ -961,8 +981,7 @@ impl ExprOperator {
 			.pop()
 			.unwrap()
 			.unwrap_operand()
-			.calc_in_place(context)
-			.unwrap();
+			.calc_in_place(context);
 		
 		op
 	}
@@ -985,6 +1004,12 @@ impl ExprOperator {
 				
 			(DataType::Builtin (BuiltinType::Char), DataType::Builtin (BuiltinType::Char)) => 
 				Ok(DataType::Builtin (BuiltinType::String)),
+				
+			(DataType::Builtin (BuiltinType::Array), _) => 
+				Ok(DataType::Builtin (BuiltinType::Array)),
+				
+			(_, DataType::Builtin (BuiltinType::Array)) => 
+				Ok(DataType::Builtin (BuiltinType::Array)),
 				
 			_ => return Err(()),
 		}

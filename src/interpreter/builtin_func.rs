@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 //------------------------- BuiltinFuncDef -----------------------
 
-pub type BuiltinFuncBody = Box<dyn Fn(Vec<Value>) -> Option<Value>>;
+pub type BuiltinFuncBody = Box<dyn Fn(Vec<Value>) -> Value>;
 
 pub struct BuiltinFuncDef {
 	inner: Rc<BuiltinFuncDefInner>,
@@ -37,7 +37,7 @@ impl BuiltinFuncDef {
 		&self.inner.return_type
 	}
 	
-	pub fn call(&self, args_values: Vec<Value>) -> Option<Value> {
+	pub fn call(&self, args_values: Vec<Value>) -> Value {
 		(self.inner.body)(args_values)
 	}
 }
@@ -126,7 +126,8 @@ impl BuiltinFuncDefInner {
 			.map(|expr| expr.check_as_rhs_and_calc_data_type(check_context))
 			.collect();
 			
-		let args_data_types: Vec<DataType> = args_data_types_result?;
+		let mut args_data_types: Vec<DataType> = args_data_types_result?;
+		args_data_types.insert(0, value_type.clone());
 		
 		if value_type.ne(&self.args[0].data_type) {
 			return Err( BuiltinFuncErr::ArgType {

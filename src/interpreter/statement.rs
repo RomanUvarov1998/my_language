@@ -936,15 +936,15 @@ impl ReturningBody {
 		}
 	}
 	
-	pub fn run(&self, context: &mut Context) -> Option<Value> {
+	pub fn run(&self, context: &mut Context) -> Value {
 		for st_ref in self.statements.iter() {
 			match st_ref.run(context) {
-				Some(value) => return Some(value),
+				Some(value) => return value,
 				None => {},
 			}
 		}
 		
-		None
+		Value::None
 	}
 	
 	pub fn statements(&self) -> &Vec<Statement> {

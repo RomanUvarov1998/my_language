@@ -1,1 +1,60 @@
-var a: @untyped_array = 3;
+var a: @untyped_array = [1, 2, 3];
+
+@println("Should print '[1, 2, 3]':");
+
+f print_array(arr: @untyped_array) {
+	@print("[");
+	
+	var i: @f32 = 0;
+	var is_first: @bool = True;
+	while (i < arr.@len()) {
+		if (!is_first) { @print(", "); }
+		is_first = False;
+		@print(arr[i]);
+		//@print(1);
+		i = i + 1;
+	}
+	
+	@println("]");
+}
+
+print_array(a);
+
+@println("");
+@println("Should print '[1, 2, 3]':");
+@println(a);
+
+@println("");
+@println("Should print '[1, 2, 3, 4]':");
+a.@add(4);
+@println(a);
+
+@println("");
+@println("Should print '1':");
+@println(a.@get(0));
+
+@println("");
+@println("Should print '[6, 2, 3, 4]':");
+a.@set(0, 6);
+@println(a);
+
+@println("");
+@println("Should print '6':");
+@println(a.@remove(0));
+
+@println("");
+@println("Should print '[2, 3, 4]':");
+@println(a);
+
+@println("");
+@println("Should print '[2, 7, 3, 4]':");
+a.@insert(1, 7);
+@println(a);
+
+@println("");
+@println("Should print '[1, 2, 3, 4, 5]':");
+@println(1 + [2, 3, 4] + 5);
+
+@println("");
+@println("Should print '[1, 2, 3, 4, 5]':");
+@println([1, 2, 3] + [4, 5]);

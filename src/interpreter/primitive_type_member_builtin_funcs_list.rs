@@ -18,9 +18,9 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 				vec![
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					if let Value::Float32 (val) = &args_values[0] {
-						Some( Value::Float32( val.abs() ) )
+						Value::Float32( val.abs() )
 					} else {
 						unreachable!();
 					}
@@ -32,14 +32,14 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 				vec![
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					if let Value::Float32 (val) = &args_values[0] {
 						if *val < 0_f32 {
-							Some( Value::Float32( -1_f32 ) )
+							Value::Float32( -1_f32 )
 						} else if *val > 0_f32 {
-							Some( Value::Float32( 1_f32 ) )
+							Value::Float32( 1_f32 )
 						} else {
-							Some( Value::Float32( 0_f32 ) )
+							Value::Float32( 0_f32 )
 						}
 					} else {
 						unreachable!();
@@ -52,9 +52,9 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 				vec![
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					if let Value::Float32 (val) = &args_values[0] {
-						Some( Value::from(format!("{}", val)) )
+						Value::from(format!("{}", val))
 					} else {
 						unreachable!();
 					}
@@ -69,9 +69,9 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 				vec![
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::String)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					if let Value::String (chars_rc) = &args_values[0] {
-						Some( Value::Float32( chars_rc.borrow().len() as f32 ) )
+						Value::Float32( chars_rc.borrow().len() as f32 )
 					} else {
 						unreachable!();
 					}
@@ -86,11 +86,11 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 				vec![
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Bool)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					if let Value::Bool (val) = &args_values[0] {
 						match *val {
-							true => Some( Value::from("True") ),
-							false => Some( Value::from("False") ),
+							true => Value::from("True"),
+							false => Value::from("False"),
 						}
 					} else {
 						unreachable!();
@@ -106,9 +106,9 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 				vec![
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Bool)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					if let Value::Char (val) = &args_values[0] {
-						Some( Value::from(val.to_string()) )
+						Value::from(val.to_string())
 					} else {
 						unreachable!();
 					}
@@ -123,10 +123,10 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 				vec![
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					if let Value::Array { .. } = &args_values[0] {
 						let s: String = format!("{}", &args_values[0]);
-						Some( Value::from(s) )
+						Value::from(s)
 					} else {
 						unreachable!();
 					}
@@ -138,9 +138,9 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 				vec![
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					if let Value::Array { values, .. } = &args_values[0] {
-						Some( Value::from(values.borrow().len() as f32) )
+						Value::from(values.borrow().len() as f32)
 					} else {
 						unreachable!();
 					}
@@ -153,11 +153,11 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					let item: Value = args_values[1].clone();
 					if let Value::Array { values, .. } = &args_values[0] {
 						values.borrow_mut().push(item);
-						None
+						Value::None
 					} else {
 						unreachable!();
 					}
@@ -170,11 +170,11 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					let ind: f32 = args_values[1].unwrap_f32();
 					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
 					if let Value::Array { values, .. } = &args_values[0] {
-						Some(values.borrow()[ind].clone())
+						values.borrow()[ind].clone()
 					} else {
 						unreachable!();
 					}
@@ -188,13 +188,13 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					let ind: f32 = args_values[1].unwrap_f32();
 					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
 					let item: Value = args_values[2].clone();
 					if let Value::Array { values, .. } = &args_values[0] {
 						values.borrow_mut()[ind] = item;
-						None
+						Value::None
 					} else {
 						unreachable!();
 					}
@@ -207,11 +207,11 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					let ind: f32 = args_values[1].unwrap_f32();
 					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
 					if let Value::Array { values, .. } = &args_values[0] {
-						Some(values.borrow_mut().remove(ind))
+						values.borrow_mut().remove(ind)
 					} else {
 						unreachable!();
 					}
@@ -225,13 +225,13 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 					BuiltinFuncArg::new("ind".to_string(), DataType::Builtin (BuiltinType::Float32)),
 					BuiltinFuncArg::new("item".to_string(), DataType::Builtin (BuiltinType::Any)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					let ind: f32 = args_values[1].unwrap_f32();
 					let ind: usize = (ind.abs().floor() * ind.signum()) as usize;
 					let item: Value = args_values[2].clone();
 					if let Value::Array { values, .. } = &args_values[0] {
 						values.borrow_mut().insert(ind, item);
-						None
+						Value::None
 					} else {
 						unreachable!();
 					}
@@ -248,9 +248,9 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 				vec![
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::None)),
 				],
-				Box::new(|args_values: Vec<Value>| -> Option<Value> {
+				Box::new(|args_values: Vec<Value>| -> Value {
 					if let Value::None = &args_values[0] {
-						Some( Value::from("None") )
+						Value::from("None")
 					} else {
 						unreachable!();
 					}

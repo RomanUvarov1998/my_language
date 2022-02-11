@@ -28,7 +28,7 @@ impl UserFuncDef {
 		self.inner.check_args_as_member_function(func_name, args_exprs, value_type, caller_pos, check_context)
 	}
 	
-	pub fn call(&self, context: &mut Context) -> Option<Value> {
+	pub fn call(&self, context: &mut Context) -> Value {
 		self.inner.body.run(context)
 	}
 	

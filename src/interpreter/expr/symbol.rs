@@ -572,11 +572,11 @@ impl Operand {
 		Ok(dt)
 	}
 	
-	pub fn calc_in_place(&self, context: &Context) -> Option<Value> {
+	pub fn calc_in_place(&self, context: &Context) -> Value {
 		match self {
-			Operand::Constant (c) => Some(c.clone()), // TODO: try do it without cloning values
+			Operand::Constant (c) => c.clone(), // TODO: try do it without cloning values
 			
-			Operand::Variable (name) => Some(context.get_variable_value(&name).unwrap().borrow().clone()),
+			Operand::Variable (name) => context.get_variable_value(&name).unwrap().borrow().clone(),
 			
 			Operand::FuncCall { func_name, arg_exprs } => {
 				if func_name.is_builtin() {
@@ -629,32 +629,32 @@ impl Operand {
 					struct_def
 				} else { unreachable!(); };
 				
-				Some(Value::Struct {
+				Value::Struct {
 					struct_def,
 					fields: calculated_fields,
-				})
+				}
 			},
 			
 			Operand::ArrayLiteral { ref elements_exprs } => {
 				let mut values: Vec<Value> = elements_exprs.iter().map(|expr| expr.calc_as_rhs(context)).collect();
 				
-				Some( Value::Array {
+				Value::Array {
 					values: Rc::new(RefCell::new(values)),
-				} )
+				}
 			},
 			
-			Operand::ValueRef (value_rc) => Some(value_rc.borrow().clone()),
+			Operand::ValueRef (value_rc) => value_rc.borrow().clone(),
 			
-			Operand::IndexExpr (se) => Some(se.calc_as_rhs(context)),
+			Operand::IndexExpr (se) => se.calc_as_rhs(context),
 			
 			Operand::StringCharRefByInd { string_value, index } => {
 				let ch: char = string_value.borrow()[*index];
-				Some( Value::Char(ch) )
+				Value::Char(ch)
 			},
 			
 			Operand::ArrayElementRefByInd { array_elements, index } => {
 				let val: Value = array_elements.borrow()[*index].clone();
-				Some(val)
+				val
 			}
 		}
 	}

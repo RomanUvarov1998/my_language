@@ -10,7 +10,7 @@ use std::rc::Rc;
 #[derive(Debug)]
 pub enum Value {
 	Float32 (f32),
-	String (Rc<RefCell<Vec<char>>>),
+	String (Rc<RefCell<Vec<char>>>), // TODO: implement string using Value::Array and template for Array<Value::Char>
 	Bool (bool),
 	Char (char),
 	Struct {
@@ -20,6 +20,7 @@ pub enum Value {
 	Array {
 		values: Rc<RefCell<Vec<Value>>>,
 	},
+	Any, // TODO: added for typechecking purposes, remove it later and use another context for code checking. With such another context instead of setting variables to default value using DataType::default_value(), just mark them as 'initialized'
 	None,
 }
 
@@ -32,7 +33,39 @@ impl Value {
 			Value::Char (_) => DataType::Builtin (BuiltinType::Char),
 			Value::Struct { struct_def, .. } => DataType::UserDefined(struct_def.clone()), // TODO: try avoid cloning and return reference
 			Value::Array { .. } => DataType::Builtin (BuiltinType::Array),
+			Value::Any => DataType::Builtin (BuiltinType::Any),
 			Value::None => DataType::Builtin (BuiltinType::None),
+		}
+	}
+	
+	pub fn get_clone_with_the_same_inner(&self) -> Value {
+		match self {
+			Value::Float32 (val) => Value::Float32 (*val),
+			Value::String (ref chars_vec_rc) => Value::String(Rc::clone(chars_vec_rc)),
+			Value::Bool (val) => Value::Bool (*val),
+			Value::Char (val) => Value::Char(*val),
+			Value::Struct { struct_def, fields } => {
+				let mut fields_cloned = HashMap::<String, Rc<RefCell<Value>>>::with_capacity(fields.capacity());
+				
+				for (key, value_rc) in fields.iter() {
+					fields_cloned.insert(
+						key.clone(), 
+						Rc::clone(value_rc));
+				}
+				
+				Value::Struct {
+					struct_def: struct_def.clone(),
+					fields: fields_cloned,
+				}
+			},
+			Value::Array { ref values } => {
+				let elems_vec_cloned: Vec<Value> = values.borrow().clone();
+				Value::Array {
+					values: Rc::clone(values),
+				}
+			},
+			Value::Any => Value::Any,
+			Value::None => Value::None,
 		}
 	}
 	
@@ -93,6 +126,7 @@ impl Clone for Value {
 					values: Rc::new(RefCell::new(elems_vec_cloned)),
 				}
 			},
+			Value::Any => Value::Any,
 			Value::None => Value::None,
 		}
 	}
@@ -127,6 +161,10 @@ impl PartialEq for Value {
 				Value::Array { values: vs2 } => vs1 == vs2,
 				_ => false,
 			},
+			Value::Any => match other {
+				Value::Any => true,
+				_ => false,
+			},
 			Value::None => match other {
 				Value::None => true,
 				_ => false,
@@ -140,11 +178,10 @@ impl std::fmt::Display for Value {
 		match self {
 			Value::Float32 (v) => write!(f, "{}", v),
 			Value::String (v) => {
-				write!(f, "'")?;
 				for ch in v.borrow().iter() {
 					write!(f, "{}", ch)?;
 				}
-				write!(f, "'")
+				Ok(())
 			},
 			Value::Bool (v) => if *v {
 				write!(f, "True")
@@ -169,6 +206,7 @@ impl std::fmt::Display for Value {
 				}
 				write!(f, "]")
 			},
+			Value::Any => write!(f, "Any"),
 			Value::None => write!(f, "None"),
 		}
 	}

@@ -83,8 +83,7 @@ impl Expr {
 		let result: Value = calc_stack.pop()
 			.unwrap()
 			.unwrap_operand()
-			.calc_in_place(context)
-			.unwrap();
+			.calc_in_place(context);
 		assert_eq!(calc_stack.pop(), None);
 		
 		result
@@ -102,7 +101,7 @@ impl Expr {
 				
 				SymbolKind::ExprOperator (op) => {
 					let dt: DataType = op.get_result_data_type(&mut type_calc_stack, check_context, sym.pos())?;
-					type_calc_stack.push(Symbol { 
+					type_calc_stack.push(Symbol {
 						pos: sym.pos(), 
 						kind: SymbolKind::Operand (Operand::Constant(dt.default_value())),
 					}); // TODO: somehow place DataType here, not a massive symbol

@@ -41,9 +41,9 @@ impl Interpreter {
 			vec![
 				BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Any)),
 			],
-			Box::new(|args_values: Vec<Value>| -> Option<Value> {
+			Box::new(|args_values: Vec<Value>| -> Value {
 				print!("{}", args_values[0]);
-				None
+				Value::None
 			}) as BuiltinFuncBody,
 			DataType::Builtin (BuiltinType::None)
 		));
@@ -53,9 +53,9 @@ impl Interpreter {
 			vec![
 				BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::Any)),
 			],
-			Box::new(|args_values: Vec<Value>| -> Option<Value> {
+			Box::new(|args_values: Vec<Value>| -> Value {
 				println!("{}", args_values[0]);
-				None
+				Value::None
 			}) as BuiltinFuncBody,
 			DataType::Builtin (BuiltinType::None)
 		));
@@ -63,7 +63,7 @@ impl Interpreter {
 		builtin_func_defs.push(BuiltinFuncDef::new(
 			"exit",
 			Vec::new(),
-			Box::new(|_args_values: Vec<Value>| -> Option<Value> {
+			Box::new(|_args_values: Vec<Value>| -> Value {
 				std::process::exit(0)
 			}) as BuiltinFuncBody,
 			DataType::Builtin (BuiltinType::None)
@@ -74,7 +74,7 @@ impl Interpreter {
 			vec![
 				BuiltinFuncArg::new("prompt".to_string(), DataType::Builtin (BuiltinType::String)),
 			],
-			Box::new(|args_values: Vec<Value>| -> Option<Value> {
+			Box::new(|args_values: Vec<Value>| -> Value {
 				use std::io::{self, Write};
 				
 				print!("{}", args_values[0]);
@@ -83,7 +83,7 @@ impl Interpreter {
 				let mut input = String::new();
 				io::stdin().read_line(&mut input).unwrap();
 				
-				Some(Value::from(input.trim_end().clone()))
+				Value::from(input.trim_end().clone())
 			}) as BuiltinFuncBody,
 			DataType::Builtin (BuiltinType::String)
 		));
@@ -93,13 +93,13 @@ impl Interpreter {
 			vec![
 				BuiltinFuncArg::new("value".to_string(), DataType::Builtin (BuiltinType::String)),
 			],
-			Box::new(|args_values: Vec<Value>| -> Option<Value> {
+			Box::new(|args_values: Vec<Value>| -> Value {
 				let str_value: String = match &args_values[0] {
 					val @ Value::String(_) => format!("{}", val),
 					_ => unreachable!(),
 				};
 				let result: f32 = str_value.parse::<f32>().unwrap();
-				Some(Value::from(result))
+				Value::from(result)
 			}) as BuiltinFuncBody,
 			DataType::Builtin (BuiltinType::Float32)
 		));
@@ -877,6 +877,76 @@ var b: @char = '!';
 @println(a + b);
 @println(b + a);
 @println(b + b);
+		"#) {
+			Ok(_) => {},
+			res @ _ => panic!("Wrong result: {:?}", res),
+		}
+	}
+	
+	#[test]
+	fn untyped_array_literal() {
+		let mut int = Interpreter::new();		
+		match int.check_and_run(r#"
+var a: @untyped_array = [1, 2, 3];
+
+@println("Should print '[1, 2, 3]':");
+
+f print_array(arr: @untyped_array) {
+	@print("[");
+	
+	var i: @f32 = 0;
+	var is_first: @bool = True;
+	while (i < arr.@len()) {
+		if (!is_first) { @print(", "); }
+		is_first = False;
+		@print(arr[i]);
+		//@print(1);
+		i = i + 1;
+	}
+	
+	@println("]");
+}
+
+print_array(a);
+
+@println("");
+@println("Should print '[1, 2, 3]':");
+@println(a);
+
+@println("");
+@println("Should print '[1, 2, 3, 4]':");
+a.@add(4);
+@println(a);
+
+@println("");
+@println("Should print '1':");
+@println(a.@get(0));
+
+@println("");
+@println("Should print '[6, 2, 3, 4]':");
+a.@set(0, 6);
+@println(a);
+
+@println("");
+@println("Should print '6':");
+@println(a.@remove(0));
+
+@println("");
+@println("Should print '[2, 3, 4]':");
+@println(a);
+
+@println("");
+@println("Should print '[2, 7, 3, 4]':");
+a.@insert(1, 7);
+@println(a);
+
+@println("");
+@println("Should print '[1, 2, 3, 4, 5]':");
+@println(1 + [2, 3, 4] + 5);
+
+@println("");
+@println("Should print '[1, 2, 3, 4, 5]':");
+@println([1, 2, 3] + [4, 5]);
 		"#) {
 			Ok(_) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),

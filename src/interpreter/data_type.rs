@@ -75,8 +75,8 @@ impl BuiltinType {
 			BuiltinType::Array => Value::Array {
 				values: Rc::new(RefCell::new(Vec::new())),
 			},
-			BuiltinType::Any => unreachable!(),
-			BuiltinType::None => unreachable!(),
+			BuiltinType::Any => Value::Any,
+			BuiltinType::None => Value::None,
 		}
 	}
 }
