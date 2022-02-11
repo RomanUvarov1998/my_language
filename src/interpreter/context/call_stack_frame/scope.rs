@@ -2,20 +2,21 @@ use super::super::super::value::Value;
 use super::super::super::data_type::DataType;
 use super::super::super::var_data::{VarData, VarErr};
 use super::super::super::user_func::{UserFuncErr, UserFuncDef, UserFuncArg};
-use super::super::super::utils::NameToken;
+use super::super::super::utils::{NameToken, HashMapInsertPanic};
 use super::super::super::statement::ReturningBody;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct Scope {
-	vars: Vec<VarData>,
-	user_defined_funcs: Vec<UserFuncDef>,
+	vars: HashMap<String, VarData>,
+	user_defined_funcs: HashMap<String, UserFuncDef>,
 }
 
 impl Scope {
 	pub fn new() -> Self {
 		Self {
-			vars: Vec::new(),
-			user_defined_funcs: Vec::new(),
+			vars: HashMap::new(),
+			user_defined_funcs: HashMap::new(),
 		}
 	}
 	
@@ -24,7 +25,9 @@ impl Scope {
 			return Err( VarErr::AlreadyExists { name } );
 		}
 		
-		self.vars.push(VarData::new_with_value(name, data_type, initial_value)?);
+		self.vars.insert_assert_not_replace(
+			name.value().to_string(),
+			VarData::new_with_value(name, data_type, initial_value)?);
 		
 		Ok(())
 	}
@@ -34,28 +37,29 @@ impl Scope {
 			return Err( UserFuncErr::AlreadyExists { name } );
 		}
 		
-		self.user_defined_funcs.push(UserFuncDef::new(
-			name, args, return_type, body));
+		self.user_defined_funcs.insert_assert_not_replace(
+			name.value().to_string(),
+			UserFuncDef::new(name, args, return_type, body));
 		
 		Ok(())
 	}
 	
 	pub fn find_var(&self, name: &NameToken) -> Result<&VarData, VarErr> {
-		match self.vars.iter().find(|var| var.get_name() == name) {
+		match self.vars.get(name.value()) {
 			Some(var) => Ok(var),
 			None => Err( VarErr::NotDefined { name: name.clone() } ),
 		}
 	}
 	
 	pub fn find_var_mut(&mut self, name: &NameToken) -> Result<&mut VarData, VarErr> {
-		match self.vars.iter_mut().find(|var| var.get_name() == name) {
+		match self.vars.get_mut(name.value()) {
 			Some(var) => Ok(var),
 			None => Err( VarErr::NotDefined { name: name.clone() } ),
 		}
 	}
 
 	pub fn find_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, UserFuncErr> {
-		match self.user_defined_funcs.iter().find(|func| func.name() == name) {
+		match self.user_defined_funcs.get(name.value()) {
 			Some(func) => Ok(func),
 			None => Err( UserFuncErr::NotDefined { name: name.clone() } ),
 		}
