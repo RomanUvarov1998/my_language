@@ -693,8 +693,6 @@ struct B {
 
 	#[test]
 	fn can_assign_defined_struct() {
-		// TODO: make possible to create struct with a field of a type of itself:
-		// struct A { a: A }
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
 struct A {
@@ -711,8 +709,6 @@ var a: A = A { a: 4.5, b: False, };
 
 	#[test]
 	fn can_use_fields_of_defined_struct_in_expr() {
-		// TODO: make possible to create struct with a field of a type of itself:
-		// struct A { a: A }
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
 struct A {
@@ -731,8 +727,6 @@ var b: @f32 = a.a + 4;
 	
 	#[test]
 	fn can_assign_to_struct_member_field() {
-		// TODO: make possible to create struct with a field of a type of itself:
-		// struct A { a: A }
 		let mut int = Interpreter::new();		
 		match int.check_and_run(r#"
 struct A {

@@ -15,7 +15,6 @@ pub enum Value {
 	Char (char),
 	Struct {
 		struct_def: StructDef,
-		// TODO: try use &str for key to not to copy the whole string
 		fields: HashMap<String, Rc<RefCell<Value>>>,
 	},
 	Array {

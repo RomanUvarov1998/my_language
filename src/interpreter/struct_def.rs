@@ -49,7 +49,6 @@ impl StructDef {
 		let mut defined_fields = HashSet::<String>::new();
 		let inner = self.inner();
 		for field in fields {
-			// TODO: try use &str or Cow to not to copy String
 			let field_name: String = field.field_name().value().to_string();
 			match inner.fields.get(&field_name) {
 				Some(field_def_ref) => {
@@ -105,7 +104,7 @@ impl std::fmt::Debug for StructDef {
 pub struct StructDefInner {
 	name: NameToken,
 	fields: HashMap<String, StructFieldDef>,
-	user_funcs: HashMap<String, UserFuncDef>,	// TODO: use HashMap for user_funcs and builtin_funcs
+	user_funcs: HashMap<String, UserFuncDef>,
 	builtin_funcs: HashMap<String, BuiltinFuncDef>,
 }
 

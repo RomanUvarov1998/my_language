@@ -13,7 +13,7 @@ use super::expr::{Expr, Symbol, SymbolKind, Operand, StructLiteralField};
 #[derive(Debug)]
 pub struct DataTypeTemplate {
 	name: &'static str,
-	fields: HashMap<String, StructFieldDefTemplate>, // TODO: try using &str
+	fields: HashMap<String, StructFieldDefTemplate>,
 	user_funcs: HashMap<String, UserFuncDefTemplate>,
 }
 

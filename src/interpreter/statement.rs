@@ -498,7 +498,7 @@ impl Statement {
 				
 				let mut typed_args = Vec::<UserFuncArg>::new();
 				for arg in args {
-					// TODO: add check for duplicating args
+					// duplicating args are checked when copying their values into new stack frame context
 					typed_args.push(UserFuncArg::new(
 						arg.name.clone(),
 						check_context.find_type_by_name(&arg.data_type_name)?));
@@ -592,7 +592,7 @@ impl Statement {
 				
 				let mut typed_args = Vec::<UserFuncArg>::new();
 				for arg in args {
-					// TODO: add check for duplicating args
+					// duplicating args are checked when copying their values into new stack frame context
 					typed_args.push(UserFuncArg::new(
 						arg.name.clone(),
 						context.find_type_by_name(&arg.data_type_name).unwrap()));
