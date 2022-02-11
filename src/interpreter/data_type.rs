@@ -32,6 +32,14 @@ impl DataType {
 			}, // TODO: do not use this function for check purposes
 		}
 	}
+	
+	pub fn is_any(&self) -> bool {
+		if let &DataType::Builtin (BuiltinType::Any) = self {
+			true
+		} else {
+			false
+		}
+	}
 }
 
 impl std::fmt::Display for DataType {
@@ -65,7 +73,6 @@ impl BuiltinType {
 			BuiltinType::Bool => Value::from(false),
 			BuiltinType::Char => Value::from('a'),
 			BuiltinType::Array => Value::Array {
-				elem_type: DataType::Builtin (BuiltinType::Any),
 				values: Rc::new(RefCell::new(Vec::new())),
 			},
 			BuiltinType::Any => unreachable!(),

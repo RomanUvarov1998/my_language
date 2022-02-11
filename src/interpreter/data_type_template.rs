@@ -91,15 +91,27 @@ pub struct StructFieldDefTemplate {
 pub struct UserFuncDefTemplate {
 	name: NameToken,
 	args: Vec<ParsedFuncArgDef>,
-	return_type_name: NameToken,
+	return_type_name: Option<NameToken>,
 	body: Vec<Statement>,
 }
 
 impl UserFuncDefTemplate {
+	pub fn new(name: NameToken, args: Vec<ParsedFuncArgDef>, return_type_name: Option<NameToken>, body: Vec<Statement>) -> Self {
+		Self {
+			name,
+			args,
+			return_type_name,
+			body,
+		}
+	}
+	
 	fn generate(&self, type_params: &HashMap<String, String>, context: &Context) -> UserFuncDef {
 		let args: Vec<UserFuncArg> = Self::resolve_user_member_function_args(type_params, &self.args, context);
 		
-		let return_type: DataType = context.find_type_by_name(&self.return_type_name).unwrap();
+		let return_type: DataType = match self.return_type_name {
+			Some(ref tn) => context.find_type_by_name(tn).unwrap(),
+			None => DataType::Builtin (BuiltinType::None),
+		};
 		
 		let func_body: ReturningBody = Self::resolve_returning_body(type_params, &self.body, &return_type, context);
 		
@@ -264,8 +276,22 @@ impl UserFuncDefTemplate {
 							}),
 						}
 					},
+					Operand::ArrayLiteral { elements_exprs } => {
+						let mut resolved_elements_exprs = Vec::<Expr>::new();
+						for expr in elements_exprs {
+							let re: Expr = Self::resolve_expr(type_params, expr, context);
+							resolved_elements_exprs.push(re);
+						}
+						Symbol {
+							pos: sym.pos(),
+							kind: SymbolKind::Operand (Operand::ArrayLiteral {
+								elements_exprs: resolved_elements_exprs,
+							}),
+						}
+					},
 					Operand::ValueRef (_) => unreachable!(),
 					Operand::StringCharRefByInd { .. } => unreachable!(),
+					Operand::ArrayElementRefByInd { .. } => unreachable!(),
 					Operand::IndexExpr (expr) => Symbol {
 						pos: sym.pos(),
 						kind: SymbolKind::Operand (Operand::IndexExpr (

@@ -124,22 +124,26 @@ impl Iterator for SymbolIterator<'_> {
 				Bracket::LeftCurly | Bracket::RightCurly => return Some(Err(unexpected(pos))),
 				
 				Bracket::LeftSquared => {
-					// cache Operand::IndexExpr as symbol to be returned next
-					match Symbol::parse_index_value(self.iter) {
-						Ok(sym) => self.cached_symbols.push_back(sym),
-						Err(err) => return Some(Err(err)),
-					};
-					
-					// skip ']' token
-					if let Some( Ok ( Token {
-						content: TokenContent::Bracket (Bracket::RightSquared), .. 
-					} ) ) = self.iter.next() {} else { unreachable!(); }
-					
-					// return '[' as Index operator
-					Ok( Symbol {
-						pos,
-						kind: SymbolKind::ExprOperator (ExprOperator::Index),
-					} )
+					if self.prev_is_operand { // parse as index operator
+						// cache Operand::IndexExpr as symbol to be returned next
+						match Symbol::parse_index_value(self.iter) {
+							Ok(sym) => self.cached_symbols.push_back(sym),
+							Err(err) => return Some(Err(err)),
+						};
+						
+						// skip ']' token
+						if let Some( Ok ( Token {
+							content: TokenContent::Bracket (Bracket::RightSquared), .. 
+						} ) ) = self.iter.next() {} else { unreachable!(); }
+						
+						// return '[' as Index operator
+						Ok( Symbol {
+							pos,
+							kind: SymbolKind::ExprOperator (ExprOperator::Index),
+						} )
+					} else { // parse as array literal
+						Symbol::parse_array_literal(self.iter, pos.begin())
+					}
 				},
 				
 				Bracket::RightSquared => return Some(Err(unexpected(pos))),
@@ -337,6 +341,45 @@ impl Symbol {
 		}
 	}
 
+	fn parse_array_literal(tokens_iter: &mut TokensIter, begin_pos: CharPos) -> Result<Symbol, InterpErr> {
+		// squared bracket was already skipped
+		
+		let mut elements_exprs = Vec::<Expr>::new();
+		
+		let last_pos: CharPos = loop {
+			match tokens_iter.peek_or_end_reached_err()? {
+				Token { content: TokenContent::Bracket (Bracket::RightSquared), pos } => {
+					let pos = *pos;
+					tokens_iter.skip_or_end_reached_err()?;
+					break pos.end();
+				},
+				_ => {
+					let expr = Expr::new(tokens_iter, ExprContextKind::ArrayLiteralValue)?;
+					elements_exprs.push(expr);
+					
+					match tokens_iter.next_or_end_reached_err()? {
+						Token { content: TokenContent::StatementOp (StatementOp::Comma), .. } => continue,
+						Token { content: TokenContent::Bracket (Bracket::RightSquared), pos } => break pos.end(),
+						found @ _ => return Err(TokenErr::ExpectedButFound {
+							expected: vec![
+								TokenContent::StatementOp (StatementOp::Comma),
+								TokenContent::Bracket (Bracket::RightCurly),
+							],
+							found,
+						}.into()),
+					}
+				},
+			}
+		};
+				
+		Ok(Symbol {
+			pos: CodePos::new(begin_pos, last_pos),
+			kind: SymbolKind::Operand (Operand::ArrayLiteral {
+				elements_exprs,
+			}),
+		})
+	}
+
 	fn parse_index_value(tokens_iter: &mut TokensIter) -> Result<Symbol, InterpErr> {
 		let index_expr = Expr::new(tokens_iter, ExprContextKind::IndexValue)?;
 		Ok( Symbol {
@@ -420,9 +463,16 @@ pub enum Operand {
 		data_type_name: NameToken,
 		fields: Vec<StructLiteralField>,
 	},
+	ArrayLiteral {
+		elements_exprs: Vec<Expr>,
+	},
 	ValueRef (Rc<RefCell<Value>>),
 	StringCharRefByInd {
 		string_value: Rc<RefCell<Vec<char>>>,
+		index: usize,
+	},
+	ArrayElementRefByInd {
+		array_elements: Rc<RefCell<Vec<Value>>>,
 		index: usize,
 	},
 	IndexExpr (Expr),
@@ -449,12 +499,20 @@ impl PartialEq for Operand {
 				sl_2 @ Operand::StructLiteral { .. } => sl_1 == sl_2,
 				_ => false,
 			},
+			Operand::ArrayLiteral { elements_exprs: ee1 } => match other {
+				Operand::ArrayLiteral { elements_exprs: ee2 } => ee1 == ee2,
+				_ => false,
+			},
 			Operand::ValueRef (v1) => match other {
 				Operand::ValueRef (v2) => *v1.borrow() == *v2.borrow(),
 				_ => false,
 			},
 			Operand::StringCharRefByInd { string_value: sv1, index: ind1 } => match other {
 				Operand::StringCharRefByInd { string_value: sv2, index: ind2 } => *sv1.borrow() == *sv2.borrow() && ind1 == ind2,
+				_ => false,
+			},
+			Operand::ArrayElementRefByInd { array_elements: ae1, index: ind1, } => match other {
+				Operand::ArrayElementRefByInd { array_elements: ae2, index: ind2 } => *ae1.borrow() == *ae2.borrow() && ind1 == ind2,
 				_ => false,
 			},
 			Operand::IndexExpr (se1) => match other {
@@ -500,11 +558,15 @@ impl Operand {
 				dt
 			},
 			
+			Operand::ArrayLiteral { .. } => DataType::Builtin (BuiltinType::Array),
+			
 			Operand::ValueRef (value_rc) => value_rc.borrow().get_type(),
 			
 			Operand::IndexExpr (se) => se.check_as_rhs_and_calc_data_type(check_context)?,
 			
 			Operand::StringCharRefByInd { .. } => DataType::Builtin (BuiltinType::Char),
+			
+			Operand::ArrayElementRefByInd { .. } => DataType::Builtin (BuiltinType::Any),
 		};
 		
 		Ok(dt)
@@ -573,6 +635,14 @@ impl Operand {
 				})
 			},
 			
+			Operand::ArrayLiteral { ref elements_exprs } => {
+				let mut values: Vec<Value> = elements_exprs.iter().map(|expr| expr.calc_as_rhs(context)).collect();
+				
+				Some( Value::Array {
+					values: Rc::new(RefCell::new(values)),
+				} )
+			},
+			
 			Operand::ValueRef (value_rc) => Some(value_rc.borrow().clone()),
 			
 			Operand::IndexExpr (se) => Some(se.calc_as_rhs(context)),
@@ -581,6 +651,11 @@ impl Operand {
 				let ch: char = string_value.borrow()[*index];
 				Some( Value::Char(ch) )
 			},
+			
+			Operand::ArrayElementRefByInd { array_elements, index } => {
+				let val: Value = array_elements.borrow()[*index].clone();
+				Some(val)
+			}
 		}
 	}
 }
@@ -592,9 +667,11 @@ impl std::fmt::Display for Operand {
 			Operand::Variable (_) => write!(f, "variable"),
 			Operand::FuncCall { .. } => write!(f, "function call"),
 			Operand::StructLiteral { .. } => write!(f, "struct literal"),
+			Operand::ArrayLiteral { ref elements_exprs } => write!(f, "array literal [{:?}]", elements_exprs),
 			Operand::ValueRef (_) => write!(f, "struct field"),
 			Operand::IndexExpr (_) => write!(f, "index expr"),
-			Operand::StringCharRefByInd { ref string_value, index } => write!(f, "{}th char of {:?}", index, *string_value.borrow()),
+			Operand::StringCharRefByInd { ref string_value, index } => write!(f, "{}th char of {:?}", index, &*string_value.borrow()),
+			Operand::ArrayElementRefByInd { ref array_elements, index } => write!(f, "{}th element of {:?}", index, &*array_elements.borrow()),
 		}
 	}
 }

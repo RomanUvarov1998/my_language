@@ -92,7 +92,7 @@ impl TokensIter {
 			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 		}
 	}
-		
+	
 	pub fn next_expect_right_bracket(&mut self) -> Result<(), TokenErr> {
 		match self.next() {
 			Some(token_result) => Self::expect(

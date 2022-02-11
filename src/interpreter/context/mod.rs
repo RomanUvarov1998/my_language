@@ -2,15 +2,16 @@ mod call_stack_frame;
 
 use call_stack_frame::CallStackFrame;
 use super::builtin_func::{BuiltinFuncDef, BuiltinFuncErr};
-use super::utils::{NameToken, HashMapInsertPanic};
+use super::utils::{NameToken, CodePos, CharPos, HashMapInsertPanic};
 use super::value::Value;
 use super::data_type::{DataType, BuiltinType, DataTypeErr};
 use super::var_data::{VarData, VarErr};
 use super::user_func::{UserFuncErr, UserFuncArg, UserFuncDef};
-use super::statement::ReturningBody;
+use super::statement::{ReturningBody, ParsedFuncArgDef};
 use super::primitive_type_member_builtin_funcs_list::PrimitiveTypeMemberBuiltinFuncsList;
 use super::struct_def::{StructDef, StructFieldDef, StructDefErr};
-use super::data_type_template::DataTypeTemplate;
+use super::data_type_template::{DataTypeTemplate, UserFuncDefTemplate};
+use crate::interpreter::Statement;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::collections::HashMap;
@@ -33,13 +34,53 @@ impl<'prev_context> Context<'prev_context> {
 		primitive_type_member_builtin_funcs_list: &'prev_context PrimitiveTypeMemberBuiltinFuncsList,
 		struct_defs: Vec<StructDef>
 	) -> Self {
+		let new_nt = |name: &str| -> NameToken {
+			NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()), true)
+		};
+		
+		let arr_type_param_name = "ArrType";
+		let item_type_param_name = "ItemType";
+		let mut array_template = DataTypeTemplate::new("arr");
+		
+		let user_func_add = UserFuncDefTemplate::new(
+			new_nt("add"),
+			vec![
+				ParsedFuncArgDef::new(new_nt("self"), new_nt(arr_type_param_name)),
+				ParsedFuncArgDef::new(new_nt("item"), new_nt(item_type_param_name)),
+			],
+			None,
+			Vec::<Statement>::new());
+		array_template.add_user_func_template(user_func_add);
+		
+		let user_func_len = UserFuncDefTemplate::new(
+			new_nt("len"),
+			vec![
+				ParsedFuncArgDef::new(new_nt("self"), new_nt(arr_type_param_name)),
+			],
+			Some(new_nt("f32")),
+			Vec::<Statement>::new());
+		
+		let user_func_get = UserFuncDefTemplate::new(
+			new_nt("get"),
+			vec![
+				ParsedFuncArgDef::new(new_nt("self"), new_nt(arr_type_param_name)),
+				ParsedFuncArgDef::new(new_nt("item"), new_nt("f32")),
+			],
+			Some(new_nt(item_type_param_name)),
+			Vec::<Statement>::new());
+		array_template.add_user_func_template(user_func_get);
+		
+		let tmpls: HashMap<String, DataTypeTemplate> = [
+			("arr".to_string(), array_template),
+		].into();
+		
 		Self {
 			prev_frame_context: None,
 			frame: CallStackFrame::new(),
 			builtin_func_defs,
 			primitive_type_member_builtin_funcs_list,
 			struct_defs: Rc::new(RefCell::new(struct_defs)),
-			struct_def_templates: Rc::new(RefCell::new(HashMap::new())),
+			struct_def_templates: Rc::new(RefCell::new(tmpls)),
 			is_root: true,
 		}
 	}
@@ -100,6 +141,7 @@ impl<'prev_context> Context<'prev_context> {
 			"str" => Ok( DataType::Builtin (BuiltinType::String) ),
 			"bool" => Ok( DataType::Builtin (BuiltinType::Bool) ),
 			"char" => Ok( DataType::Builtin (BuiltinType::Char) ),
+			"untyped_array" => Ok( DataType::Builtin (BuiltinType::Array) ),
 			_ => {
 				let defs = self.struct_defs.borrow();
 				if let Some(dt) = defs.iter().find(|sd| sd.inner().name().value() == name.value()) {

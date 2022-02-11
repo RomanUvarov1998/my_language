@@ -257,8 +257,15 @@ impl Expr {
 					string_value.borrow_mut()[index] = ch;
 				} else { unreachable!(); }
 			},
-			Operand::IndexExpr (_) | Operand::Constant (_) | Operand::FuncCall { .. } | Operand::StructLiteral { .. } => 
-				panic!("Wrong last operand: {:#?}", last_opnd),
+			Operand::ArrayElementRefByInd { array_elements, index } => {
+				array_elements.borrow_mut()[index] = value;
+			},
+			Operand::IndexExpr (_) 
+				| Operand::Constant (_) 
+				| Operand::FuncCall { .. } 
+				| Operand::StructLiteral { .. } 
+				| Operand::ArrayLiteral { .. } 
+				=> panic!("Wrong last operand: {:#?}", last_opnd),
 		}
 	}
 	
@@ -406,6 +413,7 @@ pub enum ExprContextKind {
 	IfCondition,
 	StructFieldValue,
 	IndexValue,
+	ArrayLiteralValue,
 }
 
 pub struct ExprContext {
@@ -452,6 +460,7 @@ impl ExprContext {
 					ExprContextKind::FunctionArg => Ok(true),
 					ExprContextKind::StructFieldValue => Ok(true),
 					ExprContextKind::IndexValue => Err(unexpected(tok.pos())),
+					ExprContextKind::ArrayLiteralValue => Ok(true),
 				},
 				StatementOp::Semicolon => match self.kind {
 					ExprContextKind::RightAssignOperand => Ok(true),
@@ -461,6 +470,7 @@ impl ExprContext {
 					ExprContextKind::FunctionArg => Err(unexpected(tok.pos())),
 					ExprContextKind::StructFieldValue => Err(unexpected(tok.pos())),
 					ExprContextKind::IndexValue => Err(unexpected(tok.pos())),
+					ExprContextKind::ArrayLiteralValue => Err(unexpected(tok.pos())),
 				}
 			},
 			TokenContent::Keyword (kw) => match kw {
@@ -497,6 +507,7 @@ impl ExprContext {
 							ExprContextKind::StructFieldValue => Err( unpaired_bracket(br_tok.pos()) ),
 							ExprContextKind::FunctionArg => Ok(true),
 							ExprContextKind::IndexValue => Err( unpaired_bracket(br_tok.pos()) ),
+							ExprContextKind::ArrayLiteralValue => Err( unpaired_bracket(br_tok.pos()) ),
 						}
 					}
 				},
@@ -508,6 +519,7 @@ impl ExprContext {
 					ExprContextKind::ToReturn => Ok(false),
 					ExprContextKind::StructFieldValue => Ok(true),
 					ExprContextKind::IndexValue => Err(unexpected(br_tok.pos())),
+					ExprContextKind::ArrayLiteralValue => Ok(false),
 				},
 				Bracket::RightCurly => match self.kind {
 					ExprContextKind::RightAssignOperand => Ok(false),
@@ -517,10 +529,15 @@ impl ExprContext {
 					ExprContextKind::ToReturn => Ok(false),
 					ExprContextKind::StructFieldValue => Ok(true),
 					ExprContextKind::IndexValue => Err(unexpected(br_tok.pos())),
+					ExprContextKind::ArrayLiteralValue => Ok(false),
 				},
-				Bracket::LeftSquared => Ok(false),
+				Bracket::LeftSquared => match self.kind {
+					ExprContextKind::ArrayLiteralValue => Err(unexpected(br_tok.pos())),
+					_ => Ok(false),
+				},
 				Bracket::RightSquared => match self.kind {
 					ExprContextKind::IndexValue => Ok(true),
+					ExprContextKind::ArrayLiteralValue => Ok(true),
 					_ => Ok(false),
 				},
 			},
@@ -628,6 +645,7 @@ mod tests {
 	use super::symbol::{SymbolKind, Symbol, Operand};
 	use super::super::value::Value;
 	use std::rc::Rc;
+	use std::cell::RefCell;
 	use super::super::context::Context;
 	use super::super::token::TokensIter;
 	use super::super::primitive_type_member_builtin_funcs_list::PrimitiveTypeMemberBuiltinFuncsList;
@@ -1123,6 +1141,52 @@ mod tests {
 			SymbolKind::ExprOperator (ExprOperator::BinPlus),
 		],
 		Value::from("Hi"));
+	}
+	
+	#[test]
+	fn can_parse_array_literal() {
+		test_expr_and_its_stack_eq_and_value(
+		r#"  [1, 2, 3]; "#, 
+		vec![
+			SymbolKind::Operand (Operand::ArrayLiteral {
+				elements_exprs: vec![
+					Expr {
+						expr_stack: Rc::new(vec![
+							Symbol {
+								kind: SymbolKind::Operand (Operand::Constant (Value::from(1_f32))),
+								pos: CodePos::from(CharPos::new()),
+							},
+						]),
+						pos: CodePos::from(CharPos::new()),
+					},
+					Expr {
+						expr_stack: Rc::new(vec![
+							Symbol {
+								kind: SymbolKind::Operand (Operand::Constant (Value::from(2_f32))),
+								pos: CodePos::from(CharPos::new()),
+							},
+						]),
+						pos: CodePos::from(CharPos::new()),
+					},
+					Expr {
+						expr_stack: Rc::new(vec![
+							Symbol {
+								kind: SymbolKind::Operand (Operand::Constant (Value::from(3_f32))),
+								pos: CodePos::from(CharPos::new()),
+							},
+						]),
+						pos: CodePos::from(CharPos::new()),
+					},
+				],
+			}),
+		],
+		Value::Array {
+			values: Rc::new(RefCell::new(vec![
+				Value::from(1_f32),
+				Value::from(2_f32),
+				Value::from(3_f32),
+			])),
+		});
 	}
 	
 	fn test_expr_and_its_stack_eq_and_value(

@@ -134,7 +134,13 @@ impl ExprOperator {
 				(_, Operand::IndexExpr (_)) => 
 					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
 				
-				(_, Operand::StringCharRefByInd { .. }) => 
+				(_, Operand::StringCharRefByInd { .. }) =>
+					unreachable!(),
+				
+				(_, Operand::ArrayElementRefByInd { .. }) =>
+					unreachable!(),
+					
+				(_, Operand::ArrayLiteral { .. }) =>
 					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
 				
 				(Operand::IndexExpr (_), _) => 
@@ -142,9 +148,13 @@ impl ExprOperator {
 				
 				
 				(Operand::Constant (ref value), Operand::Variable (ref var_name)) => {
-					let value_type: DataType = value.get_type();					
-					let field_def: StructFieldDef = check_context.find_member_field_def(&value_type, var_name)?;
-					Ok(field_def.data_type().clone())
+					let value_type: DataType = value.get_type();
+					// if value_type.is_any() {
+						// DataType::Builtin (BuiltinType::Any)
+					// } else {
+						let field_def: StructFieldDef = check_context.find_member_field_def(&value_type, var_name)?;
+						Ok(field_def.data_type().clone())
+					// }
 				},
 				
 				(Operand::Constant (ref value), Operand::FuncCall {
@@ -244,6 +254,28 @@ impl ExprOperator {
 				},
 				
 				
+				(Operand::ArrayLiteral { .. }, Operand::Variable (_)) =>
+					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
+					
+				(arr @ Operand::ArrayLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
+					arr.check_and_calc_data_type_in_place(check_context)?; // check exprs inside array
+					let arr_dt = DataType::Builtin (BuiltinType::Array);
+					if func_name.is_builtin() {
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&arr_dt, func_name)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &arr_dt, lhs_pos, check_context)?;
+						
+						Ok(func_def.return_type().clone())
+					} else {
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&arr_dt, func_name)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &arr_dt, lhs_pos, check_context)?;
+						
+						Ok(func_def.return_type().clone())
+					}
+				},
+				
+				
 				(Operand::ValueRef (ref value_rc), Operand::Variable (ref field_name)) => {
 					let value_type: DataType = value_rc.borrow().get_type();
 					let field_def: StructFieldDef = check_context.find_member_field_def(&value_type, field_name)?;
@@ -286,7 +318,29 @@ impl ExprOperator {
 						
 						Ok(func_def.return_type().clone())
 					}
-				}
+				},
+			
+			
+				
+				(Operand::ArrayElementRefByInd { .. }, Operand::Variable (_)) =>
+					Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into()),
+					
+				(lhs @ Operand::ArrayElementRefByInd { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
+					let value_type: DataType = lhs.check_and_calc_data_type_in_place(check_context)?;
+					if func_name.is_builtin() {
+						let func_def: BuiltinFuncDef = check_context.find_member_builtin_func_def(&value_type, func_name)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						
+						Ok(func_def.return_type().clone())
+					} else {
+						let func_def: UserFuncDef = check_context.find_member_user_func_def(&value_type, func_name)?;
+						
+						func_def.check_args_as_member_function(func_name, arg_exprs, &value_type, lhs_pos, check_context)?;
+						
+						Ok(func_def.return_type().clone())
+					}
+				},
 			}
 		} 
 		else if let Index = self {
@@ -329,6 +383,8 @@ impl ExprOperator {
 			match (lhs_dt, rhs_dt) {
 				(DataType::Builtin (BuiltinType::String), DataType::Builtin (BuiltinType::Float32)) 
 					=> Ok(DataType::Builtin (BuiltinType::Char)),
+				(DataType::Builtin (BuiltinType::Array), DataType::Builtin (BuiltinType::Float32)) 
+					=> Ok(DataType::Builtin (BuiltinType::Any)),
 				_ => Err(ExprErr::wrong_operands_for_operator(self, operator_pos, &[&lhs, &rhs]).into())
 			}
 		} 
@@ -451,6 +507,12 @@ impl ExprOperator {
 				(_, Operand::StringCharRefByInd { .. }) => 
 					unreachable!(),
 				
+				(_, Operand::ArrayElementRefByInd { .. }) => 
+					unreachable!(),
+					
+				(_, Operand::ArrayLiteral { .. }) =>
+					unreachable!(),
+				
 				(Operand::IndexExpr (_), _) => 
 					unreachable!(),
 				
@@ -521,6 +583,15 @@ impl ExprOperator {
 				},
 				
 				
+				(Operand::ArrayLiteral { .. }, Operand::Variable (_)) =>
+					unreachable!(),
+				
+				(al @ Operand::ArrayLiteral { .. }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
+					let struct_value: Value = al.calc_in_place(context).unwrap();
+					Self::call_member_func_of_value(&struct_value, func_name, arg_exprs, context, rhs_pos)
+				},
+				
+				
 				(Operand::ValueRef (ref value_rc), Operand::Variable (ref field_name)) => {
 					let value_rc: Rc<RefCell<Value>> = value_rc.borrow().unwrap_struct_clone_field(field_name);
 					let opnd: Operand = Operand::ValueRef (value_rc);
@@ -542,6 +613,15 @@ impl ExprOperator {
 					let ch_val = Value::Char(ch);
 					Self::call_member_func_of_value(&ch_val, func_name, arg_exprs, context, rhs_pos)
 				}
+			
+				
+				(Operand::ArrayElementRefByInd { .. }, Operand::Variable (_)) =>
+					unreachable!(),
+					
+				(Operand::ArrayElementRefByInd { ref array_elements, index }, Operand::FuncCall { ref func_name, ref arg_exprs }) => {
+					let elt_value: &Value = &array_elements.borrow()[*index];
+					Self::call_member_func_of_value(elt_value, func_name, arg_exprs, context, rhs_pos)
+				},
 			}
 		} 
 		else if let Index = self {
@@ -566,12 +646,18 @@ impl ExprOperator {
 					let index: f32 = expr.calc_as_rhs(context).unwrap_f32();
 					let index: usize = (index.abs().floor() * index.signum()) as usize;
 					
-					let chars_rc: Rc<RefCell<Vec<char>>> = value.unwrap_str_clone_inner_rc();
-					
-					let opnd = Operand::StringCharRefByInd {
-						string_value: chars_rc,
-						index,
+					let opnd = match value {
+						Value::String (ref chars_rc) => Operand::StringCharRefByInd {
+							string_value: Rc::clone(chars_rc),
+							index,
+						},
+						Value::Array { ref values } => Operand::ArrayElementRefByInd {
+							array_elements: Rc::clone(values),
+							index,
+						},
+						_ => unreachable!(),
 					};
+					
 					Symbol {
 						kind: SymbolKind::Operand (opnd),
 						pos: CodePos::new(lhs_pos.begin(), rhs_pos.end()),
@@ -611,7 +697,7 @@ impl ExprOperator {
 						pos: CodePos::new(lhs_pos.begin(), rhs_pos.end()),
 					}
 				},
-				
+								
 				_ => unreachable!(),
 			} 
 		} 

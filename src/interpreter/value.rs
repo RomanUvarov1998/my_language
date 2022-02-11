@@ -18,7 +18,6 @@ pub enum Value {
 		fields: HashMap<String, Rc<RefCell<Value>>>,
 	},
 	Array {
-		elem_type: DataType,
 		values: Rc<RefCell<Vec<Value>>>,
 	},
 	None,
@@ -88,10 +87,9 @@ impl Clone for Value {
 					fields: fields_cloned,
 				}
 			},
-			Value::Array { elem_type, values } => {
+			Value::Array { values } => {
 				let elems_vec_cloned: Vec<Value> = values.borrow().clone();
 				Value::Array {
-					elem_type: elem_type.clone(),
 					values: Rc::new(RefCell::new(elems_vec_cloned)),
 				}
 			},
@@ -125,8 +123,8 @@ impl PartialEq for Value {
 				Value::Struct { struct_def: sd2, .. } => sd1 == sd2,
 				_ => false,
 			},
-			Value::Array { elem_type: et1, values: vs1 } => match other {
-				Value::Array { elem_type: et2, values: vs2 } => et1 == et2 && vs1 == vs2,
+			Value::Array { values: vs1 } => match other {
+				Value::Array { values: vs2 } => vs1 == vs2,
 				_ => false,
 			},
 			Value::None => match other {
@@ -161,8 +159,8 @@ impl std::fmt::Display for Value {
 				}
 				writeln!(f, "}}")
 			},
-			Value::Array { elem_type, values } => {
-				write!(f, "Array of '{}' [", elem_type)?;
+			Value::Array { values } => {
+				write!(f, "Array [")?;
 				let mut is_first = true;
 				for v in values.borrow().iter() {
 					if !is_first { write!(f, ", ")?; }

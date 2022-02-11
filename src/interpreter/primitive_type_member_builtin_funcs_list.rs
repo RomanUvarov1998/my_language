@@ -124,17 +124,8 @@ impl PrimitiveTypeMemberBuiltinFuncsList {
 					BuiltinFuncArg::new("self".to_string(), DataType::Builtin (BuiltinType::Array)),
 				],
 				Box::new(|args_values: Vec<Value>| -> Option<Value> {
-					if let Value::Array { elem_type, values } = &args_values[0] {
-						let mut s: String = format!("Array of '{}' [", elem_type);
-						
-						let mut is_first = true;
-						for v in values.borrow().iter() {
-							if !is_first { s.push_str(", "); }
-							is_first = false;
-							s.push_str(&format!("{}", v));
-						}
-						s.push_str("]");
-				
+					if let Value::Array { .. } = &args_values[0] {
+						let s: String = format!("{}", &args_values[0]);
 						Some( Value::from(s) )
 					} else {
 						unreachable!();
