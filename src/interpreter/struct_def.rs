@@ -1,7 +1,7 @@
 use super::data_type::DataType;
 use super::user_func::UserFuncDef;
 use super::builtin_func::BuiltinFuncDef;
-use super::utils::{CodePos, NameToken};
+use super::utils::{CodePos, NameToken, HashMapInsertPanic};
 use super::context::Context;
 use super::expr::StructLiteralField;
 use super::InterpErr;
@@ -104,9 +104,9 @@ impl std::fmt::Debug for StructDef {
 #[derive(Debug)]
 pub struct StructDefInner {
 	name: NameToken,
-	fields: HashMap<String, StructFieldDef>, // TODO: try using &str
-	user_funcs: Vec<UserFuncDef>,	// TODO: use HashMap for user_funcs and builtin_funcs
-	builtin_funcs: Vec<BuiltinFuncDef>,
+	fields: HashMap<String, StructFieldDef>,
+	user_funcs: HashMap<String, UserFuncDef>,	// TODO: use HashMap for user_funcs and builtin_funcs
+	builtin_funcs: HashMap<String, BuiltinFuncDef>,
 }
 
 impl StructDefInner {
@@ -114,8 +114,8 @@ impl StructDefInner {
 		Self {
 			name,
 			fields,
-			user_funcs: Vec::new(),
-			builtin_funcs: Vec::new(),
+			user_funcs: HashMap::new(),
+			builtin_funcs: HashMap::new(),
 		}
 	}
 	
@@ -138,31 +138,27 @@ impl StructDefInner {
 	
 	#[allow(dead_code)]
 	pub fn add_builtin_func_def(&mut self, func_def: BuiltinFuncDef) {
-		if let Some(_) = self.builtin_funcs.iter().find(|fd| fd.name() == func_def.name()) {
-			panic!("Builtin member function '{}' is already defined", func_def.name());
-		}
-		
-		self.builtin_funcs.push(func_def);
+		self.builtin_funcs.insert_assert_not_replace(
+			func_def.name().to_string(),
+			func_def);
 	}
 	
 	#[allow(dead_code)]
 	pub fn add_user_func_def(&mut self, func_def: UserFuncDef) {
-		if let Some(_) = self.user_funcs.iter().find(|fd| fd.name() == func_def.name()) {
-			panic!("User-defined member function '{}' is already defined", func_def.name());
-		}
-		
-		self.user_funcs.push(func_def);
+		self.user_funcs.insert_assert_not_replace(
+			func_def.name().value().to_string(),
+			func_def);
 	}
 	
 	pub fn find_builtin_func_def(&self, name: &NameToken) -> Result<BuiltinFuncDef, StructDefErr> {
-		match self.builtin_funcs.iter().find(|fd| fd.name() == name.value()) {
+		match self.builtin_funcs.get(name.value()) {
 			Some(func_def) => Ok(func_def.clone()),
 			None => Err( StructDefErr::BuiltinMemberFuncIsNotDefined { name: name.clone() } )
 		}
 	}
 
 	pub fn find_user_func_def(&self, name: &NameToken) -> Result<UserFuncDef, StructDefErr> {
-		match self.user_funcs.iter().find(|fd| fd.name().value() == name.value()) {
+		match self.user_funcs.get(name.value()) {
 			Some(func_def) => Ok(func_def.clone()),
 			None => Err( StructDefErr::UserMemberFuncIsNotDefined { name: name.clone() } )
 		}
