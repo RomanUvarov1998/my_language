@@ -770,7 +770,7 @@ impl ExprOperator {
 				next_context.add_variable(
 					func_args[i].name().clone(),
 					func_args[i].data_type().clone(),
-					args_values[i].clone()).unwrap();
+					args_values[i].get_clone_with_the_same_inner()).unwrap();
 			}
 			
 			func_def.call(&mut next_context)
