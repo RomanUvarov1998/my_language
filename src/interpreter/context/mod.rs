@@ -10,8 +10,9 @@ use super::user_func::{UserFuncErr, UserFuncArg, UserFuncDef};
 use super::statement::{ReturningBody, ParsedFuncArgDef};
 use super::primitive_type_member_builtin_funcs_list::PrimitiveTypeMemberBuiltinFuncsList;
 use super::struct_def::{StructDef, StructFieldDef, StructDefErr};
-use super::data_type_template::{DataTypeTemplate, UserFuncDefTemplate};
-use crate::interpreter::Statement;
+use super::data_type_template::{DataTypeTemplate, UserFuncDefTemplate, StructFieldDefTemplate};
+use super::statement::{Statement, StatementKind};
+use super::expr::{Expr, Symbol, SymbolKind, Operand, ExprOperator};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::collections::HashMap;
@@ -32,49 +33,156 @@ impl<'prev_context> Context<'prev_context> {
 	pub fn new(
 		builtin_func_defs: &'prev_context Vec<BuiltinFuncDef>,
 		primitive_type_member_builtin_funcs_list: &'prev_context PrimitiveTypeMemberBuiltinFuncsList,
-		struct_defs: Vec<StructDef>
+		mut struct_defs: Vec<StructDef>
 	) -> Self {
-		let new_nt = |name: &str| -> NameToken {
-			NameToken::new_with_pos(name.to_string(), CodePos::from(CharPos::new()), true)
+		let null_pos = || { CodePos::from(CharPos::new()) };
+		let new_nt = |name: &str, is_builtin: bool| -> NameToken {
+			NameToken::new_with_pos(name.to_string(), null_pos(), is_builtin)
 		};
 		
-		let arr_type_param_name = "ArrType";
+		let self_param_name = "Self";
 		let item_type_param_name = "ItemType";
 		let mut array_template = DataTypeTemplate::new("arr");
 		
-		let user_func_add = UserFuncDefTemplate::new(
-			new_nt("add"),
+		let user_func_len = UserFuncDefTemplate::new(
+			new_nt("len", false),
 			vec![
-				ParsedFuncArgDef::new(new_nt("self"), new_nt(arr_type_param_name)),
-				ParsedFuncArgDef::new(new_nt("item"), new_nt(item_type_param_name)),
+				ParsedFuncArgDef::new(new_nt("self", false), new_nt(self_param_name, false)),
+			],
+			Some(new_nt("f32", true)),
+			vec![
+				Statement::new(null_pos(),
+					StatementKind::UserDefinedFuncReturn {
+						return_expr: Some(Expr::new_from_stack(vec![
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::Operand (Operand::Variable (new_nt("self", false))),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::Operand (Operand::Variable (new_nt("inner", false))),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::Operand (Operand::FuncCall {
+									func_name: new_nt("len", true), 
+									arg_exprs: Vec::new(),
+								}),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+							},
+						])),
+					}),
+			]);
+		array_template.add_user_func_template(user_func_len);
+		
+		let user_func_add = UserFuncDefTemplate::new(
+			new_nt("add", false),
+			vec![
+				ParsedFuncArgDef::new(new_nt("self", false), new_nt(self_param_name, false)),
+				ParsedFuncArgDef::new(new_nt("item", false), new_nt(item_type_param_name, false)),
 			],
 			None,
-			Vec::<Statement>::new());
+			vec![
+				Statement::new(null_pos(),
+					StatementKind::FuncCall {
+						left_expr: Expr::new_from_stack(vec![
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::Operand (Operand::Variable (new_nt("self", false))),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::Operand (Operand::Variable (new_nt("inner", false))),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::Operand (Operand::FuncCall {
+									func_name: new_nt("add", true), 
+									arg_exprs: vec![
+										Expr::new_from_stack(vec![
+											Symbol {
+												pos: null_pos(),
+												kind: SymbolKind::Operand (Operand::Variable (new_nt("item", false))),
+											},
+										]),
+									],
+								}),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+							}
+						]),
+					}),
+			]);
 		array_template.add_user_func_template(user_func_add);
 		
-		let user_func_len = UserFuncDefTemplate::new(
-			new_nt("len"),
-			vec![
-				ParsedFuncArgDef::new(new_nt("self"), new_nt(arr_type_param_name)),
-			],
-			Some(new_nt("f32")),
-			Vec::<Statement>::new());
-		
 		let user_func_get = UserFuncDefTemplate::new(
-			new_nt("get"),
+			new_nt("get", false),
 			vec![
-				ParsedFuncArgDef::new(new_nt("self"), new_nt(arr_type_param_name)),
-				ParsedFuncArgDef::new(new_nt("item"), new_nt("f32")),
+				ParsedFuncArgDef::new(new_nt("self", false), new_nt(self_param_name, false)),
+				ParsedFuncArgDef::new(new_nt("index", false), new_nt("f32", true)),
 			],
-			Some(new_nt(item_type_param_name)),
-			Vec::<Statement>::new());
+			Some(new_nt(item_type_param_name, false)),
+			vec![
+				Statement::new(null_pos(),
+					StatementKind::UserDefinedFuncReturn {
+						return_expr: Some(Expr::new_from_stack(vec![
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::Operand (Operand::Variable (new_nt("self", false))),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::Operand (Operand::Variable (new_nt("inner", false))),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::Operand (Operand::FuncCall {
+									func_name: new_nt("get", true), 
+									arg_exprs: vec![
+										Expr::new_from_stack(vec![
+											Symbol {
+												pos: null_pos(),
+												kind: SymbolKind::Operand (Operand::Variable (new_nt("index", false))),
+											},
+										]),
+									],
+								}),
+							},
+							Symbol {
+								pos: null_pos(),
+								kind: SymbolKind::ExprOperator (ExprOperator::DotMemberAccess),
+							}
+						])),
+					}),
+			]);
 		array_template.add_user_func_template(user_func_get);
+		
+		let array_inner = StructFieldDefTemplate::new(new_nt("inner", false), new_nt("untyped_array", true));
+		
+		array_template.add_field_template(array_inner);		
 		
 		let tmpls: HashMap<String, DataTypeTemplate> = [
 			("arr".to_string(), array_template),
 		].into();
 		
-		Self {
+		let mut ctx = Self {
 			prev_frame_context: None,
 			frame: CallStackFrame::new(),
 			builtin_func_defs,
@@ -82,7 +190,27 @@ impl<'prev_context> Context<'prev_context> {
 			struct_defs: Rc::new(RefCell::new(struct_defs)),
 			struct_def_templates: Rc::new(RefCell::new(tmpls)),
 			is_root: true,
-		}
+		};
+			
+		let type_params: HashMap<String, NameToken> = [
+			(item_type_param_name.to_string(), new_nt("f32", true)),
+		].into();
+		
+		let mut templates = ctx.struct_def_templates.borrow();
+		
+		let templ = templates.get("arr").unwrap();
+		
+		let mut td = templ.generate_type_def(
+			&type_params,
+			&ctx);
+			
+		ctx.struct_defs.borrow_mut().push(td.clone());
+		
+		templ.generate_user_member_funcs(&mut td, type_params, &ctx);
+		
+		drop(templates);
+		
+		ctx
 	}
 	
 	pub fn new_stack_frame_context(&'prev_context self) -> Self {

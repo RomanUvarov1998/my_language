@@ -1,0 +1,27 @@
+var ar: arr__ItemType_f32 = arr__ItemType_f32 {
+	inner: [],
+};
+
+@println(ar.len());
+@println(ar.inner);
+
+ar.add(1);
+ar.add(2);
+ar.add(3);
+
+@println(ar.len());
+@println(ar.inner);
+
+@println("----------------------------------------");
+
+var ar2: @untyped_array = [];
+
+@println(ar2.@len());
+@println(ar2);
+
+ar2.@add(1);
+ar2.@add(2);
+ar2.@add(3);
+
+@println(ar2.@len());
+@println(ar2);

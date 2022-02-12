@@ -126,6 +126,10 @@ impl StructDefInner {
 		self.fields.values()
 	}
 	
+	pub fn user_funcs(&self) -> &HashMap<String, UserFuncDef> {
+		&self.user_funcs
+	}
+	
 	pub fn member_field(&self, name: &NameToken) -> Result<StructFieldDef, StructDefErr> {
 		match self.fields.get(name.value()) {
 			Some(field_def) => Ok(field_def.clone()),
@@ -135,14 +139,12 @@ impl StructDefInner {
 		}
 	}
 	
-	#[allow(dead_code)]
 	pub fn add_builtin_func_def(&mut self, func_def: BuiltinFuncDef) {
 		self.builtin_funcs.insert_assert_not_replace(
 			func_def.name().to_string(),
 			func_def); // TODO: return Result instead of panicking
 	}
 	
-	#[allow(dead_code)]
 	pub fn add_user_func_def(&mut self, func_def: UserFuncDef) {
 		self.user_funcs.insert_assert_not_replace(
 			func_def.name().value().to_string(),

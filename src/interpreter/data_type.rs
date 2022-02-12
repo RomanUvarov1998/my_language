@@ -53,7 +53,7 @@ impl std::fmt::Display for DataType {
 
 //--------------------------- BuiltinType -------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 #[repr(usize)]
 pub enum BuiltinType {
 	Float32,
@@ -77,6 +77,18 @@ impl BuiltinType {
 			},
 			BuiltinType::Any => Value::Any,
 			BuiltinType::None => Value::None,
+		}
+	}
+}
+
+impl Eq for BuiltinType {}
+
+impl PartialEq for BuiltinType {
+	fn eq(&self, other: &Self) -> bool {
+		match (self, other) {
+			(BuiltinType::Any, _) => true,
+			(_, BuiltinType::Any) => true,
+			(t1, t2) => (*t1 as usize) == (*t2 as usize),
 		}
 	}
 }

@@ -9,7 +9,8 @@ use super::utils::{CharPos, CodePos};
 use super::context::Context;
 use symbol::SymbolIterator;
 pub use symbol::{Symbol, Operand, SymbolKind, StructLiteralField};
-use expr_operator::{ExprOperator, OpAssot};
+pub use expr_operator::ExprOperator;
+use expr_operator::OpAssot;
 use std::rc::Rc;
 
 #[derive(Debug)]
@@ -36,7 +37,6 @@ impl Expr {
 		} )
 	}
 	
-	#[allow(dead_code)]
 	pub fn new_from_stack(expr_stack: Vec<Symbol>) -> Self {
 		let mut pos_begin: CharPos = expr_stack[0].pos().begin();
 		let mut pos_end: CharPos = expr_stack[0].pos().end();
@@ -53,7 +53,6 @@ impl Expr {
 	}
 	
 	
-	#[allow(dead_code)]
 	pub fn expr_stack(&self) -> &Vec<Symbol> {
 		&*self.expr_stack
 	}

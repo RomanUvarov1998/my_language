@@ -23,6 +23,7 @@ use value::Value;
 use primitive_type_member_builtin_funcs_list::PrimitiveTypeMemberBuiltinFuncsList;
 use struct_def::{StructDef, StructDefErr};
 use data_type_template::TemplateErr;
+use std::collections::HashMap;
 
 //------------------------ Interpreter --------------------
 

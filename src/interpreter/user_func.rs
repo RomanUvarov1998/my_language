@@ -43,6 +43,10 @@ impl UserFuncDef {
 	pub fn return_type(&self) -> &DataType {
 		&self.inner.return_type
 	}
+
+	pub fn body(&self) -> &ReturningBody {
+		&self.inner.body
+	}
 }
 
 impl Clone for UserFuncDef {
@@ -141,12 +145,12 @@ impl UserFuncDefInner {
 		}
 		
 		for i in 1..self.args.len() {
-			if !self.args[i].type_check(&args_data_types[i]) {
+			if !self.args[i].type_check(&args_data_types[i - 1]) {
 				return Err( UserFuncErr::ArgType {
 					func_signature: format!("{}", self),
-					arg_expr_pos: args_exprs[i].pos(),
+					arg_expr_pos: args_exprs[i - 1].pos(),
 					actual_type: self.args[i].data_type.clone(),
-					given_type: args_data_types[i].clone(),
+					given_type: args_data_types[i - 1].clone(),
 				}.into() );
 			}
 		}
