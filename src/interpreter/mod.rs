@@ -399,7 +399,7 @@ impl From<StructDefErr> for InterpErr {
 				descr,
 				inner: InnerErr::StructDef (err),
 			},
-			StructDefErr::NotAllFieldsSet { ref name_in_code } => InterpErr {
+			StructDefErr::NotAllFieldsSet { ref name_in_code, .. } => InterpErr {
 				pos: name_in_code.pos(),
 				descr,
 				inner: InnerErr::StructDef (err),

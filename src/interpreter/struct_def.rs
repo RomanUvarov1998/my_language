@@ -46,13 +46,15 @@ impl StructDef {
 	}
 	
 	pub fn check_fields_set(&self, struct_name_in_code: &NameToken, fields: &Vec<StructLiteralField>, check_context: &Context) -> Result<(), InterpErr> {
-		let mut defined_fields = HashSet::<String>::new();
+		let mut used_fields = HashSet::<String>::new();
 		let inner = self.inner();
+		
 		for field in fields {
 			let field_name: String = field.field_name().value().to_string();
+			
 			match inner.fields.get(&field_name) {
 				Some(field_def_ref) => {
-					if !defined_fields.insert(field_name.clone()) {
+					if !used_fields.insert(field_name.clone()) {
 						return Err( StructDefErr::FieldAlreadySet { name_in_code: field.field_name().clone() }.into() );
 					}
 					let expr_data_type: DataType = field.value_expr().check_as_rhs_and_calc_data_type(check_context)?;
@@ -64,12 +66,25 @@ impl StructDef {
 						}.into() );
 					}
 				},
+				
 				None => return Err( StructDefErr::FieldDoesNotExist { name_in_code: field.field_name().clone() }.into() ),
 			}
 		}
 		
-		if defined_fields.len() != fields.len() {
-			return Err( StructDefErr::NotAllFieldsSet { name_in_code: struct_name_in_code.clone() }.into() );
+		if used_fields.len() != inner.fields.len() {
+			let defined_fields_hs: HashSet<String> = inner.fields.keys()
+				.cloned()
+				.collect();
+			
+			let unused_fields_names: Vec<String> = defined_fields_hs
+				.difference(&used_fields)
+				.cloned()
+				.collect();
+			
+			return Err( StructDefErr::NotAllFieldsSet { 
+				name_in_code: struct_name_in_code.clone(),
+				unused_fields_names
+			}.into() );
 		}
 		
 		Ok(())
@@ -221,6 +236,7 @@ pub enum StructDefErr {
 	},
 	NotAllFieldsSet {
 		name_in_code: NameToken,
+		unused_fields_names: Vec<String>,
 	},
 	FieldDoesNotExist {
 		name_in_code: NameToken,
@@ -254,8 +270,16 @@ impl std::fmt::Display for StructDefErr {
 			StructDefErr::FieldSetTypeErr { name_in_code, declared_type, set_type } => 
 				write!(f, "Member field '{}' has '{}' type buts its expression is '{}'", 
 					&name_in_code, declared_type, set_type),
-			StructDefErr::NotAllFieldsSet { name_in_code } => 
-				write!(f, "Not all fields of struct '{}' are set", &name_in_code),
+			StructDefErr::NotAllFieldsSet { name_in_code, unused_fields_names } => {
+				write!(f, "Field(-s) [")?;
+				let mut is_first = true;
+				for field_name in unused_fields_names {
+					if !is_first { write!(f, ", ")?; }
+					is_first = false;
+					write!(f, "'{}'", field_name)?;
+				}
+				write!(f, "] of struct '{}' are not set", &name_in_code)
+			},
 			StructDefErr::FieldDoesNotExist { name_in_code } => 
 				write!(f, "Member field '{}' is not declared", &name_in_code),
 			StructDefErr::BuiltinMemberFuncIsNotDefined { name } => 

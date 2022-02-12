@@ -93,7 +93,7 @@ impl Expr {
 		
 		for sym in self.expr_stack.iter() {
 			match sym.kind() {
-				SymbolKind::Operand (_) => type_calc_stack.push(sym.clone()), // TODO: avoid cloning symbols
+				SymbolKind::Operand (ref op) => type_calc_stack.push(sym.clone()), // TODO: avoid cloning symbols
 				
 				SymbolKind::LeftRoundBracket => unreachable!(),
 				SymbolKind::RightRoundBracket => unreachable!(),
