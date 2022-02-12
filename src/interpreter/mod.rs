@@ -220,6 +220,11 @@ impl From<ExprErr> for InterpErr {
 				descr: format!("{}", err),
 				inner: InnerErr::Expr (err),
 			},
+			ExprErr::EmptyBracketsPair (pos) => InterpErr {
+				pos,
+				descr: format!("{}", err),
+				inner: InnerErr::Expr (err),
+			},
 			ExprErr::ExpectedExprButFound (pos) => InterpErr {
 				pos,
 				descr: format!("{}", err),
@@ -456,6 +461,8 @@ impl From<TemplateErr> for InterpErr {
 }
 
 //------------------------ Tests --------------------
+
+// TODO: add tests for all errors
 
 #[cfg(test)]
 mod tests {

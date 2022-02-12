@@ -284,12 +284,25 @@ impl Expr {
 				SymbolKind::LeftRoundBracket => tmp_stack.push(symbol),
 				
 				SymbolKind::RightRoundBracket => {
+					let mut popped_operators_cnt = 0_i32;
+					let right_bracket_pos: CodePos = symbol.pos();
+					
 					while let Some(top_sym) = tmp_stack.pop() {
 						match top_sym.kind() {
 							SymbolKind::Operand (..) => unreachable!(),
-							SymbolKind::LeftRoundBracket => continue 'outer,
+							SymbolKind::LeftRoundBracket => {
+								if popped_operators_cnt == 0 {
+									return Err(ExprErr::EmptyBracketsPair (CodePos::new(
+										top_sym.pos().end(),
+										right_bracket_pos.begin())).into());
+								}
+								continue 'outer;
+							},
 							SymbolKind::RightRoundBracket => unreachable!(),
-							SymbolKind::ExprOperator (..) => expr_stack.push(top_sym),
+							SymbolKind::ExprOperator (..) => {
+								popped_operators_cnt += 1;
+								expr_stack.push(top_sym);
+							},
 						}
 					}
 					
@@ -550,6 +563,7 @@ impl ExprContext {
 pub enum ExprErr {
 	UnexpectedToken (CodePos),
 	UnpairedBracket (CodePos),
+	EmptyBracketsPair (CodePos),
 	ExpectedExprButFound (CodePos),
 	WrongOperandsTypeForOperator { 
 		operator_pos: CodePos,
@@ -617,6 +631,7 @@ impl std::fmt::Display for ExprErr {
 		match self {
 			ExprErr::UnexpectedToken (_) => write!(f, "Unexpected token"),
 			ExprErr::UnpairedBracket (_) => write!(f, "Unpaired bracket"),
+			ExprErr::EmptyBracketsPair (_) => write!(f, "Empty brackets pair"),
 			ExprErr::ExpectedExprButFound (_) => write!(f, "Expected arithmetical expression, but found"),
 			ExprErr::WrongOperandsTypeForOperator { ref descr, .. } => write!(f, "{}", descr),
 			ExprErr::WrongOperandsForOperator { ref descr, .. } => write!(f, "{}", descr),
