@@ -193,6 +193,10 @@ impl Iterator for SymbolIterator<'_> {
 				self.prev_is_operand = true;
 			},
 			
+			Ok( Symbol{ kind: SymbolKind::ExprOperator (ExprOperator::Index), .. } ) => {
+				self.prev_is_operand = true;
+			},
+			
 			_ => {
 				self.prev_is_operand = false;
 			}

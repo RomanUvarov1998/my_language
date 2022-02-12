@@ -1,3 +1,28 @@
+var ar2: @untyped_array = [];
+
+@println(ar2.@len());
+@println(ar2);
+
+struct S { a: @f32 }
+
+ar2.@add(1);
+ar2.@add(2);
+ar2.@add(3);
+// ar2.@add("hello");
+// ar2.@add(False);
+// ar2.@add(S { a: 3 });
+
+var result: @f32 = ar2[0] + ar2[1];
+@println("result1: " + result.@to_string());
+
+result = ar2[3] + ar2[4];
+@println("result1: " + result.@to_string());
+
+@println(ar2.@len());
+@println(ar2);
+
+@println("----------------------------------------");
+
 var ar: arr__ItemType_f32 = arr__ItemType_f32 {
 	inner: [],
 };
@@ -8,20 +33,7 @@ var ar: arr__ItemType_f32 = arr__ItemType_f32 {
 ar.add(1);
 ar.add(2);
 ar.add(3);
+ar.add(4);
 
 @println(ar.len());
 @println(ar.inner);
-
-@println("----------------------------------------");
-
-var ar2: @untyped_array = [];
-
-@println(ar2.@len());
-@println(ar2);
-
-ar2.@add(1);
-ar2.@add(2);
-ar2.@add(3);
-
-@println(ar2.@len());
-@println(ar2);

@@ -807,6 +807,16 @@ mod tests {
 		],
 		Value::Float32(3_f32.powf(1_f32.powf(2_f32))));
 		
+		test_expr_and_its_stack_eq_and_value("3 ^ -1 ^ 2;", vec![
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (3_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (1_f32))),
+			SymbolKind::Operand (Operand::Constant (Value::Float32 (2_f32))),
+			SymbolKind::ExprOperator (ExprOperator::Pow),
+			SymbolKind::ExprOperator (ExprOperator::UnMinus),
+			SymbolKind::ExprOperator (ExprOperator::Pow),
+		],
+		Value::Float32(3_f32.powf(-(1_f32.powf(2_f32)))));
+		
 		let zero_pos = CodePos::from(CharPos::new());
 		
 		test_expr_and_its_stack_eq("a + add(2, 4) + @add(4, 9);", vec![
