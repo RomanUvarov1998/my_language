@@ -409,19 +409,9 @@ pub struct ParsedStatement {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ParsedStatementKind {
 	Comment (String),
-	VariableDeclare {
-		var_name: NameToken,
-		data_type: DataType
-	},
-	VariableDeclareSet {
-		var_name: NameToken,
-		data_type: DataType,
-		value_expr: ParsedExpr
-	},
-	VariableSet {
-		var_name: NameToken,
-		value_expr: ParsedExpr
-	},
+	VariableDeclare { var_name: NameToken, data_type: DataType },
+	VariableDeclareSet { var_name: NameToken, data_type: DataType, value_expr: ParsedExpr },
+	VariableSet { var_name: NameToken, value_expr: ParsedExpr },
 	UserDefinedFuncReturn { 
 		return_expr: Option<ParsedExpr>,
 	},
