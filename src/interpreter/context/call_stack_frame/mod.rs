@@ -29,7 +29,7 @@ impl CallStackFrame {
 		self.local_scopes_stack.last_mut().unwrap()
 	}
 	
-	pub fn find_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, UserFuncErr> {
+	pub fn find_user_func_def(&self, name: &NameToken) -> Result<&UserFuncDef, UserFuncErr> {
 		for scope in self.local_scopes_stack.iter().rev() {
 			match scope.find_func_def(name) {
 				res @ Ok(_) => return res,

@@ -1,4 +1,6 @@
-use super::string_char::{ CharsIter, CharKind, Punctuation, ParsedChar };
+mod string_char;
+
+use string_char::{ CharsIter, CharKind, Punctuation, ParsedChar };
 use super::utils::{CharPos, CodePos};
 use std::collections::VecDeque;
 
@@ -8,7 +10,6 @@ use std::collections::VecDeque;
 pub struct TokensIter {
 	iter: CharsIter,
 	peeked_tokens: VecDeque<Token>,
-	cached_queue: VecDeque<Token>,
 }
 
 impl TokensIter {
@@ -16,7 +17,6 @@ impl TokensIter {
 		Self { 
 			iter: CharsIter::new(),
 			peeked_tokens: VecDeque::new(),
-			cached_queue: VecDeque::new(),
 		}
 	}
 	
@@ -43,6 +43,11 @@ impl TokensIter {
 			Some(token_ref) => Ok(token_ref),
 			None => Err( TokenErr::EndReached { pos } ),
 		}
+	}
+	
+	pub fn skip_or_end_reached_err(&mut self) -> Result<(), TokenErr> {
+		self.next_or_end_reached_err()?;
+		Ok(())
 	}
 	
 	pub fn next_or_end_reached_err(&mut self) -> Result<Token, TokenErr> {
@@ -87,7 +92,45 @@ impl TokensIter {
 			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 		}
 	}
-		
+	
+	pub fn next_expect_right_bracket(&mut self) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::Bracket (Bracket::Right)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
+	}
+	
+	pub fn next_expect_assign_operator(&mut self) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::Operator (Operator::Assign)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
+	}
+	
+	pub fn expect_keyword(&mut self, kw: Keyword) -> Result<(), TokenErr> {
+		match self.next() {
+			Some(token_result) => Self::expect(
+				token_result?, 
+				TokenContent::Keyword (kw)),
+			None => Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		}
+	}
+	
+	fn expect(actual_token: Token, expected_tc: TokenContent) -> Result<(), TokenErr> {
+		if *actual_token.content() == expected_tc {
+			Ok(())
+		} else {
+			Err( TokenErr::ExpectedButFound {
+				expected: vec![expected_tc], 
+				found: actual_token,
+			} )
+		}
+	}
+
 	fn parse_number_or_dot(&mut self, first_char: ParsedChar) -> Result<Token, TokenErr> {
 		let (mut value, mut has_dot): (f32, bool) = match first_char.kind() {
 			CharKind::Digit (d1) => (d1 as f32, false), // X
@@ -156,11 +199,14 @@ impl TokensIter {
 									| CharKind::Circumflex
 									| CharKind::Exclamation
 									| CharKind::DoubleQuote
+									| CharKind::SingleQuote
 									| CharKind::LeftSlash
 									| CharKind::LeftBracket
 									| CharKind::RightBracket
 									| CharKind::LeftCurlyBracket
 									| CharKind::RightCurlyBracket
+									| CharKind::LeftSquaredBracket
+									| CharKind::RightSquaredBracket
 									| CharKind::Eq
 									| CharKind::Underscore
 									| CharKind::Punctuation (_)
@@ -203,8 +249,11 @@ impl TokensIter {
 					CharKind::RightBracket |
 					CharKind::LeftCurlyBracket |
 					CharKind::RightCurlyBracket |
+					CharKind::LeftSquaredBracket |
+					CharKind::RightSquaredBracket |
 					CharKind::Eq |
 					CharKind::Letter |
+					CharKind::SingleQuote |
 					CharKind::Underscore |
 					CharKind::Punctuation (_) |
 					CharKind::Whitespace |
@@ -224,6 +273,54 @@ impl TokensIter {
 				},
 				None => return Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 			}
+		}
+	}
+	
+	fn parse_char_literal(&mut self, pos_begin: CharPos) -> Result<Token, TokenErr> {
+		let ch: char = match self.iter.next() {
+			Some(parsed_char) => match parsed_char.kind() {
+				CharKind::Digit (_) |
+					CharKind::Dog |
+					CharKind::Dot |
+					CharKind::Plus |
+					CharKind::Minus |
+					CharKind::Greater |
+					CharKind::Less |
+					CharKind::Asterisk |
+					CharKind::Exclamation |
+					CharKind::Circumflex |
+					CharKind::LeftSlash |
+					CharKind::LeftBracket |
+					CharKind::RightBracket |
+					CharKind::LeftCurlyBracket |
+					CharKind::RightCurlyBracket |
+					CharKind::LeftSquaredBracket |
+					CharKind::RightSquaredBracket |
+					CharKind::Eq |
+					CharKind::Letter |
+					CharKind::Underscore |
+					CharKind::Punctuation (_) |
+					CharKind::Whitespace |
+					CharKind::Invalid |
+					CharKind::DoubleQuote
+						=> parsed_char.ch(),
+						
+					CharKind::SingleQuote |
+					CharKind::NewLine |
+					CharKind::Control
+						=> return Err( TokenErr::Construct (parsed_char) ),
+			},
+			None => return Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
+		};
+		
+		match self.iter.next() {
+			Some(parsed_char) => match parsed_char.kind() {
+				CharKind::SingleQuote => {
+					Ok( Token::new(pos_begin, parsed_char.pos(), TokenContent::CharLiteral (ch)) )
+				},
+				_ => Err( TokenErr::Construct (parsed_char) ),
+			},
+			None => return Err( TokenErr::EndReached { pos: self.iter.last_pos() } ),
 		}
 	}
 
@@ -315,7 +412,7 @@ impl TokensIter {
 							}
 						};
 						
-						Ok( Token::new(first_char.pos(), last_char.pos(), TokenContent::StatementOp ( StatementOp::Comment (content) )) )
+						Ok( Token::new(first_char.pos(), last_char.pos(), TokenContent::Comment (content)) )
 					},
 					_ => Ok( Token::new(first_char.pos(), first_char.pos(), TokenContent::Operator ( Operator::Div )) ),
 				},
@@ -390,27 +487,12 @@ impl TokensIter {
 		}
 	}
 
-	fn expect(actual_token: Token, expected_tc: TokenContent) -> Result<(), TokenErr> {
-		if *actual_token.content() == expected_tc {
-			Ok(())
-		} else {
-			Err( TokenErr::ExpectedButFound {
-				expected: vec![expected_tc], 
-				found: actual_token,
-			} )
-		}
-	}
-}
-
-impl Iterator for TokensIter {
-	type Item = Result<Token, TokenErr>;
-	
-	fn next(&mut self) -> Option<Self::Item> {
+	fn parse_next_token(&mut self) -> Option<Result<Token, TokenErr>> {
 		if let Some(token) =  self.peeked_tokens.pop_front() {
 			return Some(Ok(token));
 		}
 		
-		for ch in self.iter.by_ref() {			
+		for ch in self.iter.by_ref() {
 			let token_result = match ch.kind() {
 				CharKind::Digit (_) | CharKind::Dot => self.parse_number_or_dot(ch),
 				
@@ -424,12 +506,16 @@ impl Iterator for TokensIter {
 						=> self.parse_operator_or_comment_or_thin_arrow(ch),
 						
 				CharKind::DoubleQuote => self.parse_string_literal(ch.pos()),
+				CharKind::SingleQuote => self.parse_char_literal(ch.pos()),
 				
 				CharKind::LeftBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Left )) ),
 				CharKind::RightBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::Right )) ),
 				
 				CharKind::LeftCurlyBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::LeftCurly )) ),
 				CharKind::RightCurlyBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::RightCurly )) ),
+				
+				CharKind::LeftSquaredBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::LeftSquared )) ),
+				CharKind::RightSquaredBracket => Ok( Token::new(ch.pos(), ch.pos(), TokenContent::Bracket ( Bracket::RightSquared )) ),
 				
 				CharKind::Letter 
 					| CharKind::Underscore 
@@ -454,6 +540,23 @@ impl Iterator for TokensIter {
 		}
 		
 		None
+	}
+}
+
+impl Iterator for TokensIter {
+	type Item = Result<Token, TokenErr>;
+	
+	// skips Comment tokens
+	fn next(&mut self) -> Option<Self::Item> {
+		loop {
+			match self.parse_next_token()? {
+				Ok(token) => match token.content() {
+					TokenContent::Comment(_) => {},
+					_ => break Some(Ok(token)),
+				},
+				Err(err) => break Some(Err(err)),
+			}
+		}
 	}
 }
 
@@ -489,12 +592,14 @@ impl std::fmt::Display for Token {
 pub enum TokenContent {
 	Number (f32),
 	StringLiteral (String),
+	CharLiteral (char),
 	Name (String),
 	BuiltinName (String),
 	Operator (Operator),
 	Bracket (Bracket),
 	StatementOp (StatementOp),
 	Keyword (Keyword),
+	Comment (String),
 }
 
 impl std::fmt::Display for TokenContent {
@@ -502,6 +607,7 @@ impl std::fmt::Display for TokenContent {
 		match self {
 			TokenContent::Number (val) => write!(f, "'{}'", val),
 			TokenContent::StringLiteral (val) => write!(f, "\"{}\"", val),
+			TokenContent::CharLiteral (val) => write!(f, "'{}'", val),
 			TokenContent::Operator (op) => match op {
 				Operator::Plus => write!(f, "'{}'", "+"),
 				Operator::Minus => write!(f, "'{}'", "-"),
@@ -525,6 +631,8 @@ impl std::fmt::Display for TokenContent {
 				Bracket::Right => write!(f, "'{}'", ")"),
 				Bracket::LeftCurly => write!(f, "'{}'", "{{"),
 				Bracket::RightCurly => write!(f, "'{}'", "}}"),
+				Bracket::LeftSquared => write!(f, "'{}'", "["),
+				Bracket::RightSquared => write!(f, "'{}'", "]"),
 			},
 			TokenContent::Name (name) => write!(f, "'{}'", name),
 			TokenContent::BuiltinName (name) => write!(f, "'{}'", name),
@@ -532,7 +640,6 @@ impl std::fmt::Display for TokenContent {
 				StatementOp::Colon => write!(f, "'{}'", ":"),
 				StatementOp::Semicolon => write!(f, "'{}'", ";"),
 				StatementOp::Comma => write!(f, "'{}'", ","),
-				StatementOp::Comment (content) => write!(f, "Comment //'{}'", content),
 				StatementOp::ThinArrow => write!(f, "->"),
 				StatementOp::Dot => write!(f, "."),
 			},
@@ -547,6 +654,7 @@ impl std::fmt::Display for TokenContent {
 				Keyword::True => write!(f, "'{}'", "True"),
 				Keyword::False => write!(f, "'{}'", "False"),
 			},
+			TokenContent::Comment (content) => write!(f, "Comment //'{}'", content),
 		}
 	}
 }
@@ -554,12 +662,20 @@ impl std::fmt::Display for TokenContent {
 impl PartialEq for TokenContent {
 	fn eq(&self, other: &Self) -> bool {
 		match self {
+			TokenContent::Comment (c1) => match other {
+				TokenContent::Comment (c2) => c1 == c2,
+				_ => false,
+			},
 			TokenContent::Number (f1) => match other {
 				TokenContent::Number (f2) => (f1 - f2).abs() <= std::f32::EPSILON,
 				_ => false,
 			},
 			TokenContent::StringLiteral (s1) => match other {
 				TokenContent::StringLiteral (s2) => s1 == s2,
+				_ => false,
+			},
+			TokenContent::CharLiteral (c1) => match other {
+				TokenContent::CharLiteral (c2) => c1 == c2,
 				_ => false,
 			},
 			TokenContent::Operator (op1) => match other {
@@ -619,6 +735,8 @@ pub enum Bracket {
 	Right,
 	LeftCurly,
 	RightCurly,
+	LeftSquared,
+	RightSquared,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -627,7 +745,6 @@ pub enum StatementOp {
 	Semicolon,
 	Comma,
 	Dot,
-	Comment (String),
 	ThinArrow,
 }
 
@@ -690,6 +807,18 @@ mod tests {
 			}
 		};
 		
+		// Doesn't yield comment tokens by default
+		let mut tokens_iter = TokensIter::new();
+		tokens_iter.push_string("//23rwrer2".to_string());
+					
+		assert_eq!(tokens_iter.next(), None);
+		
+		match tokens_iter.next_or_end_reached_err().unwrap_err() {
+			TokenErr::EndReached { .. } => {},
+			err @ _ => panic!("Unexpected err: {:?}", err),
+		}
+		
+		// But yields other tokens
 		test_token_content_detection("123", TokenContent::Number (123_f32));
 		test_token_content_detection("123.456", TokenContent::Number (123.456_f32));
 		test_token_content_detection("123.", TokenContent::Number (123_f32));
@@ -703,13 +832,14 @@ mod tests {
 		test_token_content_detection(")", TokenContent::Bracket (Bracket::Right));
 		test_token_content_detection("{", TokenContent::Bracket (Bracket::LeftCurly));
 		test_token_content_detection("}", TokenContent::Bracket (Bracket::RightCurly));
+		test_token_content_detection("[", TokenContent::Bracket (Bracket::LeftSquared));
+		test_token_content_detection("]", TokenContent::Bracket (Bracket::RightSquared));
 		test_token_content_detection("=", TokenContent::Operator (Operator::Assign));
 		test_token_content_detection("var1", TokenContent::Name (String::from("var1")));
 		test_token_content_detection(":", TokenContent::StatementOp (StatementOp::Colon));
 		test_token_content_detection(";", TokenContent::StatementOp (StatementOp::Semicolon));
 		test_token_content_detection(",", TokenContent::StatementOp (StatementOp::Comma));
 		test_token_content_detection(".", TokenContent::StatementOp (StatementOp::Dot));
-		test_token_content_detection("//23rwrer2", TokenContent::StatementOp (StatementOp::Comment (String::from("23rwrer2"))));
 		test_token_content_detection("->", TokenContent::StatementOp (StatementOp::ThinArrow));
 		test_token_content_detection("var", TokenContent::Keyword ( Keyword::Var ));
 		test_token_content_detection("struct", TokenContent::Keyword ( Keyword::Struct ));
@@ -734,7 +864,7 @@ mod tests {
 	#[test]
 	pub fn can_parse_multiple_tokens() {
 		let mut tokens_iter = TokensIter::new();
-		tokens_iter.push_string("1+23.4-45.6*7.8/9 f return var struct var_1var\"vasya\">>=<<===!=!land lor lxor:;,->(){}if else while//sdsdfd".to_string());
+		tokens_iter.push_string("1+23.4-45.6*7.8/9 f return var struct var_1var\"vasya\">>=<<===!=!land lor lxor:;,->(){}[]if else while//sdsdfd".to_string());
 		
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Number (1_f32));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Operator (Operator::Plus));
@@ -769,10 +899,15 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Right));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftCurly));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightCurly));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftSquared));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightSquared));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::If ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Else ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::While ));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from("sdsdfd"))));
+		
+		// Doesn't yield comment tokens by default
+		//assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Comment (String::from("sdsdfd")));
+		
 		assert_eq!(tokens_iter.next(), None);
 		
 		let mut tokens_iter = TokensIter::new();
@@ -847,8 +982,9 @@ mod tests {
 		(
 		)
 		{
-			
 		}
+		[
+		]
 		if
 		else
 		while
@@ -888,10 +1024,15 @@ mod tests {
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::Right));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftCurly));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightCurly));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::LeftSquared));
+		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Bracket (Bracket::RightSquared));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::If ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::Else ));
 		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Keyword ( Keyword::While ));
-		assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::StatementOp (StatementOp::Comment (String::from(" sdfsdfs "))));
+		
+		// Doesn't yield comment tokens by default
+		// assert_eq!(*tokens_iter.next().unwrap().unwrap().content(), TokenContent::Comment (String::from(" sdfsdfs ")));
+		
 		assert_eq!(tokens_iter.next(), None);
 	}
 }

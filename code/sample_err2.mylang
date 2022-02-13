@@ -1,11 +1,11 @@
 @print("Must print 'Hello, world!':");
-var s1: str = "Hello,";
-var s2: str = " world!";
+var s1: @str = "Hello,";
+var s2: @str = " world!";
 @print(s1 + s2);
 
 @print("Must print '11':");
-var f1: f32 = 3;
-var f2: f32 = 4;
+var f1: @f32 = 3;
+var f2: @f32 = 4;
 @print(f1 + f2 * 2);
 
-var fs: str = s1 + s3;
+var fs: @str = s1 + s3;

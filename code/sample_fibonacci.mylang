@@ -1,46 +1,46 @@
-f fib_slow(n: f32) -> f32 {		
-	if n == 0 {
+f fib_slow(n: @f32) -> @f32 {		
+	if (n == 0) {
 		return 0;
-	} else if n == 1 {
+	} else if (n == 1) {
 		return 1;
 	} else {
 		return fib_slow(n - 1) + fib_slow(n - 2);
 	}
 }
 
-var i: f32 = 0;
+var i: @f32 = 0;
 
-var max: f32 = @str_to_f32(@input("How many to print? "));
+var max: @f32 = @str_to_f32(@input("How many to print? "));
 
-if max > 30 {
+if (max > 30) {
 	@println("Too much(((");
 	@exit();
 }
 
-var ok: bool = False;
-var ans: str;
-while !ok {
+var ok: @bool = False;
+var ans: @str = "";
+while (!ok) {
 	ans = @input("Slow or fast? s/f ");
-	if ans == "s" lor ans == "f" {
+	if (ans == "s" lor ans == "f") {
 		ok = True;
 	} else {
 		@println("Wrong input");
 	}
 }
 
-if ans == "s" {
-	while i < max {
+if (ans == "s") {
+	while (i < max) {
 		@println(fib_slow(i));
 		i = i + 1;
 	}
 } else {
-	var i: f32 = 0;
-	var n1: f32 = 0;
-	var n2: f32 = 1;
+	var i: @f32 = 0;
+	var n1: @f32 = 0;
+	var n2: @f32 = 1;
 	
-	while i < max {
+	while (i < max) {
 		@println(n1);
-		var tmp: f32 = n1;
+		var tmp: @f32 = n1;
 		n1 = n2;
 		n2 = tmp + n2;
 		i = i + 1;

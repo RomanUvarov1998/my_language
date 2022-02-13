@@ -1,15 +1,15 @@
 @print("Must print 'Hello, world!':");
-var s1: str = "Hello,";
-var s2: str = " world!";
+var s1: @str = "Hello,";
+var s2: @str = " world!";
 @print(s1 + s2);
 
 @print("Must print '11':");
-var f1: f32 = 3;
-var f2: f32 = 4;
+var f1: @f32 = 3;
+var f2: @f32 = 4;
 @print(f1 + f2 * 2);
 
 // Check expression end
-var a: f32 = 2 + 3 * 4 + 5) + 3;
+var a: @f32 = 2 + 3 * 4 + 5) + 3;
 @print("a = ");
 @print(a);
 

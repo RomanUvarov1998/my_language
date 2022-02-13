@@ -1,0 +1,51 @@
+struct Age {
+	years: @f32,
+	months: @f32,
+}
+
+var st: Age = Age { years: 23, months: 1, };
+
+@println(st.years);
+@println(st.months);
+
+st.years = 4;
+st.months = 5;
+
+@println("-------");
+@println(st.years);
+@println(st.months);
+
+struct Human {
+	age: Age,
+	name: @str,
+}
+
+var st2: Human = Human { 
+	age: Age {
+		years: 25,
+		months: 3,
+	}, 
+	name: "Roma",
+};
+
+@println("------------------");
+@println(st2.name);
+@println(st2.age.years);
+@println(st2.age.months);
+
+st2.age.years = 18;
+st2.age.months = 8;
+st2.name = "Tima";
+
+@println("-------");
+@println(st2.name);
+@println(st2.age.years);
+@println(st2.age.months);
+
+st2.age = Age { years: 4, months: 12, };
+st2.name = "Demid";
+
+@println("-------");
+@println(st2.name);
+@println(st2.age.years);
+@println(st2.age.months);

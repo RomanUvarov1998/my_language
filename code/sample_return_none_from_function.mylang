@@ -1,7 +1,7 @@
-f check(a: f32) {
-	if a > 10 {
-		if a > 20 {
-			if a > 30 {
+f check(a: @f32) {
+	if (a > 10) {
+		if (a > 20) {
+			if (a > 30) {
 				@println("a > 30!");
 				return;
 			}
@@ -17,7 +17,7 @@ f say_hello() {
 	@println("Hello!");
 }
 
-var a: f32 = @str_to_f32(@input("Give a: "));
+var a: @f32 = @str_to_f32(@input("Give a: "));
 check(a);
 
 say_hello();

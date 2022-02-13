@@ -1,9 +1,0 @@
-// 'if-else' statement:
-var c1: f32 = 3;
-var c2: f32 = 4;
-
-if 1 > 2 {
-	@print("Greater");
-} else {
-	@print("Smaller");
-}

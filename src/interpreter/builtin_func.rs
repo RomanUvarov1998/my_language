@@ -1,22 +1,77 @@
-use super::data_type::{DataType, Primitive};
+use super::data_type::{DataType, BuiltinType};
 use super::value::Value;
 use super::InterpErr;
 use super::utils::{CodePos, NameToken};
 use super::expr::Expr;
 use super::context::Context;
+use std::rc::Rc;
 
 //------------------------- BuiltinFuncDef -----------------------
 
-pub type BuiltinFuncBody = Box<dyn Fn(Vec<Value>) -> Option<Value>>;
+pub type BuiltinFuncBody = Box<dyn Fn(Vec<Value>) -> Value>;
 
 pub struct BuiltinFuncDef {
+	inner: Rc<BuiltinFuncDefInner>,
+}
+
+impl BuiltinFuncDef {
+	pub fn new(name: &'static str, args: Vec<BuiltinFuncArg>, body: BuiltinFuncBody, return_type: DataType) -> Self {
+		Self {
+			inner: Rc::new(BuiltinFuncDefInner::new(name, args, body, return_type)),
+		}
+	}
+	
+	pub fn check_args(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
+		self.inner.check_args(func_name, args_exprs, check_context)
+	}
+	
+	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value_type: &DataType, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
+		self.inner.check_args_as_member_function(func_name, args_exprs, value_type, caller_pos, check_context)
+	}
+	
+	pub fn name(&self) -> &'static str {
+		self.inner.name
+	}
+	
+	pub fn return_type(&self) -> &DataType {
+		&self.inner.return_type
+	}
+	
+	pub fn call(&self, args_values: Vec<Value>) -> Value {
+		(self.inner.body)(args_values)
+	}
+}
+
+impl Clone for BuiltinFuncDef {
+	fn clone(&self) -> Self {
+		Self {
+			inner: Rc::clone(&self.inner),
+		}
+	}
+}
+
+impl std::fmt::Display for BuiltinFuncDef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{}", *self.inner)
+	}
+}
+
+impl std::fmt::Debug for BuiltinFuncDef {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{:?}", *self.inner)
+	}
+}
+
+//------------------------- BuiltinFuncDefInner -----------------------
+
+struct BuiltinFuncDefInner {
 	name: &'static str,
 	args: Vec<BuiltinFuncArg>,
 	body: BuiltinFuncBody,
 	return_type: DataType,
 }
 
-impl BuiltinFuncDef {
+impl BuiltinFuncDefInner {
 	pub fn new(name: &'static str, args: Vec<BuiltinFuncArg>, body: BuiltinFuncBody, return_type: DataType) -> Self {
 		Self {
 			name,
@@ -28,90 +83,79 @@ impl BuiltinFuncDef {
 	
 	pub fn check_args(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() {
-			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt {
+			return Err( BuiltinFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
 				func_name_pos: func_name.pos(),
 				actual_cnt: self.args.len(),
 				given_cnt: args_exprs.len(),
-			} ) );
+			}.into() );
 		}
 						
 		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
-			.map(|expr| expr.check_and_calc_data_type(check_context))
+			.map(|expr| expr.check_as_rhs_and_calc_data_type(check_context))
 			.collect();
 			
 		let args_data_types: Vec<DataType> = args_data_types_result?;
 		
 		for i in 0..self.args.len() {
 			if !self.args[i].type_check(&args_data_types[i]) {
-				return Err( InterpErr::from( BuiltinFuncErr::ArgType {
+				return Err( BuiltinFuncErr::ArgType {
 					func_signature: format!("{}", self),
 					arg_name: self.args[i].name.clone(),
 					arg_expr_pos: args_exprs[i].pos(),
 					actual_type: self.args[i].data_type.clone(),
 					given_type: args_data_types[i].clone(),
-				} ) );
+				}.into() );
 			}
 		}
 		
 		Ok(())
 	}
 	
-	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value: &Value, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
+	pub fn check_args_as_member_function(&self, func_name: &NameToken, args_exprs: &Vec<Expr>, value_type: &DataType, caller_pos: CodePos, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() + 1 {
-			return Err( InterpErr::from( BuiltinFuncErr::ArgsCnt {
+			return Err( BuiltinFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
 				func_name_pos: func_name.pos(),
 				actual_cnt: self.args.len(),
 				given_cnt: args_exprs.len() + 1,
-			} ) );
+			}.into() );
 		}
 						
 		let args_data_types_result: Result<Vec<DataType>, InterpErr> = args_exprs.iter()
-			.map(|expr| expr.check_and_calc_data_type(check_context))
+			.map(|expr| expr.check_as_rhs_and_calc_data_type(check_context))
 			.collect();
 			
-		let args_data_types: Vec<DataType> = args_data_types_result?;
+		let mut args_data_types: Vec<DataType> = args_data_types_result?;
+		args_data_types.insert(0, value_type.clone());
 		
-		if value.get_type().ne(&self.args[0].data_type) {
-			return Err( InterpErr::from( BuiltinFuncErr::ArgType {
+		if value_type.ne(&self.args[0].data_type) {
+			return Err( BuiltinFuncErr::ArgType {
 				func_signature: format!("{}", self),
 				arg_name: String::from("value itself"),
 				arg_expr_pos: caller_pos,
 				actual_type: self.args[0].data_type.clone(),
-				given_type: value.get_type().clone(),
-			} ) );
+				given_type: value_type.clone(),
+			}.into() );
 		}
 		
 		for i in 1..self.args.len() {
 			if !self.args[i].type_check(&args_data_types[i]) {
-				return Err( InterpErr::from( BuiltinFuncErr::ArgType {
+				return Err( BuiltinFuncErr::ArgType {
 					func_signature: format!("{}", self),
 					arg_name: self.args[i].name.clone(),
 					arg_expr_pos: args_exprs[i].pos(),
 					actual_type: self.args[i].data_type.clone(),
 					given_type: args_data_types[i].clone(),
-				} ) );
+				}.into() );
 			}
 		}
 		
 		Ok(())
 	}
-	
-	pub fn name(&self) -> &'static str {
-		self.name
-	}
-	
-	pub fn return_type(&self) -> &DataType {
-		&self.return_type
-	}
-	
-	pub fn call(&self, args_values: Vec<Value>) -> Option<Value> {
-		(self.body)(args_values)
-	}
 }
 
-impl std::fmt::Display for BuiltinFuncDef {
+impl std::fmt::Display for BuiltinFuncDefInner {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "f {}(", self.name)?;
 		let mut need_comma_before = false;
@@ -128,7 +172,7 @@ impl std::fmt::Display for BuiltinFuncDef {
 	}
 }
 
-impl std::fmt::Debug for BuiltinFuncDef {
+impl std::fmt::Debug for BuiltinFuncDefInner {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("BuiltinFuncDef")
 		 .field("name", &self.name)
@@ -137,6 +181,7 @@ impl std::fmt::Debug for BuiltinFuncDef {
 		 .finish()
 	}
 }
+
 
 //------------------------- BuiltinFuncArg -----------------------
 
@@ -156,7 +201,7 @@ impl BuiltinFuncArg {
 	
 	pub fn type_check(&self, data_type: &DataType) -> bool {
 		match &self.data_type {
-			DataType::Primitive (Primitive::Any) => true,
+			DataType::Builtin (BuiltinType::Any) => true,
 			_ => self.data_type.eq(data_type),
 		}
 	}

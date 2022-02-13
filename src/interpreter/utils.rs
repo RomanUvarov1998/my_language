@@ -1,12 +1,13 @@
 use super::token::{Token, TokenContent, TokenErr};
-use super::string_char::CharKind;
 use super::InterpErr;
+use std::collections::HashMap;
 
 //--------------------- NameToken --------------------------
 
 #[derive(Debug, Clone)]
 pub struct NameToken {
 	pub name: String,
+	pub is_builtin: bool,
 	pub pos: CodePos,
 }
 
@@ -14,28 +15,38 @@ impl NameToken {
 	pub fn from_or_err(tok: Token) -> Result<Self, InterpErr> {
 		let pos = tok.pos();
 		match tok {
-			Token { content: TokenContent::Name (name), .. }
-				| Token { content: TokenContent::BuiltinName (name), .. } => 
-			Ok( NameToken {
-				name,
-				pos,
-			} ),
-			found @ _ => return Err( InterpErr::from( TokenErr::ExpectedButFound {
+			Token { content: TokenContent::Name (name), .. } => 
+				Ok( NameToken {
+					is_builtin: false,
+					name,
+					pos,
+				} ),
+				
+			Token { content: TokenContent::BuiltinName (name), .. } => 
+				Ok( NameToken {
+					is_builtin: true,
+					name,
+					pos,
+				} ),
+				
+			found @ _ => return Err(TokenErr::ExpectedButFound {
 							expected: vec![TokenContent::Name ("<name>".to_string())], 
 							found,
-						} ) ),
+						}.into()),
 		}
 	}
 	
-	pub fn new_with_pos(name: String, pos: CodePos) -> Self {
+	pub fn new_with_pos(name: String, pos: CodePos, is_builtin: bool) -> Self {
 		Self {
 			name,
+			is_builtin,
 			pos,
 		}
 	}
 	
 	pub fn value(&self) -> &str { &self.name }
 	pub fn pos(&self) -> CodePos { self.pos }
+	pub fn is_builtin(&self) -> bool { self.is_builtin }
 }
 
 impl std::fmt::Display for NameToken {
@@ -46,7 +57,7 @@ impl std::fmt::Display for NameToken {
 
 impl PartialEq for NameToken {
 	fn eq(&self, other: &Self) -> bool {
-		self.value() == other.value()
+		self.value() == other.value() && self.is_builtin() == other.is_builtin()
 	}
 }
 impl Eq for NameToken {}
@@ -106,16 +117,12 @@ impl CharPos {
 	pub fn line(&self) -> usize { self.line }
 	pub fn col(&self) -> usize { self.col }
 	
-	pub fn advance(&mut self, ch_kind: CharKind) {
-		match ch_kind {
-			CharKind::NewLine => {
-				self.col = 0;
-				self.line += 1;
-			},
-			_ => {
-				self.col += 1;
-			},
-		}
+	pub fn advance_col(&mut self) {
+		self.col += 1;
+	}
+	pub fn advance_line(&mut self) {
+		self.col = 0;
+		self.line += 1;
 	}
 }
 
@@ -141,5 +148,28 @@ impl std::cmp::Ord for CharPos {
 impl std::fmt::Display for CharPos {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		write!(f, "{}:{}", self.line, self.col)
+	}
+}
+
+//------------------------------ HashMapTrait ----------------------------
+
+pub trait HashMapInsertPanic<K, V>
+where
+	K: std::fmt::Display + Eq + std::hash::Hash,
+	V: std::fmt::Debug
+{
+	fn insert_assert_not_replace(&mut self, key: K, value: V);
+}
+
+impl<K, V> HashMapInsertPanic<K, V> for HashMap<K, V>
+where
+	K: std::fmt::Display + Eq + std::hash::Hash,
+	V: std::fmt::Debug
+{
+	fn insert_assert_not_replace(&mut self, key: K, value: V) {
+		if let Some(old_value) = self.get(&key) {
+			panic!("HashMap for key {}, already contains value {:#?}", key, old_value);
+		}
+		self.insert(key, value);
 	}
 }

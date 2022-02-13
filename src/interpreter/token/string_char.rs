@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use super::utils::CharPos;
+use super::super::utils::CharPos;
 
 //------------------------------ CharsIter ----------------------------
 
@@ -53,7 +53,13 @@ impl Iterator for CharsIter {
 			for ch in cur_string.chars() {
 				let ch_kind = CharKind::from(ch);
 				self.chars_queue.push_back(ParsedChar::new(ch, ch_kind, self.pos));
-				self.pos.advance(ch_kind);
+				
+				match ch_kind {
+					CharKind::NewLine => 
+						self.pos.advance_line(),
+					_ => 
+						self.pos.advance_col(),
+				}
 			}
 		}
 			
@@ -93,11 +99,14 @@ impl std::fmt::Display for ParsedChar {
 			CharKind::Asterisk => write!(f, "*"),
 			CharKind::Circumflex => write!(f, "^"),
 			CharKind::DoubleQuote => write!(f, "\""),
+			CharKind::SingleQuote => write!(f, "'"),
 			CharKind::LeftSlash => write!(f, "/"),
 			CharKind::LeftBracket => write!(f, "("),
 			CharKind::RightBracket => write!(f, ")"),
 			CharKind::LeftCurlyBracket => write!(f, "{{"),
 			CharKind::RightCurlyBracket => write!(f, "}}"),
+			CharKind::LeftSquaredBracket => write!(f, "["),
+			CharKind::RightSquaredBracket => write!(f, "]"),
 			CharKind::Eq => write!(f, "="),
 			CharKind::Letter => write!(f, "{}", self.ch()),
 			CharKind::Underscore => write!(f, "{}", self.ch()),
@@ -129,11 +138,14 @@ pub enum CharKind {
 	Circumflex,
 	Exclamation,
 	DoubleQuote,
+	SingleQuote,
 	LeftSlash,
 	LeftBracket,
 	RightBracket,
 	LeftCurlyBracket,
 	RightCurlyBracket,
+	LeftSquaredBracket,
+	RightSquaredBracket,
 	Eq,
 	Letter,
 	Underscore,
@@ -157,11 +169,14 @@ impl From<char> for CharKind {
 			'^' => CharKind::Circumflex,
 			'!' => CharKind::Exclamation,
 			'\"' => CharKind::DoubleQuote,
+			'\'' => CharKind::SingleQuote,
 			'/' => CharKind::LeftSlash,
 			'(' => CharKind::LeftBracket,
 			')' => CharKind::RightBracket,
 			'{' => CharKind::LeftCurlyBracket,
 			'}' => CharKind::RightCurlyBracket,
+			'[' => CharKind::LeftSquaredBracket,
+			']' => CharKind::RightSquaredBracket,
 			'=' => CharKind::Eq,
 			' ' | '\t' => CharKind::Whitespace,
 			'\n' => CharKind::NewLine,

@@ -1,0 +1,3 @@
+var a: @str = "Hello!";
+a[1] = "F";
+@println(a);
