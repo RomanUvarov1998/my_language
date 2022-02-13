@@ -1,7 +1,7 @@
 mod expr;
 mod string_char;
 mod token;
-mod parsed_statement;
+mod statement;
 mod var_data;
 mod data_type;
 mod value;
@@ -12,7 +12,7 @@ mod utils;
 mod context;
 mod primitive_type_member_funcs_list;
 
-use parsed_statement::{ParsedStatementsIter, ParsedStatement, ParsedStatementErr};
+use statement::{StatementsIter, Statement, StatementErr};
 use builtin_func::{BuiltinFuncDef, BuiltinFuncArg, BuiltinFuncBody, BuiltinFuncErr};
 use user_func::UserFuncErr;
 use var_data::VarErr;
@@ -26,7 +26,7 @@ use struct_def::StructDefErr;
 //------------------------ Interpreter --------------------
 
 pub struct Interpreter {
-	statements_iter: ParsedStatementsIter,
+	statements_iter: StatementsIter,
 	builtin_func_defs: Vec<BuiltinFuncDef>,
 	primitive_type_member_funcs_list: PrimitiveTypeMemberFuncsList,
 }
@@ -104,7 +104,7 @@ impl Interpreter {
 		));
 		
 		Self {
-			statements_iter: ParsedStatementsIter::new(),
+			statements_iter: StatementsIter::new(),
 			builtin_func_defs,
 			primitive_type_member_funcs_list: PrimitiveTypeMemberFuncsList::new(),
 		}
@@ -113,13 +113,13 @@ impl Interpreter {
 	pub fn check_and_run(&mut self, code: &str) -> Result<(), InterpErr> {
 		self.statements_iter.push_string(code.to_string());
 		
-		let mut statements = Vec::<ParsedStatement>::new();
+		let mut statements = Vec::<Statement>::new();
 		let mut check_context = Context::new(
 			&self.builtin_func_defs, 
 			&self.primitive_type_member_funcs_list);
 	
 		while let Some(statement_result) = self.statements_iter.next() {
-			let st: ParsedStatement = statement_result?;
+			let st: Statement = statement_result?;
 			st.check(&mut check_context)?;
 			statements.push(st);
 		}
@@ -152,7 +152,7 @@ pub enum InnerErr {
 	Var (VarErr),
 	BuiltinFunc (BuiltinFuncErr),
 	UserFunc (UserFuncErr),
-	Statement (ParsedStatementErr),
+	Statement (StatementErr),
 	StructDef (StructDefErr),
 }
 
@@ -295,27 +295,27 @@ impl From<UserFuncErr> for InterpErr {
 	}
 }
 
-impl From<ParsedStatementErr> for InterpErr {
-	fn from(err: ParsedStatementErr) -> InterpErr {
+impl From<StatementErr> for InterpErr {
+	fn from(err: StatementErr) -> InterpErr {
 		let descr: String = format!("{}", err);
 
 		match err {
-			ParsedStatementErr::UnfinishedBody (pos) => InterpErr {
+			StatementErr::UnfinishedBody (pos) => InterpErr {
 				pos: CodePos::from(pos),
 				descr,
 				inner: InnerErr::Statement (err),
 			},
-			ParsedStatementErr::IfConditionType { pos } => InterpErr {
+			StatementErr::IfConditionType { pos } => InterpErr {
 				pos,
 				descr,
 				inner: InnerErr::Statement (err),
 			},
-			ParsedStatementErr::UserFuncReturnType { return_expr_pos, .. } => InterpErr {
+			StatementErr::UserFuncReturnType { return_expr_pos, .. } => InterpErr {
 				pos: return_expr_pos,
 				descr,
 				inner: InnerErr::Statement (err),
 			},
-			ParsedStatementErr::UserFuncNotAllFuncPathsReturn { last_statement_pos } => InterpErr {
+			StatementErr::UserFuncNotAllFuncPathsReturn { last_statement_pos } => InterpErr {
 				pos: last_statement_pos,
 				descr,
 				inner: InnerErr::Statement (err),
@@ -454,7 +454,7 @@ mod tests {
 		} 
 		@print("end");
 		"#) {
-			Err(InterpErr { inner: InnerErr::Statement(ParsedStatementErr::IfConditionType { .. }), .. } ) => {},
+			Err(InterpErr { inner: InnerErr::Statement(StatementErr::IfConditionType { .. }), .. } ) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 	}
@@ -497,7 +497,7 @@ f add2(a: f32, b: f32) -> f32 {
 	}
 }
 		"#) {
-			Err(InterpErr { inner: InnerErr::Statement (ParsedStatementErr::UserFuncNotAllFuncPathsReturn { .. } ), .. } ) => {},
+			Err(InterpErr { inner: InnerErr::Statement (StatementErr::UserFuncNotAllFuncPathsReturn { .. } ), .. } ) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 		
@@ -518,7 +518,7 @@ f add2(a: f32, b: f32) -> f32 {
 	}
 }
 		"#) {
-			Err(InterpErr { inner: InnerErr::Statement (ParsedStatementErr::UserFuncNotAllFuncPathsReturn { .. }), .. } ) => {},
+			Err(InterpErr { inner: InnerErr::Statement (StatementErr::UserFuncNotAllFuncPathsReturn { .. }), .. } ) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 		
@@ -540,7 +540,7 @@ f add2(a: f32, b: f32) -> f32 {
 	}
 }
 		"#) {
-			Err(InterpErr { inner: InnerErr::Statement (ParsedStatementErr::UserFuncNotAllFuncPathsReturn { .. }), .. } ) => {},
+			Err(InterpErr { inner: InnerErr::Statement (StatementErr::UserFuncNotAllFuncPathsReturn { .. }), .. } ) => {},
 			res @ _ => panic!("Wrong result: {:?}", res),
 		}
 		

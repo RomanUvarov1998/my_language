@@ -3,7 +3,7 @@ use super::value::Value;
 use super::InterpErr;
 use super::utils::{CodePos, NameToken};
 use super::expr::Expr;
-use super::parsed_statement::ReturningBody;
+use super::statement::ReturningBody;
 use super::context::Context;
 
 //------------------------- UserFuncDef -----------------------

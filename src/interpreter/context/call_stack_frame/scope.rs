@@ -3,7 +3,7 @@ use super::super::super::data_type::DataType;
 use super::super::super::var_data::{VarData, VarErr};
 use super::super::super::user_func::{UserFuncErr, UserFuncDef, UserFuncArg};
 use super::super::super::utils::NameToken;
-use super::super::super::parsed_statement::ReturningBody;
+use super::super::super::statement::ReturningBody;
 
 #[derive(Debug)]
 pub struct Scope {
