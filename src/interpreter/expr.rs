@@ -10,14 +10,14 @@ use super::context::Context;
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct ParsedExpr {
+pub struct Expr {
 	expr_stack: Rc<Vec<Symbol>>,
 	pos: CodePos,
 }
 
-impl ParsedExpr {	
-	pub fn new(tokens_iter: &mut TokensIter, context_kind: ParsedExprContextKind) -> Result<Self, InterpErr> {
-		let context = ParsedExprContext::new(context_kind);
+impl Expr {	
+	pub fn new(tokens_iter: &mut TokensIter, context_kind: ExprContextKind) -> Result<Self, InterpErr> {
+		let context = ExprContext::new(context_kind);
 		let expr_stack = Self::create_stack(tokens_iter, context)?;
 		
 		let mut pos_begin: CharPos = expr_stack[0].pos().begin();
@@ -97,7 +97,7 @@ impl ParsedExpr {
 		self.pos
 	}
 	
-	fn create_stack(tokens_iter: &mut TokensIter, mut context: ParsedExprContext) -> Result<Vec<Symbol>, InterpErr> {
+	fn create_stack(tokens_iter: &mut TokensIter, mut context: ExprContext) -> Result<Vec<Symbol>, InterpErr> {
 		let mut tmp_stack = Vec::<Symbol>::new();
 		let mut expr_stack = Vec::<Symbol>::new();
 		let mut prev_is_operand = false;
@@ -319,15 +319,15 @@ impl ParsedExpr {
 			TokenContent::Bracket (Bracket::Left) => {
 				tokens_iter.next_or_end_reached_err().unwrap();
 				
-				let mut arg_exprs = Vec::<ParsedExpr>::new();
+				let mut arg_exprs = Vec::<Expr>::new();
 				
 				if let TokenContent::Bracket (Bracket::Right) = tokens_iter.peek_or_end_reached_err()?.content() {
 					tokens_iter.next_or_end_reached_err().unwrap();
 				} else {
 					loop {			
-						arg_exprs.push(ParsedExpr::new(
+						arg_exprs.push(Expr::new(
 							tokens_iter,
-							ParsedExprContextKind::FunctionArg)?);
+							ExprContextKind::FunctionArg)?);
 							
 						match tokens_iter.next_or_end_reached_err()? {
 							Token { content: TokenContent::StatementOp ( StatementOp::Comma ), .. } => {},
@@ -360,15 +360,15 @@ impl ParsedExpr {
 	}
 }
 
-impl Eq for ParsedExpr {}
+impl Eq for Expr {}
 
-impl PartialEq for ParsedExpr {
+impl PartialEq for Expr {
 	fn eq(&self, other: &Self) -> bool {
 		Vec::<Symbol>::eq(&*self.expr_stack, &*other.expr_stack)
 	}
 }
 
-impl Clone for ParsedExpr {
+impl Clone for Expr {
 	fn clone(&self) -> Self {
 		Self {
 			pos: self.pos,
@@ -380,20 +380,20 @@ impl Clone for ParsedExpr {
 //------------------------------- ExprContext ----------------------------------
 
 #[derive(Debug, Clone, Copy)]
-pub enum ParsedExprContextKind {
+pub enum ExprContextKind {
 	ValueToAssign,
 	ToReturn,
 	FunctionArg,
 	IfCondition,
 }
 
-pub struct ParsedExprContext {
-	kind: ParsedExprContextKind,
+pub struct ExprContext {
+	kind: ExprContextKind,
 	left_brackets_count: u32,
 }
 
-impl ParsedExprContext {
-	fn new(kind: ParsedExprContextKind)-> Self {
+impl ExprContext {
+	fn new(kind: ExprContextKind)-> Self {
 		Self {
 			kind,
 			left_brackets_count: 0_u32,
@@ -414,8 +414,8 @@ impl ParsedExprContext {
 				StatementOp::Dot => Ok(false),
 				StatementOp::Colon | StatementOp::Comment (_) | StatementOp::ThinArrow => Err(unexpected(tok.pos())),
 				StatementOp::Comma => match self.kind {
-					ParsedExprContextKind::ValueToAssign | ParsedExprContextKind::IfCondition | ParsedExprContextKind::ToReturn => Err(unexpected(tok.pos())),
-					ParsedExprContextKind::FunctionArg => Ok(true),
+					ExprContextKind::ValueToAssign | ExprContextKind::IfCondition | ExprContextKind::ToReturn => Err(unexpected(tok.pos())),
+					ExprContextKind::FunctionArg => Ok(true),
 				},
 				StatementOp::Semicolon => Ok(true),
 			},
@@ -445,14 +445,14 @@ impl ParsedExprContext {
 						Ok(false)
 					} else {
 						match self.kind {
-							ParsedExprContextKind::ValueToAssign | ParsedExprContextKind::IfCondition | ParsedExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
-							ParsedExprContextKind::FunctionArg => Ok(true),
+							ExprContextKind::ValueToAssign | ExprContextKind::IfCondition | ExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
+							ExprContextKind::FunctionArg => Ok(true),
 						}
 					}
 				},
 				Bracket::LeftCurly => match self.kind {
-					ParsedExprContextKind::IfCondition => Ok(true),
-					ParsedExprContextKind::ValueToAssign | ParsedExprContextKind::FunctionArg | ParsedExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
+					ExprContextKind::IfCondition => Ok(true),
+					ExprContextKind::ValueToAssign | ExprContextKind::FunctionArg | ExprContextKind::ToReturn => Err( unpaired_bracket(br_tok.pos()) ),
 				},
 				_ => Err( unexpected(br_tok.pos()) ),
 			},
@@ -489,7 +489,7 @@ impl Symbol {
 			kind: SymbolKind::Operand( Operand::Variable (name_tok) ),
 		}
 	}
-	fn new_func_call(kind: FuncKind, func_name: NameToken, arg_exprs: Vec<ParsedExpr>) -> Self {
+	fn new_func_call(kind: FuncKind, func_name: NameToken, arg_exprs: Vec<Expr>) -> Self {
 		let pos = func_name.pos();
 		Self {
 			kind: SymbolKind::Operand( Operand::FuncCall {
@@ -553,7 +553,7 @@ enum Operand {
 	FuncCall {
 		kind: FuncKind,
 		func_name: NameToken, 
-		arg_exprs: Vec<ParsedExpr>,
+		arg_exprs: Vec<Expr>,
 	},
 }
 impl Eq for Operand {}
@@ -1581,7 +1581,7 @@ mod tests {
 				func_name: new_name_token("add"),
 				arg_exprs: vec![
 					// arg 1
-					ParsedExpr { 
+					Expr { 
 						pos: zero_pos,
 						expr_stack: Rc::new(vec![
 							Symbol {
@@ -1592,7 +1592,7 @@ mod tests {
 					},
 					
 					// arg 2
-					ParsedExpr {
+					Expr {
 						pos: zero_pos,
 						expr_stack: Rc::new(vec![
 							Symbol {
@@ -1609,7 +1609,7 @@ mod tests {
 				func_name: new_name_token("add"),
 				arg_exprs: vec![
 					// arg 1
-					ParsedExpr { 
+					Expr { 
 						pos: zero_pos,
 						expr_stack: Rc::new(vec![
 							Symbol {
@@ -1620,7 +1620,7 @@ mod tests {
 					},
 					
 					// arg 2
-					ParsedExpr {
+					Expr {
 						pos: zero_pos,
 						expr_stack: Rc::new(vec![
 							Symbol {
@@ -1682,7 +1682,7 @@ mod tests {
 				func_name: new_name_token("foo1"),
 				arg_exprs: vec![
 					// arg 1
-					ParsedExpr {
+					Expr {
 						pos: zero_pos,
 						expr_stack: Rc::new(vec![
 							Symbol { kind: SymbolKind::Operand (Operand::Variable (new_name_token("c"))), pos: zero_pos, },
@@ -1858,9 +1858,9 @@ mod tests {
 		let mut tokens_iter = TokensIter::new();	
 		tokens_iter.push_string(expr_str.to_string());
 		
-		let expr_stack: Vec<Symbol> = ParsedExpr::create_stack(
-			&mut tokens_iter,
-			ParsedExprContext::new(ParsedExprContextKind::ValueToAssign)).unwrap();
+		let expr_stack: Vec<Symbol> = Expr::create_stack(
+			&mut tokens_iter, 
+			ExprContext::new(ExprContextKind::ValueToAssign)).unwrap();
 		
 		let syms_expr_stack: Vec<SymbolKind> = expr_stack.iter().map(|Symbol { kind, .. }| kind.clone()).collect();
 		
@@ -1868,7 +1868,7 @@ mod tests {
 			let mut tokens_iter = TokensIter::new();	
 			tokens_iter.push_string(expr_str.to_string());
 		
-			let expr = ParsedExpr::new(&mut tokens_iter, ParsedExprContextKind::ValueToAssign).unwrap();
+			let expr = Expr::new(&mut tokens_iter, ExprContextKind::ValueToAssign).unwrap();
 			
 			let builtin_func_defs = Vec::<BuiltinFuncDef>::new();
 			let primitive_type_member_funcs_list = PrimitiveTypeMemberFuncsList::new();
@@ -1914,9 +1914,9 @@ mod tests {
 		let mut tokens_iter = TokensIter::new();	
 		tokens_iter.push_string(expr_str.to_string());
 		
-		let expr_stack: Vec<Symbol> = ParsedExpr::create_stack(
+		let expr_stack: Vec<Symbol> = Expr::create_stack(
 			&mut tokens_iter, 
-			ParsedExprContext::new(ParsedExprContextKind::ValueToAssign)).unwrap();
+			ExprContext::new(ExprContextKind::ValueToAssign)).unwrap();
 		
 		let syms_expr_stack: Vec<SymbolKind> = expr_stack.iter().map(|Symbol { kind, .. }| kind.clone()).collect();
 		

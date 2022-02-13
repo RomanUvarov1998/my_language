@@ -2,7 +2,7 @@ use super::data_type::{DataType, Primitive};
 use super::value::Value;
 use super::InterpErr;
 use super::utils::{CodePos, NameToken};
-use super::parsed_expr::ParsedExpr;
+use super::expr::Expr;
 use super::parsed_statement::ReturningBody;
 use super::context::Context;
 
@@ -26,7 +26,7 @@ impl UserFuncDef {
 		}
 	}
 	
-	pub fn check_args(&self, args_exprs: &Vec<ParsedExpr>, check_context: &Context) -> Result<(), InterpErr> {
+	pub fn check_args(&self, args_exprs: &Vec<Expr>, check_context: &Context) -> Result<(), InterpErr> {
 		if self.args.len() != args_exprs.len() {
 			return Err( InterpErr::from( UserFuncErr::ArgsCnt {
 				func_signature: format!("{}", self),
